@@ -1,0 +1,202 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { ApplicationSection } from "@/components/ApplicationSection";
+import { api } from "@/lib/api";
+import { hasActiveInterviewInvitation, toIsoFromDateAndTime } from "@/lib/interviews";
+import type { ApplicationDetail } from "@/types/applications";
+
+const inputClass =
+  "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition";
+
+type SlotForm = {
+  date: string;
+  startTime: string;
+  endTime: string;
+};
+
+const emptySlot = (): SlotForm => ({ date: "", startTime: "", endTime: "" });
+
+export default function InviteToInterviewPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const applicationId = Number(params.id);
+  const [application, setApplication] = useState<ApplicationDetail | null>(null);
+  const [message, setMessage] = useState("");
+  const [slots, setSlots] = useState<SlotForm[]>([emptySlot(), emptySlot(), emptySlot()]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api.getApplication(applicationId);
+        if (data.status !== "shortlisted") {
+          setError("Interview invitations can only be created for shortlisted applications.");
+        } else {
+          const existing = await api.listApplicationInterviews(applicationId);
+          if (existing.some((interview) => interview.status === "proposed")) {
+            setError("An invitation is already waiting for the candidate's response.");
+          } else if (hasActiveInterviewInvitation(existing)) {
+            setError("An interview is already scheduled for this application.");
+          }
+        }
+        setApplication(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load application");
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (!Number.isNaN(applicationId)) {
+      load();
+    }
+  }, [applicationId]);
+
+  const updateSlot = (index: number, field: keyof SlotForm, value: string) => {
+    setSlots((current) => current.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot)));
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    if (!message.trim()) {
+      setError("Message is required.");
+      return;
+    }
+    if (slots.some((slot) => !slot.date || !slot.startTime || !slot.endTime)) {
+      setError("Complete all three proposed slots.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.createInterviewInvitation(applicationId, {
+        message: message.trim(),
+        slots: slots.map((slot) => ({
+          starts_at: toIsoFromDateAndTime(slot.date, slot.startTime),
+          ends_at: toIsoFromDateAndTime(slot.date, slot.endTime),
+        })),
+      });
+      setSuccess("Interview invitation created. The candidate has been notified.");
+      setTimeout(() => router.push(`/hr/applications/${applicationId}`), 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create interview invitation");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="py-16 flex justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+      </div>
+    );
+  }
+
+  if (!application) {
+    return <p className="text-red-700">{error || "Application not found"}</p>;
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div>
+        <Link href={`/hr/applications/${applicationId}`} className="text-sm text-gray-500 hover:text-gray-800">
+          Application
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Invite to interview</h1>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">{success}</div>
+      )}
+
+      <ApplicationSection title="Candidate and job">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-gray-500">Candidate</p>
+            <p className="mt-0.5 text-gray-900">{application.candidate.full_name}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Job</p>
+            <p className="mt-0.5 text-gray-900">{application.job.title}</p>
+          </div>
+        </div>
+      </ApplicationSection>
+
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl border shadow-sm p-6 space-y-6">
+        <div>
+          <label htmlFor="message" className="block text-sm font-medium text-gray-700 mb-1">
+            Message from HR
+          </label>
+          <textarea
+            id="message"
+            required
+            rows={4}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className={inputClass}
+            placeholder="Tell the candidate what to expect..."
+          />
+        </div>
+
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="space-y-3 border border-gray-200 rounded-lg p-4">
+            <h2 className="text-sm font-medium text-gray-900">Proposed slot {index + 1}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Date</label>
+                <input
+                  type="date"
+                  required
+                  value={slots[index].date}
+                  onChange={(e) => updateSlot(index, "date", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Start time</label>
+                <input
+                  type="time"
+                  required
+                  value={slots[index].startTime}
+                  onChange={(e) => updateSlot(index, "startTime", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">End time</label>
+                <input
+                  type="time"
+                  required
+                  value={slots[index].endTime}
+                  onChange={(e) => updateSlot(index, "endTime", e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <button
+          type="submit"
+          disabled={submitting || application.status !== "shortlisted"}
+          className="w-full bg-brand-600 text-white py-2.5 rounded-lg font-medium hover:bg-brand-700 disabled:opacity-50"
+        >
+          {submitting ? "Creating invitation..." : "Create interview invitation"}
+        </button>
+      </form>
+    </div>
+  );
+}
