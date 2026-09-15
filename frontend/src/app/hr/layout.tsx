@@ -77,19 +77,19 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white border-b">
           <div className="px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <NotificationBell variant="hr" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">{user.full_name}</p>
-                <p className="text-xs text-gray-500">{user.email}</p>
-              </div>
+            <div>
+              <p className="text-sm font-medium text-gray-900">{user.full_name}</p>
+              <p className="text-xs text-gray-500">{user.email}</p>
             </div>
-            <button
-              onClick={logout}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 transition"
-            >
-              Sign out
-            </button>
+            <div className="flex items-center gap-3">
+              <NotificationBell variant="hr" />
+              <button
+                onClick={logout}
+                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 transition"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </header>
         <main className="flex-1 p-6">{children}</main>

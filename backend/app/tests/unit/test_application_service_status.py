@@ -54,12 +54,23 @@ def _create_application(db_session, status: ApplicationStatus) -> Application:
         (ApplicationStatus.SUBMITTED, ApplicationStatus.REJECTED),
         (ApplicationStatus.SCREENING, ApplicationStatus.SHORTLISTED),
         (ApplicationStatus.SCREENING, ApplicationStatus.REJECTED),
+        (ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED),
     ],
 )
 def test_service_allows_valid_status_transitions(db_session, current, target):
     application = _create_application(db_session, current)
     updated = _application_service(db_session).update_status(application.id, target)
     assert updated.status == target
+
+
+def test_service_rejects_direct_hire_status_update(db_session):
+    application = _create_application(db_session, ApplicationStatus.SHORTLISTED)
+    with pytest.raises(AppException) as exc:
+        _application_service(db_session).update_status(application.id, ApplicationStatus.HIRED)
+    assert exc.value.status_code == 400
+    assert "interview outcome" in exc.value.message.lower()
+    db_session.refresh(application)
+    assert application.status == ApplicationStatus.SHORTLISTED
 
 
 @pytest.mark.parametrize(
@@ -69,7 +80,6 @@ def test_service_allows_valid_status_transitions(db_session, current, target):
         (ApplicationStatus.SCREENING, ApplicationStatus.SUBMITTED),
         (ApplicationStatus.SHORTLISTED, ApplicationStatus.SUBMITTED),
         (ApplicationStatus.SHORTLISTED, ApplicationStatus.SCREENING),
-        (ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED),
         (ApplicationStatus.REJECTED, ApplicationStatus.SCREENING),
         (ApplicationStatus.REJECTED, ApplicationStatus.SHORTLISTED),
         (ApplicationStatus.REJECTED, ApplicationStatus.SUBMITTED),

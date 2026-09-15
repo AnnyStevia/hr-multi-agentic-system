@@ -161,6 +161,11 @@ class ApplicationService:
         return application
 
     def update_status(self, application_id: int, status: ApplicationStatus) -> Application:
+        if status == ApplicationStatus.HIRED:
+            raise AppException(
+                "Hiring must be done through the interview outcome workflow",
+                status_code=400,
+            )
         application = self.get_for_hr(application_id)
         previous_status = application.status
         validate_application_status_transition(application.status, status)
@@ -185,6 +190,15 @@ class ApplicationService:
             )
 
         return loaded
+
+    def apply_interview_driven_status(
+        self,
+        application: Application,
+        status: ApplicationStatus,
+    ) -> None:
+        validate_application_status_transition(application.status, status)
+        application.status = status
+        self.db.flush()
 
     def presigned_document_url(
         self,

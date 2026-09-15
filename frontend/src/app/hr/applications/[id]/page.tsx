@@ -14,7 +14,7 @@ import type {
   EducationEntry,
   ExperienceEntry,
 } from "@/types/applications";
-import type { InterviewSummary } from "@/types/interviews";
+import type { InterviewOutcome, InterviewSummary } from "@/types/interviews";
 
 const STATUS_ACTIONS: Partial<
   Record<ApplicationStatus, Array<{ value: ApplicationStatus; label: string; className: string }>>
@@ -120,13 +120,14 @@ export default function ApplicationDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [interviews, setInterviews] = useState<InterviewSummary[]>([]);
   const [interviewsError, setInterviewsError] = useState("");
+  const [completingId, setCompletingId] = useState<number | null>(null);
+  const [feedbackDraft, setFeedbackDraft] = useState("");
+  const [submittingComplete, setSubmittingComplete] = useState(false);
+  const [outcomeActingId, setOutcomeActingId] = useState<number | null>(null);
+  const [hireConfirmId, setHireConfirmId] = useState<number | null>(null);
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const loadInterviews = async (status: ApplicationStatus) => {
-    if (status !== "shortlisted") {
-      setInterviews([]);
-      setInterviewsError("");
-      return;
-    }
+  const loadInterviews = async () => {
     try {
       setInterviewsError("");
       setInterviews(await api.listApplicationInterviews(applicationId));
@@ -143,7 +144,7 @@ export default function ApplicationDetailPage() {
       try {
         const data = await api.getApplication(applicationId);
         setApplication(data);
-        await loadInterviews(data.status);
+        await loadInterviews();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load application");
       } finally {
@@ -157,13 +158,13 @@ export default function ApplicationDetailPage() {
 
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState === "visible" && application?.status === "shortlisted") {
-        void loadInterviews("shortlisted");
+      if (document.visibilityState === "visible") {
+        void loadInterviews();
       }
     };
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
-  }, [application?.status, applicationId]);
+  }, [applicationId]);
 
   const viewDocument = async (document: ApplicationDocument) => {
     setActingId(document.id);
@@ -204,11 +205,60 @@ export default function ApplicationDetailPage() {
     try {
       const updated = await api.updateApplicationStatus(applicationId, status);
       setApplication(updated);
-      await loadInterviews(updated.status);
+      await loadInterviews();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const submitComplete = async (interviewId: number) => {
+    if (!feedbackDraft.trim()) {
+      setError("Interview feedback is required.");
+      return;
+    }
+    setSubmittingComplete(true);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await api.completeInterview(interviewId, { feedback: feedbackDraft.trim() });
+      setCompletingId(null);
+      setFeedbackDraft("");
+      setSuccessMessage("Interview marked as completed.");
+      setApplication(await api.getApplication(applicationId));
+      await loadInterviews();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to complete interview");
+    } finally {
+      setSubmittingComplete(false);
+    }
+  };
+
+  const submitOutcome = async (interviewId: number, outcome: InterviewOutcome) => {
+    setOutcomeActingId(interviewId);
+    setError("");
+    setSuccessMessage("");
+    try {
+      const updatedInterview = await api.recordInterviewOutcome(interviewId, { outcome });
+      setHireConfirmId(null);
+      setApplication(await api.getApplication(applicationId));
+      await loadInterviews();
+      if (outcome === "hired") {
+        setSuccessMessage(
+          updatedInterview.hired_employee_id
+            ? "Candidate hired. Employee record created."
+            : "Candidate hired.",
+        );
+      } else if (outcome === "rejected") {
+        setSuccessMessage("Candidate rejected. Application status updated.");
+      } else {
+        setSuccessMessage("Marked for another interview. You can send a new invitation.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to record outcome");
+    } finally {
+      setOutcomeActingId(null);
     }
   };
 
@@ -228,6 +278,10 @@ export default function ApplicationDetailPage() {
   const experience = sortExperience(application.experience);
   const hasPendingInvitation = interviews.some((interview) => interview.status === "proposed");
   const hasActiveInvitation = hasActiveInterviewInvitation(interviews);
+  const hasPendingOutcome = interviews.some(
+    (interview) => interview.status === "completed" && !interview.outcome,
+  );
+  const hiredEmployeeId = interviews.find((interview) => interview.hired_employee_id)?.hired_employee_id ?? null;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -244,6 +298,11 @@ export default function ApplicationDetailPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          {successMessage}
         </div>
       )}
 
@@ -268,6 +327,17 @@ export default function ApplicationDetailPage() {
             </div>
           </div>
         </div>
+        {application.status === "hired" && hiredEmployeeId ? (
+          <div className="pt-4 border-t border-gray-100">
+            <p className="text-sm text-green-800 mb-2">Employee created.</p>
+            <Link
+              href={`/hr/employees/${hiredEmployeeId}`}
+              className="inline-flex text-sm font-medium text-brand-700 hover:text-brand-800"
+            >
+              View employee record
+            </Link>
+          </div>
+        ) : null}
         {actions.length > 0 ? (
           <div className="pt-2">
             <p className="text-sm font-medium text-gray-700 mb-2">Change status</p>
@@ -304,9 +374,14 @@ export default function ApplicationDetailPage() {
             Waiting for candidate&apos;s response to the invitation.
           </p>
         )}
-        {!hasPendingInvitation && hasActiveInvitation && (
+        {!hasPendingInvitation && hasActiveInvitation && !hasPendingOutcome && (
           <p className="pt-4 border-t border-gray-100 text-sm text-green-800 bg-green-50 border border-green-200 px-4 py-3 rounded-lg">
             Interview is scheduled. A new invitation cannot be created until this interview is completed or cancelled.
+          </p>
+        )}
+        {hasPendingOutcome && (
+          <p className="pt-4 border-t border-gray-100 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-4 py-3 rounded-lg">
+            Interview completed. Record an outcome before inviting again.
           </p>
         )}
         {interviewsError && (
@@ -341,6 +416,138 @@ export default function ApplicationDetailPage() {
                   </p>
                 ) : (
                   <p className="text-sm text-gray-600">Waiting for candidate to choose a slot.</p>
+                )}
+
+                {interview.status === "scheduled" && completingId !== interview.id && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompletingId(interview.id);
+                      setFeedbackDraft("");
+                      setError("");
+                    }}
+                    className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700"
+                  >
+                    Mark interview as completed
+                  </button>
+                )}
+
+                {interview.status === "scheduled" && completingId === interview.id && (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                    <label className="block text-sm font-medium text-gray-800" htmlFor={`feedback-${interview.id}`}>
+                      Interview feedback
+                    </label>
+                    <textarea
+                      id={`feedback-${interview.id}`}
+                      rows={4}
+                      value={feedbackDraft}
+                      onChange={(e) => setFeedbackDraft(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
+                      placeholder="Notes from the interview..."
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={submittingComplete}
+                        onClick={() => submitComplete(interview.id)}
+                        className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {submittingComplete ? "Saving..." : "Complete interview"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={submittingComplete}
+                        onClick={() => {
+                          setCompletingId(null);
+                          setFeedbackDraft("");
+                        }}
+                        className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-white disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {interview.status === "completed" && (
+                  <div className="space-y-3 border-t border-gray-100 pt-3">
+                    {interview.completed_at && (
+                      <Detail label="Completed" value={formatDate(interview.completed_at)} />
+                    )}
+                    {interview.feedback && (
+                      <div>
+                        <p className="text-xs text-gray-500">Feedback</p>
+                        <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{interview.feedback}</p>
+                      </div>
+                    )}
+                    {interview.outcome ? (
+                      <Detail label="Outcome" value={interview.outcome_label || interview.outcome} />
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium text-gray-800">Outcome</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={outcomeActingId === interview.id}
+                            onClick={() => submitOutcome(interview.id, "rejected")}
+                            className="px-3 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            type="button"
+                            disabled={outcomeActingId === interview.id}
+                            onClick={() => submitOutcome(interview.id, "another_interview")}
+                            className="px-3 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-800 bg-white hover:bg-amber-50 disabled:opacity-50"
+                          >
+                            Another interview
+                          </button>
+                          <button
+                            type="button"
+                            disabled={outcomeActingId === interview.id}
+                            onClick={() => setHireConfirmId(interview.id)}
+                            className="px-3 py-2 rounded-lg text-sm font-medium border border-green-200 text-green-800 bg-white hover:bg-green-50 disabled:opacity-50"
+                          >
+                            Hire
+                          </button>
+                        </div>
+                        {hireConfirmId === interview.id && (
+                          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 space-y-3">
+                            <p className="text-sm text-green-900">
+                              Are you sure you want to hire this candidate? This will mark the application as
+                              HIRED and create an employee record.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={outcomeActingId === interview.id}
+                                onClick={() => setHireConfirmId(null)}
+                                className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={outcomeActingId === interview.id}
+                                onClick={() => submitOutcome(interview.id, "hired")}
+                                className="px-3 py-2 rounded-lg text-sm font-medium bg-green-700 text-white hover:bg-green-800 disabled:opacity-50"
+                              >
+                                {outcomeActingId === interview.id ? "Hiring..." : "Confirm hire"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {interview.outcome === "hired" && interview.hired_employee_id ? (
+                      <Link
+                        href={`/hr/employees/${interview.hired_employee_id}`}
+                        className="inline-flex text-sm font-medium text-brand-700 hover:text-brand-800"
+                      >
+                        View employee
+                      </Link>
+                    ) : null}
+                  </div>
                 )}
               </li>
             ))}

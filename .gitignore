@@ -15,8 +15,10 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python packaging dirs only (do not ignore frontend/src/lib)
+/lib/
+/lib64/
+backend/lib/
 parts/
 sdist/
 var/
@@ -53,6 +55,7 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+*.tsbuildinfo
 
 # Docker
 *.log

@@ -1,6 +1,6 @@
 import type { JobStatus, QuestionType } from "@/types/jobs";
 
-export type ApplicationStatus = "submitted" | "screening" | "shortlisted" | "rejected";
+export type ApplicationStatus = "submitted" | "screening" | "shortlisted" | "rejected" | "hired";
 
 export type DocumentKind = "cv" | "cover_letter";
 

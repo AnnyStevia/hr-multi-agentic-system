@@ -14,6 +14,11 @@ def test_screening_can_move_to_shortlisted_or_rejected():
     validate_application_status_transition(ApplicationStatus.SCREENING, ApplicationStatus.REJECTED)
 
 
+def test_shortlisted_can_move_to_rejected_or_hired():
+    validate_application_status_transition(ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED)
+    validate_application_status_transition(ApplicationStatus.SHORTLISTED, ApplicationStatus.HIRED)
+
+
 @pytest.mark.parametrize(
     "current,target",
     [
@@ -22,10 +27,11 @@ def test_screening_can_move_to_shortlisted_or_rejected():
         (ApplicationStatus.SCREENING, ApplicationStatus.SUBMITTED),
         (ApplicationStatus.SHORTLISTED, ApplicationStatus.SUBMITTED),
         (ApplicationStatus.SHORTLISTED, ApplicationStatus.SCREENING),
-        (ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED),
         (ApplicationStatus.REJECTED, ApplicationStatus.SCREENING),
         (ApplicationStatus.REJECTED, ApplicationStatus.SHORTLISTED),
         (ApplicationStatus.REJECTED, ApplicationStatus.SUBMITTED),
+        (ApplicationStatus.HIRED, ApplicationStatus.SHORTLISTED),
+        (ApplicationStatus.HIRED, ApplicationStatus.REJECTED),
     ],
 )
 def test_disallowed_status_transitions_are_rejected(current, target):

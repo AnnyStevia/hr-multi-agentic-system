@@ -10,7 +10,7 @@ import type { InterviewDetail } from "@/types/interviews";
 const STATUS_LABELS: Record<string, string> = {
   proposed: "Awaiting your response",
   scheduled: "Scheduled",
-  completed: "Completed",
+  completed: "Interview completed",
   cancelled: "Cancelled",
 };
 
@@ -71,6 +71,7 @@ export default function CandidateInterviewPage() {
   }
 
   const isScheduled = interview.status === "scheduled";
+  const isCompleted = interview.status === "completed";
 
   return (
     <div className="space-y-6">
@@ -79,7 +80,7 @@ export default function CandidateInterviewPage() {
           Careers
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">
-          {isScheduled ? "Interview confirmed" : "Interview invitation"}
+          {isCompleted ? "Interview completed" : isScheduled ? "Interview confirmed" : "Interview invitation"}
         </h1>
         <p className="mt-1 text-sm text-gray-600">{interview.job_title}</p>
       </div>
@@ -89,14 +90,47 @@ export default function CandidateInterviewPage() {
       )}
 
       <div className="bg-white rounded-xl border shadow-sm p-6 space-y-5">
-        {!isScheduled && (
+        {!isScheduled && !isCompleted && (
           <div>
             <h2 className="text-sm font-medium text-gray-500">Message from HR</h2>
             <p className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">{interview.message}</p>
           </div>
         )}
 
-        {isScheduled && interview.selected_slot ? (
+        {isCompleted ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-sm font-medium text-gray-900">Interview completed</p>
+              <p className="mt-1 text-sm text-gray-700">
+                This interview has been completed. Check your application status on the job page for updates.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-gray-500">Job</p>
+                <p className="mt-0.5 text-gray-900">{interview.job_title}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Status</p>
+                <p className="mt-0.5 text-gray-900">{STATUS_LABELS[interview.status] || interview.status}</p>
+              </div>
+              {interview.selected_slot ? (
+                <>
+                  <div>
+                    <p className="text-xs text-gray-500">Date</p>
+                    <p className="mt-0.5 text-gray-900">{formatSlotDate(interview.selected_slot.starts_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Time</p>
+                    <p className="mt-0.5 text-gray-900">
+                      {formatSlotTimeRange(interview.selected_slot.starts_at, interview.selected_slot.ends_at)}
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        ) : isScheduled && interview.selected_slot ? (
           <div className="space-y-4">
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
               <p className="text-sm font-medium text-green-900">Interview confirmed</p>

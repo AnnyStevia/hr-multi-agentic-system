@@ -67,14 +67,36 @@ class InterviewRepository:
         )
 
     def has_active_invitation_for_application(self, application_id: int) -> bool:
+        """Block new invites while proposed, scheduled, or completed without outcome."""
         from app.modules.interviews.models import InterviewStatus
 
-        return (
+        blocking = (
             self.db.query(Interview)
             .filter(
                 Interview.application_id == application_id,
                 Interview.status.in_([InterviewStatus.PROPOSED, InterviewStatus.SCHEDULED]),
             )
             .count()
-            > 0
         )
+        if blocking > 0:
+            return True
+
+        pending_outcome = (
+            self.db.query(Interview)
+            .filter(
+                Interview.application_id == application_id,
+                Interview.status == InterviewStatus.COMPLETED,
+                Interview.outcome.is_(None),
+            )
+            .count()
+        )
+        return pending_outcome > 0
+
+    def save_without_commit(self, interview: Interview) -> None:
+        self.db.flush()
+
+    def commit(self) -> None:
+        self.db.commit()
+
+    def rollback(self) -> None:
+        self.db.rollback()

@@ -8,8 +8,11 @@ ALLOWED_APPLICATION_STATUS_TRANSITIONS: dict[ApplicationStatus, frozenset[Applic
     ApplicationStatus.SCREENING: frozenset(
         {ApplicationStatus.SHORTLISTED, ApplicationStatus.REJECTED}
     ),
-    ApplicationStatus.SHORTLISTED: frozenset(),
+    ApplicationStatus.SHORTLISTED: frozenset(
+        {ApplicationStatus.REJECTED, ApplicationStatus.HIRED}
+    ),
     ApplicationStatus.REJECTED: frozenset(),
+    ApplicationStatus.HIRED: frozenset(),
 }
 
 

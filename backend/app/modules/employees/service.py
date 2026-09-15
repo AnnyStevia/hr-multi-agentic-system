@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from app.modules.employees.models import (
     Department,
     DepartmentStatus,
@@ -12,6 +14,7 @@ from app.modules.employees.schemas import (
     EmployeeResponse,
     EmployeeUpdateRequest,
 )
+from app.modules.recruitment.models import Application
 from app.shared.exceptions import AppException
 
 
@@ -100,6 +103,40 @@ class EmployeeService:
             employment_status=EmploymentStatus.ACTIVE,
         )
         return self.employees.add(employee)
+
+    def create_from_hired_candidate(self, application: Application, *, commit: bool = True) -> Employee:
+        candidate = application.candidate
+        user = candidate.user
+        job = application.job
+
+        if job.department_id is None:
+            raise AppException("Job must have a department before hiring", status_code=400)
+        if not candidate.phone or not candidate.phone.strip():
+            raise AppException("Candidate phone is required before hiring", status_code=400)
+
+        self.departments.require_active(job.department_id)
+        email = user.email
+        if self.employees.get_by_email(email) is not None:
+            raise AppException("An employee with this email already exists", status_code=409)
+        if self.employees.get_by_user_id(user.id) is not None:
+            raise AppException("An employee already exists for this user", status_code=409)
+
+        employee = Employee(
+            employee_number="PENDING",
+            first_name=user.first_name.strip(),
+            last_name=user.last_name.strip(),
+            email=email,
+            phone=_normalize_phone(candidate.phone),
+            department_id=job.department_id,
+            position=job.title.strip(),
+            hire_date=datetime.now(UTC).date(),
+            employment_status=EmploymentStatus.ACTIVE,
+            user_id=user.id,
+        )
+        return self.employees.add(employee, commit=commit)
+
+    def get_by_user_id(self, user_id: int) -> Employee | None:
+        return self.employees.get_by_user_id(user_id)
 
     def update_employee(self, employee_id: int, payload: EmployeeUpdateRequest) -> Employee:
         employee = self.get_employee(employee_id)

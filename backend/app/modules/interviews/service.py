@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
 from app.modules.employees.models import Employee
+from app.modules.employees.service import EmployeeService
 from app.modules.identity.models import User
-from app.modules.interviews.models import Interview, InterviewSlot, InterviewStatus
+from app.modules.interviews.models import Interview, InterviewOutcome, InterviewSlot, InterviewStatus
 from app.modules.interviews.repository import InterviewRepository
 from app.modules.interviews.schemas import (
     InterviewCreateRequest,
@@ -12,6 +13,7 @@ from app.modules.interviews.schemas import (
 )
 from app.modules.notifications.models import NotificationType
 from app.modules.notifications.service import NotificationService
+from app.modules.recruitment.application_service import ApplicationService
 from app.modules.recruitment.models import Application, ApplicationStatus
 from app.modules.recruitment.repository import ApplicationRepository
 from app.shared.exceptions import AppException
@@ -25,6 +27,12 @@ STATUS_LABELS = {
     InterviewStatus.CANCELLED: "Cancelled",
 }
 
+OUTCOME_LABELS = {
+    InterviewOutcome.REJECTED: "Rejected",
+    InterviewOutcome.ANOTHER_INTERVIEW: "Another interview",
+    InterviewOutcome.HIRED: "Hired",
+}
+
 
 class InterviewService:
     def __init__(
@@ -32,10 +40,14 @@ class InterviewService:
         repository: InterviewRepository,
         applications: ApplicationRepository,
         notification_service: NotificationService | None = None,
+        employee_service: EmployeeService | None = None,
+        application_service: ApplicationService | None = None,
     ):
         self.repository = repository
         self.applications = applications
         self.notifications = notification_service
+        self.employees = employee_service
+        self.application_service = application_service
 
     def create_invitation(
         self,
@@ -159,6 +171,110 @@ class InterviewService:
 
         return saved
 
+    def complete_interview(self, interview_id: int, feedback: str) -> Interview:
+        interview = self.get_for_hr(interview_id)
+        if interview.status != InterviewStatus.SCHEDULED:
+            raise AppException(
+                "Only scheduled interviews can be marked as completed",
+                status_code=400,
+            )
+        cleaned = feedback.strip()
+        if not cleaned:
+            raise AppException("Interview feedback is required", status_code=400)
+
+        interview.status = InterviewStatus.COMPLETED
+        interview.feedback = cleaned
+        interview.completed_at = datetime.now(UTC)
+        return self.repository.save(interview)
+
+    def record_outcome(self, interview_id: int, outcome: InterviewOutcome) -> Interview:
+        interview = self.get_for_hr(interview_id)
+        if interview.status != InterviewStatus.COMPLETED:
+            raise AppException(
+                "Interview must be completed before recording an outcome",
+                status_code=400,
+            )
+        if interview.outcome is not None:
+            raise AppException("An outcome has already been recorded for this interview", status_code=409)
+
+        application = interview.application
+        if application.status != ApplicationStatus.SHORTLISTED:
+            raise AppException(
+                "Application must be shortlisted to record an interview outcome",
+                status_code=400,
+            )
+
+        if self.application_service is None:
+            raise AppException("Application service is not configured", status_code=500)
+
+        hired_employee: Employee | None = None
+        try:
+            interview.outcome = outcome
+
+            if outcome == InterviewOutcome.REJECTED:
+                self.application_service.apply_interview_driven_status(
+                    application, ApplicationStatus.REJECTED
+                )
+            elif outcome == InterviewOutcome.HIRED:
+                if self.employees is None:
+                    raise AppException("Employee service is not configured", status_code=500)
+                hired_employee = self.employees.create_from_hired_candidate(
+                    application, commit=False
+                )
+                self.application_service.apply_interview_driven_status(
+                    application, ApplicationStatus.HIRED
+                )
+            elif outcome == InterviewOutcome.ANOTHER_INTERVIEW:
+                self.repository.save_without_commit(interview)
+            else:
+                raise AppException("Invalid interview outcome", status_code=400)
+
+            self.repository.save_without_commit(interview)
+            self.repository.commit()
+        except AppException:
+            self.repository.rollback()
+            raise
+        except Exception:
+            self.repository.rollback()
+            raise
+
+        saved = self.repository.get_by_id(interview_id)
+        if saved is None:
+            raise AppException("Failed to load updated interview", status_code=500)
+
+        if outcome == InterviewOutcome.REJECTED:
+            self._notify_application_status(
+                saved.application,
+                title="Application update",
+                message=f"Your application for {saved.application.job.title} was not successful.",
+            )
+        elif outcome == InterviewOutcome.HIRED:
+            self._notify_application_status(
+                saved.application,
+                title="You've been hired!",
+                message=f"Congratulations! You have been hired for {saved.application.job.title}.",
+            )
+
+        return saved
+
+    def _notify_application_status(self, application: Application, *, title: str, message: str) -> None:
+        if self.notifications is None:
+            return
+        self.notifications.create_notification(
+            recipient_user_id=application.candidate.user_id,
+            type=NotificationType.APPLICATION_STATUS_CHANGED,
+            title=title,
+            message=message,
+            related_entity_type="application",
+            related_entity_id=application.id,
+        )
+
+    def resolve_hired_employee_id(self, interview: Interview) -> int | None:
+        if interview.outcome != InterviewOutcome.HIRED or self.employees is None:
+            return None
+        employee = self.employees.get_by_user_id(interview.application.candidate.user_id)
+        return employee.id if employee else None
+
     def _normalize_interview_state(self, interview: Interview) -> Interview:
         changed = False
         selected = interview.selected_slot
@@ -245,7 +361,17 @@ def _status_label(status: InterviewStatus) -> str:
     return STATUS_LABELS.get(status, status.value)
 
 
-def build_interview_summary(interview: Interview) -> InterviewSummary:
+def _outcome_label(outcome: InterviewOutcome | None) -> str | None:
+    if outcome is None:
+        return None
+    return OUTCOME_LABELS.get(outcome, outcome.value)
+
+
+def build_interview_summary(
+    interview: Interview,
+    *,
+    hired_employee_id: int | None = None,
+) -> InterviewSummary:
     application = interview.application
     candidate = application.candidate
     selected = interview.selected_slot
@@ -261,10 +387,19 @@ def build_interview_summary(interview: Interview) -> InterviewSummary:
         candidate_name=candidate.user.full_name,
         interviewer_name=interviewer.full_name if interviewer else None,
         selected_slot=_slot_response(selected) if selected else None,
+        feedback=interview.feedback,
+        completed_at=interview.completed_at,
+        outcome=interview.outcome.value if interview.outcome else None,
+        outcome_label=_outcome_label(interview.outcome),
+        hired_employee_id=hired_employee_id,
     )
 
 
-def build_interview_detail(interview: Interview) -> InterviewDetailResponse:
+def build_interview_detail(
+    interview: Interview,
+    *,
+    hired_employee_id: int | None = None,
+) -> InterviewDetailResponse:
     application = interview.application
     candidate = application.candidate
     selected = interview.selected_slot
@@ -288,4 +423,9 @@ def build_interview_detail(interview: Interview) -> InterviewDetailResponse:
         interviewer_name=interviewer.full_name if interviewer else None,
         slots=[_slot_response(slot) for slot in sorted(visible_slots, key=lambda s: s.starts_at)],
         selected_slot=_slot_response(selected) if selected else None,
+        feedback=interview.feedback,
+        completed_at=interview.completed_at,
+        outcome=interview.outcome.value if interview.outcome else None,
+        outcome_label=_outcome_label(interview.outcome),
+        hired_employee_id=hired_employee_id,
     )

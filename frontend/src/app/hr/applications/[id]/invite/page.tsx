@@ -43,6 +43,8 @@ export default function InviteToInterviewPage() {
           const existing = await api.listApplicationInterviews(applicationId);
           if (existing.some((interview) => interview.status === "proposed")) {
             setError("An invitation is already waiting for the candidate's response.");
+          } else if (existing.some((interview) => interview.status === "completed" && !interview.outcome)) {
+            setError("Record an interview outcome before inviting again.");
           } else if (hasActiveInterviewInvitation(existing)) {
             setError("An interview is already scheduled for this application.");
           }

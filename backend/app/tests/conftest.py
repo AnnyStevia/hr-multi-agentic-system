@@ -10,6 +10,8 @@ from app.modules.identity import models as identity_models  # noqa: F401
 from app.modules.identity.service import SeedService
 from app.modules.employees import models as employee_models  # noqa: F401
 from app.modules.recruitment import models as recruitment_models  # noqa: F401
+from app.modules.interviews import models as interview_models  # noqa: F401
+from app.modules.notifications import models as notification_models  # noqa: F401
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 

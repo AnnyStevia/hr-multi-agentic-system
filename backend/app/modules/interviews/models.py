@@ -14,6 +14,12 @@ class InterviewStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class InterviewOutcome(str, Enum):
+    REJECTED = "rejected"
+    ANOTHER_INTERVIEW = "another_interview"
+    HIRED = "hired"
+
+
 class Interview(Base):
     __tablename__ = "interviews"
 
@@ -40,6 +46,16 @@ class Interview(Base):
     )
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    outcome: Mapped[InterviewOutcome | None] = mapped_column(
+        SAEnum(
+            InterviewOutcome,
+            name="interview_outcome",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

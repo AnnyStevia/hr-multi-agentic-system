@@ -86,6 +86,7 @@ class ApplicationStatus(str, Enum):
     SCREENING = "screening"
     SHORTLISTED = "shortlisted"
     REJECTED = "rejected"
+    HIRED = "hired"
 
 
 class DocumentKind(str, Enum):
