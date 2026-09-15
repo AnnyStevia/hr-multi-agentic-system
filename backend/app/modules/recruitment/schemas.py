@@ -180,6 +180,14 @@ class ApplicationListItem(BaseModel):
     has_cover_letter: bool
 
 
+class CandidateApplicationSummary(BaseModel):
+    id: int
+    job_id: int
+    status: ApplicationStatus
+    submitted_at: datetime
+    job_title: str
+
+
 class ApplicationStatusUpdateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 

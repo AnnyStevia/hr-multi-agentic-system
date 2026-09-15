@@ -11,6 +11,7 @@ class NotificationType(str, Enum):
     APPLICATION_STATUS_CHANGED = "application_status_changed"
     INTERVIEW_INVITATION = "interview_invitation"
     INTERVIEW_SCHEDULED = "interview_scheduled"
+    INTERVIEW_REMINDER = "interview_reminder"
 
 
 class Notification(Base):

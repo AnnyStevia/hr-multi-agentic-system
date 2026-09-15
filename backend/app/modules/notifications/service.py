@@ -50,6 +50,47 @@ class NotificationService:
     def mark_all_as_read(self, user_id: int) -> int:
         return self.repository.mark_all_as_read(user_id)
 
+    def exists_for_entity(
+        self,
+        *,
+        recipient_user_id: int,
+        type: NotificationType,
+        related_entity_type: str,
+        related_entity_id: int,
+    ) -> bool:
+        return self.repository.exists_for_entity(
+            recipient_user_id=recipient_user_id,
+            type=type,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+        )
+
+    def create_if_absent(
+        self,
+        *,
+        recipient_user_id: int,
+        type: NotificationType,
+        title: str,
+        message: str,
+        related_entity_type: str,
+        related_entity_id: int,
+    ) -> Notification | None:
+        if self.exists_for_entity(
+            recipient_user_id=recipient_user_id,
+            type=type,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+        ):
+            return None
+        return self.create_notification(
+            recipient_user_id=recipient_user_id,
+            type=type,
+            title=title,
+            message=message,
+            related_entity_type=related_entity_type,
+            related_entity_id=related_entity_id,
+        )
+
 
 def build_notification_response(notification: Notification) -> NotificationResponse:
     return NotificationResponse(

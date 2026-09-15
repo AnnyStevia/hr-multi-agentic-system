@@ -67,6 +67,15 @@ class ApplicationRepository:
             .first()
         )
 
+    def list_for_candidate(self, candidate_id: int) -> list[Application]:
+        return (
+            self.db.query(Application)
+            .options(joinedload(Application.job))
+            .filter(Application.candidate_id == candidate_id)
+            .order_by(Application.submitted_at.desc())
+            .all()
+        )
+
     def list_for_job(self, job_id: int) -> list[Application]:
         return (
             self.db.query(Application)

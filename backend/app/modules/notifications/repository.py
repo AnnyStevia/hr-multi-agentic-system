@@ -61,6 +61,29 @@ class NotificationRepository:
             self.db.commit()
         return len(unread)
 
+    def exists_for_entity(
+        self,
+        *,
+        recipient_user_id: int,
+        type,
+        related_entity_type: str,
+        related_entity_id: int,
+    ) -> bool:
+        from app.modules.notifications.models import NotificationType
+
+        notification_type = type if isinstance(type, NotificationType) else NotificationType(type)
+        return (
+            self.db.query(Notification)
+            .filter(
+                Notification.recipient_user_id == recipient_user_id,
+                Notification.type == notification_type,
+                Notification.related_entity_type == related_entity_type,
+                Notification.related_entity_id == related_entity_id,
+            )
+            .count()
+            > 0
+        )
+
     def save(self, notification: Notification) -> Notification:
         self.db.commit()
         self.db.refresh(notification)

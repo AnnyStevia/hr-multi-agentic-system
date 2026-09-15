@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import asyncio
+import logging
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,19 +10,40 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.modules.identity.service import SeedService
+from app.modules.interviews.reminders import send_upcoming_interview_reminders
 from app.shared.storage import StorageException, get_storage_service
 
+logger = logging.getLogger(__name__)
 
-def create_app(seed_on_startup: bool = True) -> FastAPI:
+REMINDER_POLL_SECONDS = 60
+
+
+def create_app(seed_on_startup: bool = True, enable_reminder_loop: bool | None = None) -> FastAPI:
+    run_reminders = settings.app_env == "development" if enable_reminder_loop is None else enable_reminder_loop
+    if not seed_on_startup:
+        run_reminders = False if enable_reminder_loop is None else enable_reminder_loop
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        reminder_task: asyncio.Task | None = None
         if seed_on_startup:
             db = SessionLocal()
             try:
                 SeedService(db).seed(settings.seed_admin_email, settings.seed_admin_password)
             finally:
                 db.close()
+
+        if run_reminders:
+            reminder_task = asyncio.create_task(_interview_reminder_loop())
+
         yield
+
+        if reminder_task is not None:
+            reminder_task.cancel()
+            try:
+                await reminder_task
+            except asyncio.CancelledError:
+                pass
 
     app = FastAPI(
         title=settings.app_name,
@@ -71,6 +94,21 @@ def create_app(seed_on_startup: bool = True) -> FastAPI:
     app.include_router(api_router)
 
     return app
+
+
+async def _interview_reminder_loop() -> None:
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                created = send_upcoming_interview_reminders(db)
+                if created:
+                    logger.info("Created %s interview reminder notification(s)", created)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Interview reminder loop failed")
+        await asyncio.sleep(REMINDER_POLL_SECONDS)
 
 
 app = create_app()

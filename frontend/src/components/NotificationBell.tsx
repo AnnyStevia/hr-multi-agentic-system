@@ -6,6 +6,8 @@ import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { api } from "@/lib/api";
 import type { Notification } from "@/types/notifications";
 
+const POLL_INTERVAL_MS = 20_000;
+
 type NotificationBellProps = {
   variant?: "candidate" | "hr";
 };
@@ -15,8 +17,12 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -27,23 +33,47 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     }
   }, []);
 
-  const loadNotifications = useCallback(async () => {
-    setLoading(true);
+  const loadNotifications = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       setNotifications(await api.listNotifications());
     } catch {
       setNotifications([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     refreshUnreadCount();
-  }, [refreshUnreadCount]);
+    const interval = window.setInterval(() => {
+      void refreshUnreadCount();
+      if (openRef.current) {
+        void loadNotifications(true);
+      }
+    }, POLL_INTERVAL_MS);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshUnreadCount();
+        if (openRef.current) {
+          void loadNotifications(true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refreshUnreadCount, loadNotifications]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setExpandedId(null);
+      return;
+    }
     loadNotifications();
   }, [open, loadNotifications]);
 
@@ -59,18 +89,30 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
+  const markReadLocally = async (notification: Notification) => {
+    if (notification.is_read) return;
+    await api.markNotificationRead(notification.id);
+    setUnreadCount((count) => Math.max(0, count - 1));
+    setNotifications((items) =>
+      items.map((item) =>
+        item.id === notification.id ? { ...item, is_read: true, read_at: new Date().toISOString() } : item
+      )
+    );
+  };
+
   const handleNotificationClick = async (notification: Notification) => {
     try {
-      if (!notification.is_read) {
-        await api.markNotificationRead(notification.id);
-        setUnreadCount((count) => Math.max(0, count - 1));
-        setNotifications((items) =>
-          items.map((item) =>
-            item.id === notification.id ? { ...item, is_read: true, read_at: new Date().toISOString() } : item
-          )
-        );
-      }
+      await markReadLocally(notification);
+      setExpandedId((current) => (current === notification.id ? null : notification.id));
+    } catch {
+      // keep panel open
+    }
+  };
 
+  const navigateFromNotification = async (notification: Notification) => {
+    setNavigating(true);
+    try {
+      await markReadLocally(notification);
       setOpen(false);
 
       if (variant === "candidate") {
@@ -86,10 +128,18 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       }
     } catch {
       setOpen(false);
+    } finally {
+      setNavigating(false);
     }
   };
 
   const viewAllHref = variant === "hr" ? "/hr/notifications" : "/careers/notifications";
+  const ctaLabel =
+    variant === "hr"
+      ? "View application"
+      : expandedId && notifications.find((n) => n.id === expandedId)?.related_entity_type === "interview"
+        ? "View interview"
+        : "View application";
 
   return (
     <div className="relative" ref={containerRef}>
@@ -118,7 +168,11 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
         <NotificationsPanel
           notifications={notifications}
           loading={loading}
+          expandedId={expandedId}
+          navigating={navigating}
+          ctaLabel={ctaLabel}
           onNotificationClick={handleNotificationClick}
+          onOpenRelated={navigateFromNotification}
           onClose={() => setOpen(false)}
           viewAllHref={viewAllHref}
         />

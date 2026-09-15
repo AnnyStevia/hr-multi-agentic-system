@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
+import type { ApplicationStatus } from "@/types/applications";
 import type { Job } from "@/types/jobs";
 
 const EMPLOYMENT_LABELS: Record<string, string> = {
@@ -14,6 +16,7 @@ const EMPLOYMENT_LABELS: Record<string, string> = {
 
 export default function CareerJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [statusByJobId, setStatusByJobId] = useState<Record<number, ApplicationStatus>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -22,7 +25,18 @@ export default function CareerJobsPage() {
       setError("");
       setLoading(true);
       try {
-        setJobs(await api.listCareerJobs());
+        const published = await api.listCareerJobs();
+        setJobs(published);
+        try {
+          const mine = await api.listMyApplications();
+          const map: Record<number, ApplicationStatus> = {};
+          for (const application of mine) {
+            map[application.job_id] = application.status;
+          }
+          setStatusByJobId(map);
+        } catch {
+          setStatusByJobId({});
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load jobs");
       } finally {
@@ -54,25 +68,31 @@ export default function CareerJobsPage() {
           </div>
         ) : (
           <ul className="divide-y divide-gray-200">
-            {jobs.map((job) => (
-              <li key={job.id}>
-                <Link
-                  href={`/careers/jobs/${job.id}`}
-                  className="block px-5 py-4 hover:bg-gray-50"
-                >
-                  <p className="text-sm font-medium text-gray-900">{job.title}</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    {[
-                      job.department,
-                      job.location,
-                      EMPLOYMENT_LABELS[job.employment_type] || job.employment_type,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "View details"}
-                  </p>
-                </Link>
-              </li>
-            ))}
+            {jobs.map((job) => {
+              const status = statusByJobId[job.id];
+              return (
+                <li key={job.id}>
+                  <Link
+                    href={`/careers/jobs/${job.id}`}
+                    className="block px-5 py-4 hover:bg-gray-50"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{job.title}</p>
+                      {status ? <StatusBadge status={status} /> : null}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {[
+                        job.department,
+                        job.location,
+                        EMPLOYMENT_LABELS[job.employment_type] || job.employment_type,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "View details"}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

@@ -30,10 +30,12 @@ def _shortlist(client, db_session, application_id: int):
     return headers
 
 
-def _future_slots():
+def _future_slots(count: int = 3):
     base = datetime.now(UTC) + timedelta(days=3)
+    hours = [10, 14, 11, 15, 16, 9]
     slots = []
-    for day_offset, hour in enumerate([10, 14, 11], start=0):
+    for day_offset in range(count):
+        hour = hours[day_offset % len(hours)]
         start = base.replace(hour=hour, minute=0, second=0, microsecond=0) + timedelta(days=day_offset)
         end = start + timedelta(minutes=30)
         slots.append({"starts_at": start.isoformat(), "ends_at": end.isoformat()})
@@ -127,17 +129,31 @@ def test_cannot_create_invitation_for_non_shortlisted_application(client, db_ses
     assert response.status_code == 400
 
 
-def test_exactly_three_slots_are_required(client, db_session):
+def test_slot_count_must_be_between_two_and_five(client, db_session):
     application, _job, _candidate_headers, _storage = _submit_application(client, db_session)
     headers = _shortlist(client, db_session, application["id"])
-    slots = _future_slots()[:2]
 
-    response = client.post(
+    too_few = client.post(
         f"/api/v1/interviews/applications/{application['id']}",
-        json={"message": "Hello", "slots": slots},
+        json={"message": "Hello", "slots": _future_slots(1)},
         headers=headers,
     )
-    assert response.status_code == 422
+    assert too_few.status_code in (400, 422)
+
+    too_many = client.post(
+        f"/api/v1/interviews/applications/{application['id']}",
+        json={"message": "Hello", "slots": _future_slots(6)},
+        headers=headers,
+    )
+    assert too_many.status_code in (400, 422)
+
+    exactly_two = client.post(
+        f"/api/v1/interviews/applications/{application['id']}",
+        json={"message": "Hello", "slots": _future_slots(2)},
+        headers=headers,
+    )
+    assert exactly_two.status_code == 201, exactly_two.text
+    assert len(exactly_two.json()["slots"]) == 2
 
 
 def test_duplicate_slots_are_rejected(client, db_session):

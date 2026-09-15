@@ -7,13 +7,37 @@ from app.modules.recruitment.application_service import (
     build_application_detail,
 )
 from app.modules.recruitment.dependencies import get_application_service
-from app.modules.recruitment.schemas import ApplicationDetail
+from app.modules.recruitment.schemas import ApplicationDetail, CandidateApplicationSummary
 from app.shared.exceptions import AppException
 
-router = APIRouter(prefix="/careers/applications", tags=["Careers"])
+router = APIRouter(prefix="/careers", tags=["Careers"])
 
 
-@router.get("/{application_id}", response_model=ApplicationDetail)
+@router.get("/my-applications", response_model=list[CandidateApplicationSummary])
+def list_my_applications(
+    current_user: User = Depends(require_roles("candidate")),
+    application_service: ApplicationService = Depends(get_application_service),
+) -> list[CandidateApplicationSummary]:
+    try:
+        applications = application_service.list_own(current_user)
+        return [
+            CandidateApplicationSummary(
+                id=application.id,
+                job_id=application.job_id,
+                status=application.status,
+                submitted_at=application.submitted_at,
+                job_title=application.job.title,
+            )
+            for application in applications
+        ]
+    except AppException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+applications_router = APIRouter(prefix="/careers/applications", tags=["Careers"])
+
+
+@applications_router.get("/{application_id}", response_model=ApplicationDetail)
 def get_own_application(
     application_id: int,
     current_user: User = Depends(require_roles("candidate")),

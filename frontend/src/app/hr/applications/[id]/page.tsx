@@ -392,7 +392,7 @@ export default function ApplicationDetailPage() {
       </ApplicationSection>
 
       {interviews.length > 0 && (
-        <ApplicationSection title="Interviews">
+        <ApplicationSection title="Interviews" collapsible defaultOpen={false}>
           <ul className="space-y-4">
             {interviews.map((interview) => (
               <li key={interview.id} className="rounded-lg border border-gray-200 px-4 py-4 space-y-3">
@@ -555,7 +555,7 @@ export default function ApplicationDetailPage() {
         </ApplicationSection>
       )}
 
-      <ApplicationSection title="Education">
+      <ApplicationSection title="Education" collapsible defaultOpen={false}>
         {application.education.length === 0 ? (
           <p className="text-sm text-gray-500">No education provided.</p>
         ) : (
@@ -563,7 +563,7 @@ export default function ApplicationDetailPage() {
         )}
       </ApplicationSection>
 
-      <ApplicationSection title="Experience">
+      <ApplicationSection title="Experience" collapsible defaultOpen={false}>
         {experience.length === 0 ? (
           <p className="text-sm text-gray-500">No experience provided.</p>
         ) : (
@@ -573,7 +573,7 @@ export default function ApplicationDetailPage() {
         )}
       </ApplicationSection>
 
-      <ApplicationSection title="Questions and answers">
+      <ApplicationSection title="Questions and answers" collapsible defaultOpen={false}>
         {application.answers.length === 0 ? (
           <p className="text-sm text-gray-500">No questions for this job.</p>
         ) : (
@@ -586,7 +586,7 @@ export default function ApplicationDetailPage() {
         )}
       </ApplicationSection>
 
-      <ApplicationSection title="Documents">
+      <ApplicationSection title="Documents" collapsible defaultOpen={false}>
         <div id="documents" className="space-y-3">
           {application.documents.map((document) => (
             <div key={document.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

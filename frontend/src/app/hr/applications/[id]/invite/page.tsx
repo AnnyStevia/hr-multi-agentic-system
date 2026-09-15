@@ -11,6 +11,9 @@ import type { ApplicationDetail } from "@/types/applications";
 const inputClass =
   "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition";
 
+const MIN_SLOTS = 2;
+const MAX_SLOTS = 5;
+
 type SlotForm = {
   date: string;
   startTime: string;
@@ -25,7 +28,7 @@ export default function InviteToInterviewPage() {
   const applicationId = Number(params.id);
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [message, setMessage] = useState("");
-  const [slots, setSlots] = useState<SlotForm[]>([emptySlot(), emptySlot(), emptySlot()]);
+  const [slots, setSlots] = useState<SlotForm[]>([emptySlot(), emptySlot()]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
@@ -65,6 +68,14 @@ export default function InviteToInterviewPage() {
     setSlots((current) => current.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot)));
   };
 
+  const addSlot = () => {
+    setSlots((current) => (current.length >= MAX_SLOTS ? current : [...current, emptySlot()]));
+  };
+
+  const removeSlot = (index: number) => {
+    setSlots((current) => (current.length <= MIN_SLOTS ? current : current.filter((_, i) => i !== index)));
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
@@ -73,8 +84,12 @@ export default function InviteToInterviewPage() {
       setError("Message is required.");
       return;
     }
+    if (slots.length < MIN_SLOTS) {
+      setError("At least two proposed slots are required.");
+      return;
+    }
     if (slots.some((slot) => !slot.date || !slot.startTime || !slot.endTime)) {
-      setError("Complete all three proposed slots.");
+      setError("Complete all proposed slots.");
       return;
     }
 
@@ -153,16 +168,26 @@ export default function InviteToInterviewPage() {
           />
         </div>
 
-        {[0, 1, 2].map((index) => (
+        {slots.map((slot, index) => (
           <div key={index} className="space-y-3 border border-gray-200 rounded-lg p-4">
-            <h2 className="text-sm font-medium text-gray-900">Proposed slot {index + 1}</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-medium text-gray-900">Proposed slot {index + 1}</h2>
+              <button
+                type="button"
+                onClick={() => removeSlot(index)}
+                disabled={slots.length <= MIN_SLOTS}
+                className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-40 disabled:hover:text-gray-500"
+              >
+                Remove
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Date</label>
                 <input
                   type="date"
                   required
-                  value={slots[index].date}
+                  value={slot.date}
                   onChange={(e) => updateSlot(index, "date", e.target.value)}
                   className={inputClass}
                 />
@@ -172,7 +197,7 @@ export default function InviteToInterviewPage() {
                 <input
                   type="time"
                   required
-                  value={slots[index].startTime}
+                  value={slot.startTime}
                   onChange={(e) => updateSlot(index, "startTime", e.target.value)}
                   className={inputClass}
                 />
@@ -182,7 +207,7 @@ export default function InviteToInterviewPage() {
                 <input
                   type="time"
                   required
-                  value={slots[index].endTime}
+                  value={slot.endTime}
                   onChange={(e) => updateSlot(index, "endTime", e.target.value)}
                   className={inputClass}
                 />
@@ -190,6 +215,15 @@ export default function InviteToInterviewPage() {
             </div>
           </div>
         ))}
+
+        <button
+          type="button"
+          onClick={addSlot}
+          disabled={slots.length >= MAX_SLOTS}
+          className="w-full border border-dashed border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50"
+        >
+          Add slot
+        </button>
 
         <button
           type="submit"

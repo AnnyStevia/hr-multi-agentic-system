@@ -18,7 +18,8 @@ from app.modules.recruitment.models import Application, ApplicationStatus
 from app.modules.recruitment.repository import ApplicationRepository
 from app.shared.exceptions import AppException
 
-REQUIRED_SLOT_COUNT = 3
+MIN_SLOT_COUNT = 2
+MAX_SLOT_COUNT = 5
 
 STATUS_LABELS = {
     InterviewStatus.PROPOSED: "Waiting for candidate's response to the invitation",
@@ -152,13 +153,14 @@ class InterviewService:
 
         saved = self.repository.save(interview)
 
-        if self.notifications is not None and interview.created_by_user_id is not None:
+        hr_recipient_id = _resolve_hr_notification_recipient(saved)
+        if self.notifications is not None and hr_recipient_id is not None:
             selected = saved.selected_slot
             slot_text = ""
             if selected is not None:
                 slot_text = f" for {_format_slot_range(selected.starts_at, selected.ends_at)}"
             self.notifications.create_notification(
-                recipient_user_id=interview.created_by_user_id,
+                recipient_user_id=hr_recipient_id,
                 type=NotificationType.INTERVIEW_SCHEDULED,
                 title="Interview confirmed by candidate",
                 message=(
@@ -243,16 +245,35 @@ class InterviewService:
             raise AppException("Failed to load updated interview", status_code=500)
 
         if outcome == InterviewOutcome.REJECTED:
+            job_title = saved.application.job.title
             self._notify_application_status(
                 saved.application,
                 title="Application update",
-                message=f"Your application for {saved.application.job.title} was not successful.",
+                message=(
+                    f"Thank you for your interest in {job_title}. After careful consideration, "
+                    "we won’t move forward with your application this time. We truly appreciate "
+                    "the time you invested and wish you every success ahead."
+                ),
             )
         elif outcome == InterviewOutcome.HIRED:
+            job_title = saved.application.job.title
             self._notify_application_status(
                 saved.application,
-                title="You've been hired!",
-                message=f"Congratulations! You have been hired for {saved.application.job.title}.",
+                title="Welcome aboard!",
+                message=(
+                    f"Congratulations — we’re delighted to offer you the {job_title} role. "
+                    "An employee record has been created and HR will follow up with next steps soon."
+                ),
+            )
+        elif outcome == InterviewOutcome.ANOTHER_INTERVIEW:
+            job_title = saved.application.job.title
+            self._notify_application_status(
+                saved.application,
+                title="Next step: another interview",
+                message=(
+                    f"Thank you for the interview. We’d like to continue with another conversation "
+                    f"for {job_title}. Please watch for a new invitation from our team."
+                ),
             )
 
         return saved
@@ -312,8 +333,11 @@ class InterviewService:
 
 
 def _validate_slots(slots: list) -> list[tuple[datetime, datetime]]:
-    if len(slots) != REQUIRED_SLOT_COUNT:
-        raise AppException(f"Exactly {REQUIRED_SLOT_COUNT} proposed slots are required", status_code=400)
+    if len(slots) < MIN_SLOT_COUNT or len(slots) > MAX_SLOT_COUNT:
+        raise AppException(
+            f"Between {MIN_SLOT_COUNT} and {MAX_SLOT_COUNT} proposed slots are required",
+            status_code=400,
+        )
 
     now = datetime.now(UTC)
     normalized: list[tuple[datetime, datetime]] = []
@@ -359,6 +383,15 @@ def _slot_response(slot: InterviewSlot) -> InterviewSlotResponse:
 
 def _status_label(status: InterviewStatus) -> str:
     return STATUS_LABELS.get(status, status.value)
+
+
+def _resolve_hr_notification_recipient(interview: Interview) -> int | None:
+    if interview.created_by_user_id is not None:
+        return interview.created_by_user_id
+    interviewer = interview.interviewer
+    if interviewer is not None and interviewer.user_id is not None:
+        return interviewer.user_id
+    return None
 
 
 def _outcome_label(outcome: InterviewOutcome | None) -> str | None:

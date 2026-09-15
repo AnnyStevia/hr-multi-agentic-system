@@ -1,7 +1,8 @@
 export type NotificationType =
   | "application_status_changed"
   | "interview_invitation"
-  | "interview_scheduled";
+  | "interview_scheduled"
+  | "interview_reminder";
 
 export interface Notification {
   id: number;

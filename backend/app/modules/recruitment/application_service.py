@@ -148,6 +148,10 @@ class ApplicationService:
         candidate = self._require_candidate(user)
         return self.applications.get_by_candidate_and_job(candidate.id, job_id)
 
+    def list_own(self, user: User) -> list[Application]:
+        candidate = self._require_candidate(user)
+        return self.applications.list_for_candidate(candidate.id)
+
     def list_for_job(self, job_id: int) -> list[Application]:
         job = self.jobs.get_by_id(job_id)
         if job is None:

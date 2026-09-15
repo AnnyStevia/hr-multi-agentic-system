@@ -16,7 +16,7 @@ class InterviewCreateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     message: str = Field(min_length=1, max_length=5000)
-    slots: list[InterviewSlotInput] = Field(min_length=3, max_length=3)
+    slots: list[InterviewSlotInput] = Field(min_length=2, max_length=5)
 
 
 class InterviewSlotResponse(BaseModel):

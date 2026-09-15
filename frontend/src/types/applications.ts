@@ -76,6 +76,14 @@ export interface ApplicationDetail {
   documents: ApplicationDocument[];
 }
 
+export interface CandidateApplicationSummary {
+  id: number;
+  job_id: number;
+  status: ApplicationStatus;
+  submitted_at: string;
+  job_title: string;
+}
+
 export interface PresignedDocument {
   url: string;
   filename: string;

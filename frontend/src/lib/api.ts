@@ -8,7 +8,7 @@ import type {
   User,
 } from "@/types/auth";
 import type { Job, JobPayload } from "@/types/jobs";
-import type { ApplicationDetail, ApplicationListItem, ApplicationStatus, PresignedDocument } from "@/types/applications";
+import type { ApplicationDetail, ApplicationListItem, ApplicationStatus, CandidateApplicationSummary, PresignedDocument } from "@/types/applications";
 import type { Department } from "@/types/departments";
 import type { Employee, EmployeeListResponse, EmployeePayload, EmployeeUpdatePayload, EmploymentStatus } from "@/types/employees";
 import type { MarkAllReadResponse, Notification, UnreadCountResponse } from "@/types/notifications";
@@ -258,6 +258,10 @@ class ApiClient {
 
   async getMyApplication(id: number): Promise<ApplicationDetail> {
     return this.request<ApplicationDetail>(`/api/v1/careers/applications/${id}`);
+  }
+
+  async listMyApplications(): Promise<CandidateApplicationSummary[]> {
+    return this.request<CandidateApplicationSummary[]>("/api/v1/careers/my-applications");
   }
 
   async listJobApplications(jobId: number): Promise<ApplicationListItem[]> {
