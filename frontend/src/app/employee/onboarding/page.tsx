@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { DocumentsSection } from "@/components/DocumentsSection";
+import { TrainingSection } from "@/components/TrainingSection";
 import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { useAuth } from "@/hooks/useAuth";
@@ -104,7 +106,7 @@ export default function EmployeeOnboardingPage() {
         <p className="mt-1 text-sm text-gray-600">
           {isComplete
             ? "Your onboarding is complete. You can review your tasks below."
-            : "Complete the tasks below. HR will mark your onboarding finished when everything is done."}
+            : "Complete all assigned tasks below to finish onboarding and unlock the employee portal."}
         </p>
       </div>
 
@@ -151,7 +153,7 @@ export default function EmployeeOnboardingPage() {
             {!isComplete && (
               <p className="mb-4 text-sm text-gray-600">
                 {pendingCount === 0
-                  ? "All assigned tasks are done. Waiting for HR to complete your onboarding."
+                  ? "All assigned tasks are done. Onboarding will complete automatically."
                   : `${pendingCount} pending task${pendingCount === 1 ? "" : "s"} remaining.`}
               </p>
             )}
@@ -204,6 +206,9 @@ export default function EmployeeOnboardingPage() {
           </>
         )}
       </ApplicationSection>
+
+      <DocumentsSection mode="employee" />
+      <TrainingSection mode="employee" />
     </div>
   );
 }

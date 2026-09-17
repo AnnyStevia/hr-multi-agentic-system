@@ -4,6 +4,8 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { DocumentsSection } from "@/components/DocumentsSection";
+import { TrainingSection } from "@/components/TrainingSection";
 import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { api } from "@/lib/api";
@@ -219,14 +221,19 @@ export default function OnboardingDetailPage() {
           <p className="mt-1 text-sm text-gray-600">{employee.position}</p>
         </div>
         {onboarding.status === "in_progress" && (
-          <button
-            type="button"
-            disabled={completingOnboarding}
-            onClick={handleCompleteOnboarding}
-            className="bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-          >
-            {completingOnboarding ? "Completing..." : "Mark onboarding complete"}
-          </button>
+          <div className="text-right space-y-1">
+            <button
+              type="button"
+              disabled={completingOnboarding}
+              onClick={handleCompleteOnboarding}
+              className="border border-gray-300 bg-white text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              {completingOnboarding ? "Completing..." : "Mark onboarding complete"}
+            </button>
+            <p className="text-xs text-gray-500 max-w-xs">
+              Override only — normally completes when the employee finishes all tasks.
+            </p>
+          </div>
         )}
       </div>
 
@@ -445,6 +452,9 @@ export default function OnboardingDetailPage() {
           </div>
         )}
       </ApplicationSection>
+
+      <DocumentsSection mode="hr" employeeId={employee.id} allowDelete />
+      <TrainingSection mode="hr" onboardingId={onboarding.id} />
     </div>
   );
 }

@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.modules.employees.repository import DepartmentRepository, EmployeeRepository
 from app.modules.employees.service import DepartmentService, EmployeeService
+from app.modules.notifications.repository import NotificationRepository
+from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.onboarding.service import OnboardingService
 
@@ -14,5 +16,9 @@ def get_department_service(db: Session = Depends(get_db)) -> DepartmentService:
 
 def get_employee_service(db: Session = Depends(get_db)) -> EmployeeService:
     departments = DepartmentService(DepartmentRepository(db))
-    onboarding = OnboardingService(OnboardingRepository(db), EmployeeRepository(db))
+    onboarding = OnboardingService(
+        OnboardingRepository(db),
+        EmployeeRepository(db),
+        NotificationService(NotificationRepository(db)),
+    )
     return EmployeeService(EmployeeRepository(db), departments, onboarding)

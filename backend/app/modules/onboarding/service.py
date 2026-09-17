@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
 from app.modules.employees.repository import EmployeeRepository
+from app.modules.notifications.models import NotificationType
+from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.models import Onboarding, OnboardingStatus, OnboardingTask, OnboardingTaskStatus
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.onboarding.schemas import (
@@ -14,9 +16,15 @@ from app.shared.exceptions import AppException
 
 
 class OnboardingService:
-    def __init__(self, repository: OnboardingRepository, employees: EmployeeRepository):
+    def __init__(
+        self,
+        repository: OnboardingRepository,
+        employees: EmployeeRepository,
+        notifications: NotificationService | None = None,
+    ):
         self.repository = repository
         self.employees = employees
+        self.notifications = notifications
 
     def create_for_employee(self, employee_id: int, *, commit: bool = True) -> Onboarding:
         if self.repository.get_by_employee_id(employee_id) is not None:
@@ -102,7 +110,12 @@ class OnboardingService:
     def create_task(
         self, onboarding_id: int, payload: OnboardingTaskCreateRequest
     ) -> OnboardingTask:
-        self.get_for_hr(onboarding_id)
+        onboarding = self.get_for_hr(onboarding_id)
+        if onboarding.status == OnboardingStatus.COMPLETED:
+            raise AppException(
+                "Cannot add tasks to a completed onboarding",
+                status_code=400,
+            )
         description = payload.description.strip() if payload.description else None
         if description == "":
             description = None
@@ -113,7 +126,9 @@ class OnboardingService:
             status=OnboardingTaskStatus.PENDING,
             due_date=payload.due_date,
         )
-        return self.repository.add_task(task)
+        saved = self.repository.add_task(task)
+        self._notify_task_assigned(onboarding, saved)
+        return saved
 
     def update_task(self, task_id: int, payload: OnboardingTaskUpdateRequest) -> OnboardingTask:
         task = self.repository.get_task_by_id(task_id)
@@ -121,6 +136,7 @@ class OnboardingService:
             raise AppException("Onboarding task not found", status_code=404)
 
         data = payload.model_dump(exclude_unset=True)
+        status_became_completed = False
         if "title" in data and data["title"] is not None:
             task.title = data["title"].strip()
         if "description" in data:
@@ -133,6 +149,8 @@ class OnboardingService:
         if "status" in data and data["status"] is not None:
             new_status = data["status"]
             if new_status == OnboardingTaskStatus.COMPLETED:
+                if task.status != OnboardingTaskStatus.COMPLETED:
+                    status_became_completed = True
                 task.status = OnboardingTaskStatus.COMPLETED
                 if task.completed_at is None:
                     task.completed_at = datetime.now(UTC)
@@ -140,13 +158,18 @@ class OnboardingService:
                 task.status = OnboardingTaskStatus.PENDING
                 task.completed_at = None
 
-        return self.repository.save_task(task)
+        saved = self.repository.save_task(task)
+        if status_became_completed:
+            self._maybe_complete_onboarding(saved.onboarding_id)
+        return saved
 
     def delete_task(self, task_id: int) -> None:
         task = self.repository.get_task_by_id(task_id)
         if task is None:
             raise AppException("Onboarding task not found", status_code=404)
+        onboarding_id = task.onboarding_id
         self.repository.delete_task(task)
+        self._maybe_complete_onboarding(onboarding_id)
 
     def list_tasks_for_employee_user(self, user_id: int) -> list[OnboardingTask]:
         onboarding = self.get_for_employee_user(user_id)
@@ -166,7 +189,37 @@ class OnboardingService:
 
         task.status = OnboardingTaskStatus.COMPLETED
         task.completed_at = datetime.now(UTC)
-        return self.repository.save_task(task)
+        saved = self.repository.save_task(task)
+        self._maybe_complete_onboarding(saved.onboarding_id)
+        return saved
+
+    def _notify_task_assigned(self, onboarding: Onboarding, task: OnboardingTask) -> None:
+        if self.notifications is None:
+            return
+        employee = self.employees.get_by_id(onboarding.employee_id)
+        if employee is None or employee.user_id is None:
+            return
+        self.notifications.create_notification(
+            recipient_user_id=employee.user_id,
+            type=NotificationType.ONBOARDING_TASK_ASSIGNED,
+            title="New onboarding task",
+            message=f'You have a new onboarding task: "{task.title}".',
+            related_entity_type="onboarding",
+            related_entity_id=onboarding.id,
+        )
+
+    def _maybe_complete_onboarding(self, onboarding_id: int) -> None:
+        onboarding = self.repository.get_by_id(onboarding_id)
+        if onboarding is None or onboarding.status == OnboardingStatus.COMPLETED:
+            return
+        tasks = self.repository.list_tasks_by_onboarding_id(onboarding_id)
+        if not tasks:
+            return
+        if any(task.status != OnboardingTaskStatus.COMPLETED for task in tasks):
+            return
+        onboarding.status = OnboardingStatus.COMPLETED
+        onboarding.completed_at = datetime.now(UTC)
+        self.repository.save(onboarding)
 
 
 def build_onboarding_list_item(onboarding: Onboarding) -> OnboardingListItemResponse:

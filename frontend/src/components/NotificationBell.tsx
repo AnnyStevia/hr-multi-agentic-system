@@ -9,7 +9,7 @@ import type { Notification } from "@/types/notifications";
 const POLL_INTERVAL_MS = 20_000;
 
 type NotificationBellProps = {
-  variant?: "candidate" | "hr";
+  variant?: "candidate" | "hr" | "employee";
 };
 
 export function NotificationBell({ variant = "candidate" }: NotificationBellProps) {
@@ -115,7 +115,11 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       await markReadLocally(notification);
       setOpen(false);
 
-      if (variant === "candidate") {
+      if (variant === "employee") {
+        if (notification.related_entity_type === "onboarding") {
+          router.push("/employee/onboarding");
+        }
+      } else if (variant === "candidate") {
         if (notification.related_entity_type === "application" && notification.related_entity_id) {
           const application = await api.getMyApplication(notification.related_entity_id);
           router.push(`/careers/jobs/${application.job.id}`);
@@ -133,13 +137,17 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     }
   };
 
-  const viewAllHref = variant === "hr" ? "/hr/notifications" : "/careers/notifications";
+  const viewAllHref =
+    variant === "hr" ? "/hr/notifications" : variant === "employee" ? "/employee/onboarding" : "/careers/notifications";
+  const expanded = expandedId ? notifications.find((n) => n.id === expandedId) : undefined;
   const ctaLabel =
-    variant === "hr"
-      ? "View application"
-      : expandedId && notifications.find((n) => n.id === expandedId)?.related_entity_type === "interview"
-        ? "View interview"
-        : "View application";
+    variant === "employee"
+      ? "View onboarding"
+      : variant === "hr"
+        ? "View application"
+        : expanded?.related_entity_type === "interview"
+          ? "View interview"
+          : "View application";
 
   return (
     <div className="relative" ref={containerRef}>

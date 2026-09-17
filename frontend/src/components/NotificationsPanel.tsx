@@ -75,7 +75,8 @@ export function NotificationsPanel({
                   <div className="px-4 pb-3 bg-amber-50 border-t border-amber-100">
                     <p className="pt-3 text-sm text-amber-950 whitespace-pre-wrap">{notification.message}</p>
                     {(notification.related_entity_type === "application" ||
-                      notification.related_entity_type === "interview") && (
+                      notification.related_entity_type === "interview" ||
+                      notification.related_entity_type === "onboarding") && (
                       <button
                         type="button"
                         disabled={navigating}

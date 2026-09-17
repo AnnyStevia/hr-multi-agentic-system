@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessEmployeePortal, needsOnboarding } from "@/lib/roles";
 
@@ -68,6 +69,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             <Link href="/employee/onboarding" className="text-sm text-gray-600 hover:text-gray-900">
               Onboarding
             </Link>
+            <NotificationBell variant="employee" />
             <span className="text-sm text-gray-600">{user.full_name}</span>
             <button
               onClick={logout}

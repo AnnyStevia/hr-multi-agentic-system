@@ -12,6 +12,7 @@ class NotificationType(str, Enum):
     INTERVIEW_INVITATION = "interview_invitation"
     INTERVIEW_SCHEDULED = "interview_scheduled"
     INTERVIEW_REMINDER = "interview_reminder"
+    ONBOARDING_TASK_ASSIGNED = "onboarding_task_assigned"
 
 
 class Notification(Base):

@@ -21,7 +21,11 @@ def get_interview_service(
 ) -> InterviewService:
     notification_service = NotificationService(NotificationRepository(db))
     department_service = DepartmentService(DepartmentRepository(db))
-    onboarding_service = OnboardingService(OnboardingRepository(db), EmployeeRepository(db))
+    onboarding_service = OnboardingService(
+        OnboardingRepository(db),
+        EmployeeRepository(db),
+        notification_service,
+    )
     employee_service = EmployeeService(
         EmployeeRepository(db), department_service, onboarding_service
     )

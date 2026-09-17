@@ -7,11 +7,13 @@ from app.api.v1 import (
     career_interviews,
     careers,
     departments,
+    documents,
     employees,
     interviews,
     jobs,
     notifications,
     onboarding,
+    training,
     users,
 )
 
@@ -20,9 +22,14 @@ api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(departments.router)
 api_router.include_router(employees.router)
+api_router.include_router(documents.employees_router)
+api_router.include_router(documents.me_router)
 api_router.include_router(onboarding.employee_onboarding_router)
 api_router.include_router(onboarding.me_router)
 api_router.include_router(onboarding.router)
+api_router.include_router(training.catalog_router)
+api_router.include_router(training.onboarding_router)
+api_router.include_router(training.me_router)
 api_router.include_router(jobs.router)
 api_router.include_router(applications.router)
 api_router.include_router(careers.router)

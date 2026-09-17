@@ -27,6 +27,12 @@ import type {
   OnboardingTaskCreatePayload,
   OnboardingTaskUpdatePayload,
 } from "@/types/onboarding";
+import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
+import type {
+  OnboardingTrainingAssignment,
+  Training,
+  TrainingPayload,
+} from "@/types/training";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -440,6 +446,107 @@ class ApiClient {
     return this.request<Onboarding>(`/api/v1/onboarding/${onboardingId}/complete`, {
       method: "POST",
     });
+  }
+
+  async listMyDocuments(): Promise<EmployeeDocument[]> {
+    return this.request<EmployeeDocument[]>("/api/v1/me/documents");
+  }
+
+  async uploadMyDocument(documentType: DocumentType, file: File): Promise<EmployeeDocument> {
+    const form = new FormData();
+    form.append("document_type", documentType);
+    form.append("file", file);
+    return this.request<EmployeeDocument>("/api/v1/me/documents", {
+      method: "POST",
+      body: form,
+    });
+  }
+
+  async getMyDocumentUrl(documentId: number, download = false): Promise<PresignedDocumentUrl> {
+    const query = download ? "?download=true" : "";
+    return this.request<PresignedDocumentUrl>(`/api/v1/me/documents/${documentId}/url${query}`);
+  }
+
+  async listEmployeeDocuments(employeeId: number): Promise<EmployeeDocument[]> {
+    return this.request<EmployeeDocument[]>(`/api/v1/employees/${employeeId}/documents`);
+  }
+
+  async uploadEmployeeDocument(
+    employeeId: number,
+    documentType: DocumentType,
+    file: File,
+  ): Promise<EmployeeDocument> {
+    const form = new FormData();
+    form.append("document_type", documentType);
+    form.append("file", file);
+    return this.request<EmployeeDocument>(`/api/v1/employees/${employeeId}/documents`, {
+      method: "POST",
+      body: form,
+    });
+  }
+
+  async getEmployeeDocumentUrl(
+    employeeId: number,
+    documentId: number,
+    download = false,
+  ): Promise<PresignedDocumentUrl> {
+    const query = download ? "?download=true" : "";
+    return this.request<PresignedDocumentUrl>(
+      `/api/v1/employees/${employeeId}/documents/${documentId}/url${query}`,
+    );
+  }
+
+  async deleteEmployeeDocument(employeeId: number, documentId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/employees/${employeeId}/documents/${documentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listTrainings(): Promise<Training[]> {
+    return this.request<Training[]>("/api/v1/trainings");
+  }
+
+  async createTraining(payload: TrainingPayload): Promise<Training> {
+    return this.request<Training>("/api/v1/trainings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listOnboardingTrainings(onboardingId: number): Promise<OnboardingTrainingAssignment[]> {
+    return this.request<OnboardingTrainingAssignment[]>(
+      `/api/v1/onboarding/${onboardingId}/trainings`,
+    );
+  }
+
+  async assignOnboardingTraining(
+    onboardingId: number,
+    trainingId: number,
+  ): Promise<OnboardingTrainingAssignment> {
+    return this.request<OnboardingTrainingAssignment>(
+      `/api/v1/onboarding/${onboardingId}/trainings`,
+      {
+        method: "POST",
+        body: JSON.stringify({ training_id: trainingId }),
+      },
+    );
+  }
+
+  async removeOnboardingTraining(onboardingId: number, assignmentId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/onboarding/${onboardingId}/trainings/${assignmentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listMyOnboardingTrainings(): Promise<OnboardingTrainingAssignment[]> {
+    return this.request<OnboardingTrainingAssignment[]>("/api/v1/me/onboarding/trainings");
+  }
+
+  async completeMyOnboardingTraining(assignmentId: number): Promise<OnboardingTrainingAssignment> {
+    return this.request<OnboardingTrainingAssignment>(
+      `/api/v1/me/onboarding/trainings/${assignmentId}/complete`,
+      { method: "PATCH" },
+    );
   }
 
   logout(): void {

@@ -245,3 +245,115 @@ def test_invalid_onboarding_and_task_access_rejected(client, db_session):
     )
     assert client.get("/api/v1/me/onboarding", headers=other_headers).status_code == 200
     assert hired2.json()["hired_employee_id"] != body["hired_employee_id"]
+
+
+def test_creating_task_notifies_employee(client, db_session):
+    from app.modules.identity.models import User
+    from app.modules.notifications.models import Notification, NotificationType
+
+    _application, _job, candidate_headers, headers, body = _hire(
+        client, db_session, email="tasks.notify@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+    user = db_session.query(User).filter(User.email == "tasks.notify@test.com").one()
+
+    created = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/tasks",
+        json={"title": "Read company handbook"},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+
+    notification = (
+        db_session.query(Notification)
+        .filter(
+            Notification.recipient_user_id == user.id,
+            Notification.type == NotificationType.ONBOARDING_TASK_ASSIGNED,
+        )
+        .one()
+    )
+    assert "Read company handbook" in notification.message
+    assert notification.related_entity_type == "onboarding"
+    assert notification.related_entity_id == onboarding_id
+
+    listed = client.get("/api/v1/notifications", headers=candidate_headers)
+    assert listed.status_code == 200
+    assert any(item["type"] == "onboarding_task_assigned" for item in listed.json())
+
+
+def test_completing_last_task_auto_completes_onboarding(client, db_session):
+    from app.modules.onboarding.models import OnboardingStatus
+
+    _application, _job, candidate_headers, headers, body = _hire(
+        client, db_session, email="tasks.autodone@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+
+    first = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/tasks",
+        json={"title": "Task A"},
+        headers=headers,
+    )
+    second = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/tasks",
+        json={"title": "Task B"},
+        headers=headers,
+    )
+    assert first.status_code == 201 and second.status_code == 201
+    task_a = first.json()["id"]
+    task_b = second.json()["id"]
+
+    partial = client.patch(
+        f"/api/v1/me/onboarding/tasks/{task_a}/complete",
+        headers=candidate_headers,
+    )
+    assert partial.status_code == 200
+    db_session.expire_all()
+    onboarding = db_session.query(Onboarding).filter(Onboarding.id == onboarding_id).one()
+    assert onboarding.status == OnboardingStatus.IN_PROGRESS
+    assert client.get("/api/v1/careers/jobs", headers=candidate_headers).status_code == 403
+
+    done = client.patch(
+        f"/api/v1/me/onboarding/tasks/{task_b}/complete",
+        headers=candidate_headers,
+    )
+    assert done.status_code == 200
+    db_session.expire_all()
+    onboarding = db_session.query(Onboarding).filter(Onboarding.id == onboarding_id).one()
+    assert onboarding.status == OnboardingStatus.COMPLETED
+    assert onboarding.completed_at is not None
+
+    me = client.get("/api/v1/auth/me", headers=candidate_headers)
+    assert me.json()["onboarding_status"] == "completed"
+    assert client.get("/api/v1/careers/jobs", headers=candidate_headers).status_code == 200
+    assert client.get("/api/v1/me/employee-home", headers=candidate_headers).status_code == 200
+
+
+def test_cannot_add_task_to_completed_onboarding(client, db_session):
+    _application, _job, _candidate_headers, headers, body = _hire(
+        client, db_session, email="tasks.closed@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+    assert (
+        client.post(f"/api/v1/onboarding/{onboarding_id}/complete", headers=headers).status_code
+        == 200
+    )
+    blocked = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/tasks",
+        json={"title": "Too late"},
+        headers=headers,
+    )
+    assert blocked.status_code == 400
+
+
+def test_hr_override_complete_works_with_zero_tasks(client, db_session):
+    _application, _job, candidate_headers, headers, body = _hire(
+        client, db_session, email="tasks.override@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+    assert (
+        client.post(f"/api/v1/onboarding/{onboarding_id}/complete", headers=headers).status_code
+        == 200
+    )
+    me = client.get("/api/v1/auth/me", headers=candidate_headers)
+    assert me.json()["onboarding_status"] == "completed"
