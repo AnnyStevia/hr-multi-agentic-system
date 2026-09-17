@@ -3,8 +3,8 @@ import json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from app.modules.identity.dependencies import require_roles
 from app.modules.identity.models import User
+from app.modules.onboarding.dependencies import require_careers_access
 from app.modules.recruitment.application_service import (
     ApplicationService,
     build_application_detail,
@@ -23,7 +23,7 @@ def _handle(exc: AppException) -> None:
 
 @router.get("", response_model=list[JobResponse])
 def list_career_jobs(
-    _candidate: User = Depends(require_roles("candidate")),
+    _candidate: User = Depends(require_careers_access),
     job_service: JobService = Depends(get_job_service),
 ) -> list[JobResponse]:
     return [build_job_response(job) for job in job_service.list_published_jobs()]
@@ -32,7 +32,7 @@ def list_career_jobs(
 @router.get("/{job_id}", response_model=JobResponse)
 def get_career_job(
     job_id: int,
-    _candidate: User = Depends(require_roles("candidate")),
+    _candidate: User = Depends(require_careers_access),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:
@@ -44,7 +44,7 @@ def get_career_job(
 @router.get("/{job_id}/application", response_model=ApplicationDetail)
 def get_own_job_application(
     job_id: int,
-    current_user: User = Depends(require_roles("candidate")),
+    current_user: User = Depends(require_careers_access),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> ApplicationDetail:
     try:
@@ -65,7 +65,7 @@ def apply_to_job(
     phone: str = Form(...),
     cv: UploadFile = File(...),
     cover_letter: UploadFile | None = File(None),
-    current_user: User = Depends(require_roles("candidate")),
+    current_user: User = Depends(require_careers_access),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> ApplicationDetail:
     try:

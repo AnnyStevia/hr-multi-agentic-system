@@ -14,6 +14,7 @@ export interface User {
   roles: Role[];
   permissions: string[];
   phone?: string | null;
+  onboarding_status?: "in_progress" | "completed" | null;
 }
 
 export interface Account {

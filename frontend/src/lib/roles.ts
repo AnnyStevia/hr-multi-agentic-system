@@ -12,6 +12,17 @@ export function isHR(user: User | null): boolean {
   return hasRole(user, "hr");
 }
 
+export function needsOnboarding(user: User | null): boolean {
+  return user?.onboarding_status === "in_progress";
+}
+
+/** Employee portal: employee role, or hired user with an onboarding record (dual-role / lag-safe). */
+export function canAccessEmployeePortal(user: User | null): boolean {
+  if (!user) return false;
+  if (hasRole(user, "employee")) return true;
+  return user.onboarding_status === "in_progress" || user.onboarding_status === "completed";
+}
+
 const ROLE_HOME_PATHS: Array<{ role: string; path: string }> = [
   { role: "admin", path: "/admin/dashboard" },
   { role: "hr", path: "/hr/dashboard" },
@@ -23,6 +34,9 @@ const ROLE_HOME_PATHS: Array<{ role: string; path: string }> = [
 export function getHomePath(user: User | null): string {
   if (!user) {
     return "/login";
+  }
+  if (needsOnboarding(user)) {
+    return "/employee/onboarding";
   }
   for (const mapping of ROLE_HOME_PATHS) {
     if (hasRole(user, mapping.role)) {
@@ -54,8 +68,11 @@ export function isSafeCareersNext(next: string | null | undefined): boolean {
 }
 
 export function resolvePostAuthPath(user: User | null, next?: string | null): string {
+  if (needsOnboarding(user)) {
+    return "/employee/onboarding";
+  }
   const home = getHomePath(user);
-  if (isCandidate(user) && isSafeCareersNext(next)) {
+  if (isCandidate(user) && !hasRole(user, "employee") && isSafeCareersNext(next)) {
     return next as string;
   }
   return home;

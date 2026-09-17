@@ -1,6 +1,7 @@
 from app.modules.employees.models import Employee
 from app.modules.identity.models import Candidate
 from app.modules.interviews.models import Interview, InterviewStatus
+from app.modules.onboarding.models import Onboarding, OnboardingStatus
 from app.modules.recruitment.models import Application, ApplicationStatus
 from app.tests.helpers import auth_header, create_user_with_role
 from app.tests.integration.test_application_review import _submit_application
@@ -179,6 +180,14 @@ def test_hr_can_record_hired_outcome_and_create_employee(client, db_session):
     assert employee.user_id is not None
     assert employee.position == job["title"]
     assert employee.department_id == job["department_id"]
+
+    onboarding = (
+        db_session.query(Onboarding)
+        .filter(Onboarding.employee_id == employee.id)
+        .one()
+    )
+    assert onboarding.status == OnboardingStatus.IN_PROGRESS
+    assert onboarding.started_at is not None
 
 
 def test_hiring_twice_does_not_create_duplicate_employees(client, db_session):

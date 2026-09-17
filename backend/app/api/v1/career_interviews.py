@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.modules.identity.dependencies import require_roles
 from app.modules.identity.models import User
 from app.modules.interviews.dependencies import get_interview_service
 from app.modules.interviews.schemas import InterviewConfirmRequest, InterviewDetailResponse
 from app.modules.interviews.service import InterviewService, build_interview_detail
+from app.modules.onboarding.dependencies import require_careers_access
 from app.shared.exceptions import AppException
 
 router = APIRouter(prefix="/careers/interviews", tags=["Careers"])
@@ -17,7 +17,7 @@ def _handle(exc: AppException) -> None:
 @router.get("/{interview_id}", response_model=InterviewDetailResponse)
 def get_own_interview(
     interview_id: int,
-    current_user: User = Depends(require_roles("candidate")),
+    current_user: User = Depends(require_careers_access),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:
@@ -30,7 +30,7 @@ def get_own_interview(
 def confirm_interview_slot(
     interview_id: int,
     payload: InterviewConfirmRequest,
-    current_user: User = Depends(require_roles("candidate")),
+    current_user: User = Depends(require_careers_access),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:

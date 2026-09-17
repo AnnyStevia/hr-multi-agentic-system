@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from app.modules.employees.models import (
     Department,
@@ -14,8 +17,15 @@ from app.modules.employees.schemas import (
     EmployeeResponse,
     EmployeeUpdateRequest,
 )
+from app.modules.identity.models import Role, UserRole
 from app.modules.recruitment.models import Application
 from app.shared.exceptions import AppException
+
+if TYPE_CHECKING:
+    from app.modules.onboarding.service import OnboardingService
+
+
+EMPLOYEE_ROLE_NAME = "employee"
 
 
 class DepartmentService:
@@ -62,9 +72,15 @@ class DepartmentService:
 
 
 class EmployeeService:
-    def __init__(self, employees: EmployeeRepository, departments: DepartmentService):
+    def __init__(
+        self,
+        employees: EmployeeRepository,
+        departments: DepartmentService,
+        onboarding: OnboardingService | None = None,
+    ):
         self.employees = employees
         self.departments = departments
+        self.onboarding = onboarding
 
     def list_employees(
         self,
@@ -133,7 +149,16 @@ class EmployeeService:
             employment_status=EmploymentStatus.ACTIVE,
             user_id=user.id,
         )
-        return self.employees.add(employee, commit=commit)
+        employee = self.employees.add(employee, commit=False)
+        if self.onboarding is None:
+            raise AppException("Onboarding service is not configured", status_code=500)
+        self.onboarding.create_for_employee(employee.id, commit=False)
+        _ensure_employee_role(self.employees.db, user.id)
+        if commit:
+            self.employees.db.commit()
+            loaded = self.employees.get_by_id(employee.id)
+            return loaded or employee
+        return employee
 
     def get_by_user_id(self, user_id: int) -> Employee | None:
         return self.employees.get_by_user_id(user_id)
@@ -219,3 +244,16 @@ def _normalize_phone(value: str) -> str:
     if any(character not in allowed for character in stripped):
         raise AppException("Enter a valid phone number", status_code=400)
     return stripped
+
+
+def _ensure_employee_role(db, user_id: int) -> None:
+    employee_role = db.query(Role).filter(Role.name == EMPLOYEE_ROLE_NAME).first()
+    if employee_role is None:
+        raise AppException("Employee role is not configured", status_code=500)
+    existing = (
+        db.query(UserRole)
+        .filter(UserRole.user_id == user_id, UserRole.role_id == employee_role.id)
+        .first()
+    )
+    if existing is None:
+        db.add(UserRole(user_id=user_id, role_id=employee_role.id))

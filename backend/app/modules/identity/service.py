@@ -53,7 +53,7 @@ class AuthService:
         )
 
     @staticmethod
-    def build_user_response(user: User) -> UserResponse:
+    def build_user_response(user: User, *, onboarding_status: str | None = None) -> UserResponse:
         roles = [ur.role for ur in user.user_roles]
         permission_names: set[str] = set()
         for role in roles:
@@ -70,6 +70,21 @@ class AuthService:
             roles=roles,
             permissions=sorted(permission_names),
             phone=user.candidate_profile.phone if user.candidate_profile else None,
+            onboarding_status=onboarding_status,
+        )
+
+    def build_user_response_with_onboarding(self, user: User) -> UserResponse:
+        from app.modules.employees.repository import EmployeeRepository
+        from app.modules.onboarding.repository import OnboardingRepository
+        from app.modules.onboarding.service import OnboardingService
+
+        status = OnboardingService(
+            OnboardingRepository(self.db),
+            EmployeeRepository(self.db),
+        ).get_onboarding_status_for_user(user.id)
+        return self.build_user_response(
+            user,
+            onboarding_status=status.value if status is not None else None,
         )
 
 

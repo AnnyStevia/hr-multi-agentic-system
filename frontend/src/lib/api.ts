@@ -20,6 +20,13 @@ import type {
   InterviewOutcomePayload,
   InterviewSummary,
 } from "@/types/interviews";
+import type {
+  Onboarding,
+  OnboardingListItem,
+  OnboardingTask,
+  OnboardingTaskCreatePayload,
+  OnboardingTaskUpdatePayload,
+} from "@/types/onboarding";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -101,6 +108,36 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  private async requestVoid(path: string, options: RequestInit = {}): Promise<void> {
+    const token = this.getToken();
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    const headers: Record<string, string> = {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers,
+      });
+    } catch {
+      throw new Error("Cannot reach the server. Is the backend running?");
+    }
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        detail: "An unexpected error occurred",
+      }));
+      throw new Error(formatApiDetail(error.detail));
+    }
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
@@ -346,6 +383,62 @@ class ApiClient {
     return this.request<InterviewDetail>(`/api/v1/interviews/${id}/outcome`, {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+  }
+
+  async listOnboardings(): Promise<OnboardingListItem[]> {
+    return this.request<OnboardingListItem[]>("/api/v1/onboarding");
+  }
+
+  async getOnboarding(id: number): Promise<Onboarding> {
+    return this.request<Onboarding>(`/api/v1/onboarding/${id}`);
+  }
+
+  async listOnboardingTasks(onboardingId: number): Promise<OnboardingTask[]> {
+    return this.request<OnboardingTask[]>(`/api/v1/onboarding/${onboardingId}/tasks`);
+  }
+
+  async createOnboardingTask(
+    onboardingId: number,
+    payload: OnboardingTaskCreatePayload,
+  ): Promise<OnboardingTask> {
+    return this.request<OnboardingTask>(`/api/v1/onboarding/${onboardingId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOnboardingTask(
+    taskId: number,
+    payload: OnboardingTaskUpdatePayload,
+  ): Promise<OnboardingTask> {
+    return this.request<OnboardingTask>(`/api/v1/onboarding/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteOnboardingTask(taskId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/onboarding/tasks/${taskId}`, { method: "DELETE" });
+  }
+
+  async getMyOnboarding(): Promise<Onboarding> {
+    return this.request<Onboarding>("/api/v1/me/onboarding");
+  }
+
+  async listMyOnboardingTasks(): Promise<OnboardingTask[]> {
+    return this.request<OnboardingTask[]>("/api/v1/me/onboarding/tasks");
+  }
+
+  async completeMyOnboardingTask(taskId: number): Promise<OnboardingTask> {
+    return this.request<OnboardingTask>(`/api/v1/me/onboarding/tasks/${taskId}/complete`, {
+      method: "PATCH",
+    });
+  }
+
+  async completeOnboarding(onboardingId: number): Promise<Onboarding> {
+    return this.request<Onboarding>(`/api/v1/onboarding/${onboardingId}/complete`, {
+      method: "POST",
     });
   }
 

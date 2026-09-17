@@ -45,5 +45,8 @@ def register_candidate(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
-    return AuthService.build_user_response(current_user)
+def get_me(
+    current_user: User = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> UserResponse:
+    return auth_service.build_user_response_with_onboarding(current_user)

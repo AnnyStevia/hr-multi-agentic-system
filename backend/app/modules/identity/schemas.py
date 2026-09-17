@@ -89,5 +89,6 @@ class UserResponse(BaseModel):
     roles: list[RoleResponse] = []
     permissions: list[str] = []
     phone: str | None = None
+    onboarding_status: str | None = None
 
     model_config = {"from_attributes": True}
