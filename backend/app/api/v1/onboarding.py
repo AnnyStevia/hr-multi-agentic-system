@@ -8,6 +8,7 @@ from app.modules.onboarding.dependencies import (
 )
 from app.modules.onboarding.schemas import (
     OnboardingListItemResponse,
+    OnboardingProgressResponse,
     OnboardingResponse,
     OnboardingTaskCreateRequest,
     OnboardingTaskResponse,
@@ -36,6 +37,17 @@ def get_my_onboarding(
 ) -> OnboardingResponse:
     try:
         return build_onboarding_response(onboarding_service.get_for_employee_user(current_user.id))
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.get("/onboarding/progress", response_model=OnboardingProgressResponse)
+def get_my_onboarding_progress(
+    current_user: User = Depends(get_current_user),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingProgressResponse:
+    try:
+        return onboarding_service.get_progress_for_employee_user(current_user.id)
     except AppException as exc:
         _handle(exc)
 
@@ -78,6 +90,18 @@ def list_onboardings(
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> list[OnboardingListItemResponse]:
     return onboarding_service.list_for_hr()
+
+
+@router.get("/{onboarding_id}/progress", response_model=OnboardingProgressResponse)
+def get_onboarding_progress(
+    onboarding_id: int,
+    _user: User = Depends(require_permissions("onboarding:read")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingProgressResponse:
+    try:
+        return onboarding_service.get_progress_for_hr(onboarding_id)
+    except AppException as exc:
+        _handle(exc)
 
 
 @router.post("/{onboarding_id}/complete", response_model=OnboardingResponse)

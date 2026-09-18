@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.modules.documents.repository import DocumentRepository
 from app.modules.employees.repository import EmployeeRepository
 from app.modules.identity.dependencies import require_roles
 from app.modules.identity.models import User
@@ -9,6 +10,7 @@ from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.onboarding.service import OnboardingService
+from app.modules.training.repository import TrainingRepository
 
 
 def get_onboarding_service(db: Session = Depends(get_db)) -> OnboardingService:
@@ -16,6 +18,8 @@ def get_onboarding_service(db: Session = Depends(get_db)) -> OnboardingService:
         OnboardingRepository(db),
         EmployeeRepository(db),
         NotificationService(NotificationRepository(db)),
+        DocumentRepository(db),
+        TrainingRepository(db),
     )
 
 

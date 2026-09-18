@@ -155,25 +155,25 @@ def test_hr_can_list_onboardings_with_task_counts(client, db_session):
         .one()
     )
 
-    created = client.post(
+    first = client.post(
         f"/api/v1/onboarding/{onboarding.id}/tasks",
         json={"title": "Setup laptop"},
         headers=headers,
     )
-    assert created.status_code == 201, created.text
-    task_id = created.json()["id"]
+    assert first.status_code == 201, first.text
+    second = client.post(
+        f"/api/v1/onboarding/{onboarding.id}/tasks",
+        json={"title": "Sign contract"},
+        headers=headers,
+    )
+    assert second.status_code == 201, second.text
+    task_id = first.json()["id"]
     completed = client.patch(
         f"/api/v1/onboarding/tasks/{task_id}",
         json={"status": "completed"},
         headers=headers,
     )
     assert completed.status_code == 200, completed.text
-
-    client.post(
-        f"/api/v1/onboarding/{onboarding.id}/tasks",
-        json={"title": "Sign contract"},
-        headers=headers,
-    )
 
     listing = client.get("/api/v1/onboarding", headers=headers)
     assert listing.status_code == 200, listing.text

@@ -7,19 +7,22 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessEmployeePortal, needsOnboarding } from "@/lib/roles";
 
+const ONBOARDING_ALLOWED = new Set(["/employee/onboarding", "/employee/profile"]);
+
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+  const allowDuringOnboarding = ONBOARDING_ALLOWED.has(pathname);
 
   useEffect(() => {
     if (!loading && !user) {
       window.location.href = "/login";
       return;
     }
-    if (!loading && user && needsOnboarding(user) && pathname !== "/employee/onboarding") {
+    if (!loading && user && needsOnboarding(user) && !allowDuringOnboarding) {
       window.location.href = "/employee/onboarding";
     }
-  }, [loading, user, pathname]);
+  }, [loading, user, allowDuringOnboarding]);
 
   if (loading) {
     return (
@@ -42,7 +45,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     );
   }
 
-  if (needsOnboarding(user) && pathname !== "/employee/onboarding") {
+  if (needsOnboarding(user) && !allowDuringOnboarding) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
@@ -66,6 +69,9 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                 Dashboard
               </Link>
             )}
+            <Link href="/employee/profile" className="text-sm text-gray-600 hover:text-gray-900">
+              Profile
+            </Link>
             <Link href="/employee/onboarding" className="text-sm text-gray-600 hover:text-gray-900">
               Onboarding
             </Link>

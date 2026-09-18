@@ -265,6 +265,8 @@ class InterviewService:
                     "An employee record has been created and HR will follow up with next steps soon."
                 ),
             )
+            if hired_employee is not None and self.employees is not None and self.employees.onboarding is not None:
+                self.employees.onboarding.notify_onboarding_started(hired_employee)
         elif outcome == InterviewOutcome.ANOTHER_INTERVIEW:
             job_title = saved.application.job.title
             self._notify_application_status(

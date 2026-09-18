@@ -23,11 +23,21 @@ import type {
 import type {
   Onboarding,
   OnboardingListItem,
+  OnboardingProgress,
   OnboardingTask,
   OnboardingTaskCreatePayload,
   OnboardingTaskUpdatePayload,
 } from "@/types/onboarding";
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
+import type {
+  EducationPayload,
+  EmployeeEducation,
+  EmployeeExperience,
+  EmployeeProfile,
+  ExperiencePayload,
+  PresignedProfilePictureUrl,
+  ProfileUpdatePayload,
+} from "@/types/profile";
 import type {
   OnboardingTrainingAssignment,
   Training,
@@ -432,6 +442,14 @@ class ApiClient {
     return this.request<Onboarding>("/api/v1/me/onboarding");
   }
 
+  async getMyOnboardingProgress(): Promise<OnboardingProgress> {
+    return this.request<OnboardingProgress>("/api/v1/me/onboarding/progress");
+  }
+
+  async getOnboardingProgress(onboardingId: number): Promise<OnboardingProgress> {
+    return this.request<OnboardingProgress>(`/api/v1/onboarding/${onboardingId}/progress`);
+  }
+
   async listMyOnboardingTasks(): Promise<OnboardingTask[]> {
     return this.request<OnboardingTask[]>("/api/v1/me/onboarding/tasks");
   }
@@ -546,6 +564,104 @@ class ApiClient {
     return this.request<OnboardingTrainingAssignment>(
       `/api/v1/me/onboarding/trainings/${assignmentId}/complete`,
       { method: "PATCH" },
+    );
+  }
+
+  async getMyProfile(): Promise<EmployeeProfile> {
+    return this.request<EmployeeProfile>("/api/v1/me/profile");
+  }
+
+  async updateMyProfile(payload: ProfileUpdatePayload): Promise<EmployeeProfile> {
+    return this.request<EmployeeProfile>("/api/v1/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async uploadMyProfilePicture(file: File): Promise<EmployeeProfile> {
+    const form = new FormData();
+    form.append("file", file);
+    return this.request<EmployeeProfile>("/api/v1/me/profile/picture", {
+      method: "POST",
+      body: form,
+    });
+  }
+
+  async getMyProfilePictureUrl(): Promise<PresignedProfilePictureUrl> {
+    return this.request<PresignedProfilePictureUrl>("/api/v1/me/profile/picture/url");
+  }
+
+  async deleteMyProfilePicture(): Promise<void> {
+    return this.requestVoid("/api/v1/me/profile/picture", { method: "DELETE" });
+  }
+
+  async listMyEducation(): Promise<EmployeeEducation[]> {
+    return this.request<EmployeeEducation[]>("/api/v1/me/profile/education");
+  }
+
+  async createMyEducation(payload: EducationPayload): Promise<EmployeeEducation> {
+    return this.request<EmployeeEducation>("/api/v1/me/profile/education", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateMyEducation(
+    educationId: number,
+    payload: Partial<EducationPayload>,
+  ): Promise<EmployeeEducation> {
+    return this.request<EmployeeEducation>(`/api/v1/me/profile/education/${educationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteMyEducation(educationId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/me/profile/education/${educationId}`, { method: "DELETE" });
+  }
+
+  async listMyExperience(): Promise<EmployeeExperience[]> {
+    return this.request<EmployeeExperience[]>("/api/v1/me/profile/experience");
+  }
+
+  async createMyExperience(payload: ExperiencePayload): Promise<EmployeeExperience> {
+    return this.request<EmployeeExperience>("/api/v1/me/profile/experience", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateMyExperience(
+    experienceId: number,
+    payload: Partial<ExperiencePayload>,
+  ): Promise<EmployeeExperience> {
+    return this.request<EmployeeExperience>(`/api/v1/me/profile/experience/${experienceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteMyExperience(experienceId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/me/profile/experience/${experienceId}`, { method: "DELETE" });
+  }
+
+  async getEmployeeProfile(employeeId: number): Promise<EmployeeProfile> {
+    return this.request<EmployeeProfile>(`/api/v1/employees/${employeeId}/profile`);
+  }
+
+  async listEmployeeEducation(employeeId: number): Promise<EmployeeEducation[]> {
+    return this.request<EmployeeEducation[]>(`/api/v1/employees/${employeeId}/profile/education`);
+  }
+
+  async listEmployeeExperience(employeeId: number): Promise<EmployeeExperience[]> {
+    return this.request<EmployeeExperience[]>(
+      `/api/v1/employees/${employeeId}/profile/experience`,
+    );
+  }
+
+  async getEmployeeProfilePictureUrl(employeeId: number): Promise<PresignedProfilePictureUrl> {
+    return this.request<PresignedProfilePictureUrl>(
+      `/api/v1/employees/${employeeId}/profile/picture/url`,
     );
   }
 

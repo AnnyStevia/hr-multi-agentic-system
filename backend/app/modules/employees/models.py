@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -69,6 +69,14 @@ class Employee(Base):
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    profile_picture_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    profile_picture_content_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    profile_picture_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    profile_picture_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

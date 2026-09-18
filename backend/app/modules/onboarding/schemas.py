@@ -58,3 +58,23 @@ class OnboardingTaskUpdateRequest(BaseModel):
     description: str | None = None
     due_date: date | None = None
     status: OnboardingTaskStatus | None = None
+
+
+class ProgressCountResponse(BaseModel):
+    total: int
+    completed: int
+    pending: int
+
+
+class DocumentCountResponse(BaseModel):
+    total: int
+
+
+class OnboardingProgressResponse(BaseModel):
+    onboarding_id: int
+    status: OnboardingStatus
+    completed_at: datetime | None
+    tasks: ProgressCountResponse
+    trainings: ProgressCountResponse
+    documents: DocumentCountResponse
+    overall_percentage: int

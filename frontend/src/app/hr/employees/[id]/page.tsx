@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { EmployeeProfileSection } from "@/components/EmployeeProfileSection";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
@@ -108,6 +109,8 @@ export default function EmployeeProfilePage() {
         <p className="text-sm text-gray-800">Hire date: {employee.hire_date}</p>
         <p className="text-sm text-gray-800">Status: {employee.employment_status}</p>
       </ApplicationSection>
+
+      <EmployeeProfileSection mode="hr" employeeId={employee.id} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {["Documents", "Leave", "Training", "Evaluations"].map((label) => (

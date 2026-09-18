@@ -3,7 +3,12 @@ export type NotificationType =
   | "interview_invitation"
   | "interview_scheduled"
   | "interview_reminder"
-  | "onboarding_task_assigned";
+  | "onboarding_task_assigned"
+  | "onboarding_started"
+  | "onboarding_task_completed"
+  | "onboarding_training_assigned"
+  | "onboarding_training_completed"
+  | "onboarding_completed";
 
 export interface Notification {
   id: number;

@@ -1,6 +1,9 @@
 from datetime import UTC, datetime
 
 from app.modules.employees.repository import EmployeeRepository
+from app.modules.identity.hr_access import list_hr_staff_user_ids
+from app.modules.notifications.models import NotificationType
+from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.training.models import OnboardingTraining, OnboardingTrainingStatus, Training
 from app.modules.training.repository import TrainingRepository
@@ -20,10 +23,12 @@ class TrainingService:
         repository: TrainingRepository,
         onboardings: OnboardingRepository,
         employees: EmployeeRepository,
+        notifications: NotificationService | None = None,
     ):
         self.repository = repository
         self.onboardings = onboardings
         self.employees = employees
+        self.notifications = notifications
 
     def list_trainings(self) -> list[Training]:
         return self.repository.list_trainings()
@@ -76,7 +81,9 @@ class TrainingService:
             status=OnboardingTrainingStatus.PENDING,
             assigned_at=datetime.now(UTC),
         )
-        return self.repository.add_assignment(assignment)
+        saved = self.repository.add_assignment(assignment)
+        self._notify_training_assigned(saved, training)
+        return saved
 
     def remove_assignment(self, onboarding_id: int, assignment_id: int) -> None:
         if self.onboardings.get_by_id(onboarding_id) is None:
@@ -99,7 +106,9 @@ class TrainingService:
             raise AppException("Training is already completed", status_code=400)
         assignment.status = OnboardingTrainingStatus.COMPLETED
         assignment.completed_at = datetime.now(UTC)
-        return self.repository.save_assignment(assignment)
+        saved = self.repository.save_assignment(assignment)
+        self._notify_training_completed(saved)
+        return saved
 
     def _require_onboarding_for_user(self, user_id: int):
         employee = self.employees.get_by_user_id(user_id)
@@ -109,6 +118,47 @@ class TrainingService:
         if onboarding is None:
             raise AppException("Onboarding not found", status_code=404)
         return onboarding
+
+    def _notify_training_assigned(self, assignment: OnboardingTraining, training: Training) -> None:
+        if self.notifications is None:
+            return
+        onboarding = self.onboardings.get_by_id(assignment.onboarding_id)
+        if onboarding is None:
+            return
+        employee = self.employees.get_by_id(onboarding.employee_id)
+        if employee is None or employee.user_id is None:
+            return
+        self.notifications.create_if_absent(
+            recipient_user_id=employee.user_id,
+            type=NotificationType.ONBOARDING_TRAINING_ASSIGNED,
+            title="New training assigned",
+            message=f'You have been assigned a new training: "{training.title}".',
+            related_entity_type="onboarding_training",
+            related_entity_id=assignment.id,
+        )
+
+    def _notify_training_completed(self, assignment: OnboardingTraining) -> None:
+        if self.notifications is None:
+            return
+        onboarding = self.onboardings.get_by_id(assignment.onboarding_id)
+        if onboarding is None:
+            return
+        employee = self.employees.get_by_id(onboarding.employee_id)
+        if employee is None:
+            return
+        training_title = assignment.training.title if assignment.training is not None else "training"
+        employee_name = employee.full_name
+        for recipient_id in list_hr_staff_user_ids(self.repository.db):
+            if employee.user_id is not None and recipient_id == employee.user_id:
+                continue
+            self.notifications.create_if_absent(
+                recipient_user_id=recipient_id,
+                type=NotificationType.ONBOARDING_TRAINING_COMPLETED,
+                title="Training completed",
+                message=f'{employee_name} completed the training "{training_title}".',
+                related_entity_type="onboarding_training",
+                related_entity_id=assignment.id,
+            )
 
 
 def build_training_response(training: Training) -> TrainingResponse:

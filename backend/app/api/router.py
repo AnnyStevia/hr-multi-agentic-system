@@ -13,6 +13,7 @@ from app.api.v1 import (
     jobs,
     notifications,
     onboarding,
+    profile,
     training,
     users,
 )
@@ -22,6 +23,8 @@ api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(departments.router)
 api_router.include_router(employees.router)
+api_router.include_router(profile.employees_router)
+api_router.include_router(profile.me_router)
 api_router.include_router(documents.employees_router)
 api_router.include_router(documents.me_router)
 api_router.include_router(onboarding.employee_onboarding_router)

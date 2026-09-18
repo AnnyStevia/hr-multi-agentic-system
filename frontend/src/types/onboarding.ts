@@ -36,6 +36,22 @@ export type OnboardingTask = {
   updated_at: string;
 };
 
+export type ProgressCount = {
+  total: number;
+  completed: number;
+  pending: number;
+};
+
+export type OnboardingProgress = {
+  onboarding_id: number;
+  status: OnboardingStatus;
+  completed_at: string | null;
+  tasks: ProgressCount;
+  trainings: ProgressCount;
+  documents: { total: number };
+  overall_percentage: number;
+};
+
 export type OnboardingTaskCreatePayload = {
   title: string;
   description?: string | null;

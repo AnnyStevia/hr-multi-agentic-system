@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { DocumentsSection } from "@/components/DocumentsSection";
+import { OnboardingProgressSection } from "@/components/OnboardingProgressSection";
 import { TrainingSection } from "@/components/TrainingSection";
 import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import type { Onboarding, OnboardingTask } from "@/types/onboarding";
+import type { Onboarding, OnboardingProgress, OnboardingTask } from "@/types/onboarding";
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -25,6 +26,7 @@ function formatDate(value: string): string {
 export default function EmployeeOnboardingPage() {
   const { user } = useAuth();
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -34,14 +36,17 @@ export default function EmployeeOnboardingPage() {
     setError("");
     setLoading(true);
     try {
-      const [onboardingData, taskData] = await Promise.all([
+      const [onboardingData, progressData, taskData] = await Promise.all([
         api.getMyOnboarding(),
+        api.getMyOnboardingProgress(),
         api.listMyOnboardingTasks(),
       ]);
       setOnboarding(onboardingData);
+      setProgress(progressData);
       setTasks(taskData);
     } catch (err) {
       setOnboarding(null);
+      setProgress(null);
       setTasks([]);
       setError(err instanceof Error ? err.message : "Failed to load onboarding");
     } finally {
@@ -121,6 +126,8 @@ export default function EmployeeOnboardingPage() {
           Onboarding complete. You now have full access to the employee portal.
         </div>
       )}
+
+      <OnboardingProgressSection progress={progress} />
 
       <ApplicationSection title="Onboarding status">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">

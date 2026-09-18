@@ -116,7 +116,10 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       setOpen(false);
 
       if (variant === "employee") {
-        if (notification.related_entity_type === "onboarding") {
+        if (
+          notification.related_entity_type === "onboarding" ||
+          notification.related_entity_type === "onboarding_training"
+        ) {
           router.push("/employee/onboarding");
         }
       } else if (variant === "candidate") {
@@ -126,6 +129,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
         } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
           router.push(`/careers/interviews/${notification.related_entity_id}`);
         }
+      } else if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
+        router.push(`/hr/onboarding/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         const interview = await api.getInterview(notification.related_entity_id);
         router.push(`/hr/applications/${interview.application_id}`);
@@ -144,7 +149,9 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     variant === "employee"
       ? "View onboarding"
       : variant === "hr"
-        ? "View application"
+        ? expanded?.related_entity_type === "onboarding"
+          ? "View onboarding"
+          : "View application"
         : expanded?.related_entity_type === "interview"
           ? "View interview"
           : "View application";

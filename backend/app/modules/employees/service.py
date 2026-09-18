@@ -157,7 +157,10 @@ class EmployeeService:
         if commit:
             self.employees.db.commit()
             loaded = self.employees.get_by_id(employee.id)
-            return loaded or employee
+            if loaded is not None:
+                self.onboarding.notify_onboarding_started(loaded)
+                return loaded
+            return employee
         return employee
 
     def get_by_user_id(self, user_id: int) -> Employee | None:

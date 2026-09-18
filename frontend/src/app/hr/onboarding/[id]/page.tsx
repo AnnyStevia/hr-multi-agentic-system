@@ -5,12 +5,18 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { DocumentsSection } from "@/components/DocumentsSection";
+import { OnboardingProgressSection } from "@/components/OnboardingProgressSection";
 import { TrainingSection } from "@/components/TrainingSection";
 import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
-import type { Onboarding, OnboardingTask, OnboardingTaskStatus } from "@/types/onboarding";
+import type {
+  Onboarding,
+  OnboardingProgress,
+  OnboardingTask,
+  OnboardingTaskStatus,
+} from "@/types/onboarding";
 
 const inputClass =
   "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition";
@@ -42,6 +48,7 @@ export default function OnboardingDetailPage() {
   const onboardingId = Number(params.id);
 
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [error, setError] = useState("");
@@ -68,17 +75,20 @@ export default function OnboardingDetailPage() {
     setLoading(true);
     try {
       const onboardingData = await api.getOnboarding(onboardingId);
-      const [employeeData, taskData] = await Promise.all([
+      const [employeeData, taskData, progressData] = await Promise.all([
         api.getEmployee(onboardingData.employee_id),
         api.listOnboardingTasks(onboardingId),
+        api.getOnboardingProgress(onboardingId),
       ]);
       setOnboarding(onboardingData);
       setEmployee(employeeData);
       setTasks(taskData);
+      setProgress(progressData);
     } catch (err) {
       setOnboarding(null);
       setEmployee(null);
       setTasks([]);
+      setProgress(null);
       setError(err instanceof Error ? err.message : "Failed to load onboarding");
     } finally {
       setLoading(false);
@@ -282,6 +292,8 @@ export default function OnboardingDetailPage() {
           </div>
         </div>
       </ApplicationSection>
+
+      <OnboardingProgressSection progress={progress} />
 
       <ApplicationSection title="Tasks">
         <form onSubmit={handleCreateTask} className="space-y-3 mb-6 pb-6 border-b border-gray-200">
