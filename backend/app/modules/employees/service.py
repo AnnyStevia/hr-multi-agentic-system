@@ -8,14 +8,29 @@ from app.modules.employees.models import (
     DepartmentStatus,
     Employee,
     EmploymentStatus,
+    Position,
 )
-from app.modules.employees.repository import DepartmentRepository, EmployeeRepository
+from app.modules.employees.repository import (
+    DepartmentRepository,
+    EmployeeRepository,
+    PositionRepository,
+)
 from app.modules.employees.schemas import (
     DepartmentCreateRequest,
     DepartmentUpdateRequest,
+    DirectoryEntry,
+    DirectoryResponse,
     EmployeeCreateRequest,
+    EmployeeOrganizationResponse,
     EmployeeResponse,
     EmployeeUpdateRequest,
+    HierarchyNode,
+    HierarchyResponse,
+    OrgPersonSummary,
+    PositionCreateRequest,
+    PositionResponse,
+    PositionUpdateRequest,
+    DepartmentResponse,
 )
 from app.modules.identity.models import Role, UserRole
 from app.modules.recruitment.models import Application
@@ -23,9 +38,11 @@ from app.shared.exceptions import AppException
 
 if TYPE_CHECKING:
     from app.modules.onboarding.service import OnboardingService
+    from app.shared.storage.base import StorageService
 
 
 EMPLOYEE_ROLE_NAME = "employee"
+PRESIGNED_URL_EXPIRES_IN = 300
 
 
 class DepartmentService:
@@ -71,16 +88,95 @@ class DepartmentService:
         return department
 
 
+class PositionService:
+    def __init__(self, repository: PositionRepository, departments: DepartmentService):
+        self.repository = repository
+        self.departments = departments
+
+    def list_positions(
+        self, *, department_id: int | None = None, q: str | None = None
+    ) -> list[Position]:
+        return self.repository.list(department_id=department_id, q=q)
+
+    def get_position(self, position_id: int) -> Position:
+        position = self.repository.get_by_id(position_id)
+        if position is None:
+            raise AppException("Position not found", status_code=404)
+        return position
+
+    def create_position(self, payload: PositionCreateRequest) -> Position:
+        title = payload.title.strip()
+        if not title:
+            raise AppException("Position title is required", status_code=400)
+        if self.repository.get_by_title(title) is not None:
+            raise AppException("A position with this title already exists", status_code=409)
+        department_id = payload.department_id
+        if department_id is not None:
+            self.departments.require_active(department_id)
+        description = payload.description.strip() if payload.description else None
+        return self.repository.add(
+            Position(title=title, description=description or None, department_id=department_id)
+        )
+
+    def update_position(self, position_id: int, payload: PositionUpdateRequest) -> Position:
+        position = self.get_position(position_id)
+        data = payload.model_dump(exclude_unset=True)
+        if "title" in data and data["title"] is not None:
+            title = data["title"].strip()
+            if not title:
+                raise AppException("Position title is required", status_code=400)
+            existing = self.repository.get_by_title(title)
+            if existing is not None and existing.id != position.id:
+                raise AppException("A position with this title already exists", status_code=409)
+            position.title = title
+        if "description" in data:
+            value = data["description"]
+            position.description = value.strip() if isinstance(value, str) and value.strip() else None
+        if "department_id" in data:
+            department_id = data["department_id"]
+            if department_id is not None:
+                self.departments.require_active(department_id)
+            position.department_id = department_id
+        return self.repository.save(position)
+
+    def delete_position(self, position_id: int) -> None:
+        position = self.get_position(position_id)
+        if self.repository.count_employees(position_id) > 0:
+            raise AppException(
+                "Cannot delete a position that is still assigned to employees",
+                status_code=409,
+            )
+        self.repository.delete(position)
+
+    def get_or_create_by_title(
+        self, title: str, *, department_id: int | None = None, commit: bool = True
+    ) -> Position:
+        clean = title.strip()
+        existing = self.repository.get_by_title(clean)
+        if existing is not None:
+            return existing
+        position = Position(title=clean, description=None, department_id=department_id)
+        self.repository.db.add(position)
+        self.repository.db.flush()
+        if commit:
+            self.repository.db.commit()
+            loaded = self.repository.get_by_id(position.id)
+            return loaded or position
+        return position
+
+
 class EmployeeService:
     def __init__(
         self,
         employees: EmployeeRepository,
         departments: DepartmentService,
         onboarding: OnboardingService | None = None,
+        positions: PositionService | None = None,
     ):
         self.employees = employees
         self.departments = departments
         self.onboarding = onboarding
+        self.positions = positions
 
     def list_employees(
         self,
@@ -107,6 +203,15 @@ class EmployeeService:
         email = str(payload.email)
         if self.employees.get_by_email(email) is not None:
             raise AppException("An employee with this email already exists", status_code=409)
+
+        position_id, position_title = self._resolve_position_fields(
+            position_id=payload.position_id,
+            position_title=payload.position,
+            department_id=payload.department_id,
+        )
+        if payload.manager_id is not None:
+            self._validate_manager(None, payload.manager_id)
+
         employee = Employee(
             employee_number="PENDING",
             first_name=payload.first_name.strip(),
@@ -114,7 +219,9 @@ class EmployeeService:
             email=email,
             phone=_normalize_phone(payload.phone),
             department_id=payload.department_id,
-            position=payload.position.strip(),
+            position=position_title,
+            position_id=position_id,
+            manager_id=payload.manager_id,
             hire_date=payload.hire_date,
             employment_status=EmploymentStatus.ACTIVE,
         )
@@ -137,6 +244,14 @@ class EmployeeService:
         if self.employees.get_by_user_id(user.id) is not None:
             raise AppException("An employee already exists for this user", status_code=409)
 
+        title = job.title.strip()
+        position_id = None
+        if self.positions is not None:
+            position = self.positions.get_or_create_by_title(
+                title, department_id=job.department_id, commit=False
+            )
+            position_id = position.id
+
         employee = Employee(
             employee_number="PENDING",
             first_name=user.first_name.strip(),
@@ -144,7 +259,8 @@ class EmployeeService:
             email=email,
             phone=_normalize_phone(candidate.phone),
             department_id=job.department_id,
-            position=job.title.strip(),
+            position=title,
+            position_id=position_id,
             hire_date=datetime.now(UTC).date(),
             employment_status=EmploymentStatus.ACTIVE,
             user_id=user.id,
@@ -180,13 +296,34 @@ class EmployeeService:
             data.pop("email")
         if "phone" in data and data["phone"] is not None:
             employee.phone = _normalize_phone(data.pop("phone"))
-        for field in ("first_name", "last_name", "position"):
+        for field in ("first_name", "last_name"):
             if field in data and data[field] is not None:
                 setattr(employee, field, data[field].strip())
         if "department_id" in data and data["department_id"] is not None:
             employee.department_id = data["department_id"]
         if "hire_date" in data and data["hire_date"] is not None:
             employee.hire_date = data["hire_date"]
+
+        touching_position = "position_id" in data or "position" in data
+        if touching_position:
+            if "position_id" in data and data["position_id"] is not None:
+                pos = self._require_positions().get_position(data["position_id"])
+                employee.position_id = pos.id
+                employee.position = pos.title
+            elif "position" in data and data["position"] is not None:
+                title = data["position"].strip()
+                pos = self._require_positions().get_or_create_by_title(
+                    title, department_id=employee.department_id
+                )
+                employee.position_id = pos.id
+                employee.position = pos.title
+            elif "position_id" in data and data["position_id"] is None:
+                raise AppException("position_id cannot be cleared", status_code=400)
+
+        if "manager_id" in data:
+            self._validate_manager(employee.id, data["manager_id"])
+            employee.manager_id = data["manager_id"]
+
         return self.employees.save(employee)
 
     def deactivate_employee(self, employee_id: int) -> Employee:
@@ -196,6 +333,137 @@ class EmployeeService:
 
     def count_active(self) -> int:
         return self.employees.count_active()
+
+    def get_organization(self, employee_id: int) -> EmployeeOrganizationResponse:
+        employee = self.get_employee(employee_id)
+        return build_organization_response(employee)
+
+    def get_hierarchy(self) -> HierarchyResponse:
+        employees = self.employees.list_for_organization()
+        by_manager: dict[int | None, list[Employee]] = {}
+        for employee in employees:
+            by_manager.setdefault(employee.manager_id, []).append(employee)
+
+        def build_node(employee: Employee) -> HierarchyNode:
+            children = [
+                build_node(child)
+                for child in sorted(
+                    by_manager.get(employee.id, []),
+                    key=lambda item: (item.last_name.lower(), item.first_name.lower()),
+                )
+            ]
+            return HierarchyNode(
+                employee_id=employee.id,
+                name=employee.full_name,
+                position=_display_position(employee),
+                department=employee.department.name if employee.department else None,
+                children=children,
+            )
+
+        roots = sorted(
+            by_manager.get(None, []),
+            key=lambda item: (item.last_name.lower(), item.first_name.lower()),
+        )
+        # Orphans whose manager is inactive/missing still appear as roots
+        known_ids = {employee.id for employee in employees}
+        for employee in employees:
+            if employee.manager_id is not None and employee.manager_id not in known_ids:
+                roots.append(employee)
+        roots = sorted(
+            {employee.id: employee for employee in roots}.values(),
+            key=lambda item: (item.last_name.lower(), item.first_name.lower()),
+        )
+        return HierarchyResponse(employees=[build_node(root) for root in roots])
+
+    def get_directory(
+        self, *, q: str | None = None, storage: StorageService | None = None
+    ) -> DirectoryResponse:
+        employees = self.employees.list_for_organization(search=q)
+        items: list[DirectoryEntry] = []
+        for employee in employees:
+            picture_url = None
+            has_picture = bool(employee.profile_picture_storage_key)
+            if has_picture and storage is not None and employee.profile_picture_storage_key:
+                try:
+                    picture_url = storage.generate_presigned_url(
+                        employee.profile_picture_storage_key,
+                        expires_in=PRESIGNED_URL_EXPIRES_IN,
+                    )
+                except Exception:
+                    picture_url = None
+            items.append(
+                DirectoryEntry(
+                    employee_id=employee.id,
+                    full_name=employee.full_name,
+                    position=_display_position(employee),
+                    department=employee.department.name if employee.department else None,
+                    manager=employee.manager.full_name if employee.manager else None,
+                    has_profile_picture=has_picture,
+                    profile_picture_url=picture_url,
+                )
+            )
+        return DirectoryResponse(items=items, total=len(items))
+
+    def _require_positions(self) -> PositionService:
+        if self.positions is None:
+            raise AppException("Position service is not configured", status_code=500)
+        return self.positions
+
+    def _resolve_position_fields(
+        self,
+        *,
+        position_id: int | None,
+        position_title: str | None,
+        department_id: int | None,
+        prefer_existing_id: bool = False,
+        existing_id: int | None = None,
+        existing_title: str | None = None,
+    ) -> tuple[int | None, str]:
+        positions = self._require_positions()
+        if position_id is not None:
+            position = positions.get_position(position_id)
+            return position.id, position.title
+        if position_title and position_title.strip():
+            position = positions.get_or_create_by_title(
+                position_title, department_id=department_id
+            )
+            return position.id, position.title
+        if prefer_existing_id and existing_id is not None:
+            position = positions.get_position(existing_id)
+            return position.id, position.title
+        if existing_title and existing_title.strip():
+            position = positions.get_or_create_by_title(
+                existing_title, department_id=department_id
+            )
+            return position.id, position.title
+        raise AppException("Position is required", status_code=400)
+
+    def _validate_manager(self, employee_id: int | None, manager_id: int | None) -> None:
+        if manager_id is None:
+            return
+        if employee_id is not None and manager_id == employee_id:
+            raise AppException("An employee cannot report to themselves", status_code=400)
+        manager = self.employees.get_by_id(manager_id)
+        if manager is None:
+            raise AppException("Manager not found", status_code=404)
+        if employee_id is None:
+            return
+        # Walk up from proposed manager; if we hit employee_id, cycle
+        seen: set[int] = set()
+        current_id: int | None = manager_id
+        while current_id is not None:
+            if current_id == employee_id:
+                raise AppException(
+                    "Circular reporting relationship is not allowed",
+                    status_code=400,
+                )
+            if current_id in seen:
+                break
+            seen.add(current_id)
+            current = self.employees.get_by_id(current_id)
+            if current is None:
+                break
+            current_id = current.manager_id
 
 
 def build_employee_response(employee: Employee) -> EmployeeResponse:
@@ -209,13 +477,64 @@ def build_employee_response(employee: Employee) -> EmployeeResponse:
         phone=employee.phone,
         department_id=employee.department_id,
         department=employee.department.name,
-        position=employee.position,
+        position=_display_position(employee) or employee.position,
+        position_id=employee.position_id,
+        manager_id=employee.manager_id,
         hire_date=employee.hire_date,
         employment_status=employee.employment_status,
         user_id=employee.user_id,
         created_at=employee.created_at,
         updated_at=employee.updated_at,
     )
+
+
+def build_position_response(position: Position) -> PositionResponse:
+    return PositionResponse(
+        id=position.id,
+        title=position.title,
+        description=position.description,
+        department_id=position.department_id,
+        department=position.department.name if position.department else None,
+        created_at=position.created_at,
+        updated_at=position.updated_at,
+    )
+
+
+def build_organization_response(employee: Employee) -> EmployeeOrganizationResponse:
+    position = None
+    if employee.org_position is not None:
+        position = build_position_response(employee.org_position)
+    elif employee.position_id is not None:
+        # fallback if relationship not loaded
+        pass
+    department = None
+    if employee.department is not None:
+        department = DepartmentResponse.model_validate(employee.department)
+    manager = None
+    if employee.manager is not None:
+        manager = _person_summary(employee.manager)
+    return EmployeeOrganizationResponse(
+        employee=_person_summary(employee),
+        position=position,
+        department=department,
+        manager=manager,
+    )
+
+
+def _person_summary(employee: Employee) -> OrgPersonSummary:
+    return OrgPersonSummary(
+        employee_id=employee.id,
+        full_name=employee.full_name,
+        position=_display_position(employee),
+        department=employee.department.name if employee.department else None,
+        has_profile_picture=bool(employee.profile_picture_storage_key),
+    )
+
+
+def _display_position(employee: Employee) -> str | None:
+    if employee.org_position is not None:
+        return employee.org_position.title
+    return employee.position or None
 
 
 def _parse_department_status_filter(status: str | None) -> DepartmentStatus | None:

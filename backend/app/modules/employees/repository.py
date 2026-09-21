@@ -1,9 +1,17 @@
+from __future__ import annotations
+
 from uuid import uuid4
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.employees.models import Department, DepartmentStatus, Employee, EmploymentStatus
+from app.modules.employees.models import (
+    Department,
+    DepartmentStatus,
+    Employee,
+    EmploymentStatus,
+    Position,
+)
 
 
 class DepartmentRepository:
@@ -34,12 +42,58 @@ class DepartmentRepository:
         return department
 
 
+class PositionRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def _query(self):
+        return self.db.query(Position).options(joinedload(Position.department))
+
+    def list(self, *, department_id: int | None = None, q: str | None = None) -> list[Position]:
+        query = self._query()
+        if department_id is not None:
+            query = query.filter(Position.department_id == department_id)
+        if q:
+            term = f"%{q.strip()}%"
+            query = query.filter(
+                or_(Position.title.ilike(term), Position.description.ilike(term))
+            )
+        return query.order_by(Position.title.asc()).all()
+
+    def get_by_id(self, position_id: int) -> Position | None:
+        return self._query().filter(Position.id == position_id).first()
+
+    def get_by_title(self, title: str) -> Position | None:
+        return self.db.query(Position).filter(Position.title == title).first()
+
+    def count_employees(self, position_id: int) -> int:
+        return self.db.query(Employee).filter(Employee.position_id == position_id).count()
+
+    def add(self, position: Position) -> Position:
+        self.db.add(position)
+        self.db.commit()
+        return self.get_by_id(position.id) or position
+
+    def save(self, position: Position) -> Position:
+        self.db.commit()
+        return self.get_by_id(position.id) or position
+
+    def delete(self, position: Position) -> None:
+        self.db.delete(position)
+        self.db.commit()
+
+
 class EmployeeRepository:
     def __init__(self, db: Session):
         self.db = db
 
     def _query(self):
-        return self.db.query(Employee).options(joinedload(Employee.department))
+        return self.db.query(Employee).options(
+            joinedload(Employee.department),
+            joinedload(Employee.org_position),
+            joinedload(Employee.manager).joinedload(Employee.department),
+            joinedload(Employee.manager).joinedload(Employee.org_position),
+        )
 
     def list(
         self,
@@ -64,6 +118,20 @@ class EmployeeRepository:
                 )
             )
         return query.order_by(Employee.employee_number.asc()).all()
+
+    def list_for_organization(self, *, search: str | None = None) -> list[Employee]:
+        query = self._query().filter(Employee.employment_status == EmploymentStatus.ACTIVE)
+        if search:
+            term = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    Employee.first_name.ilike(term),
+                    Employee.last_name.ilike(term),
+                    Employee.position.ilike(term),
+                    Employee.employee_number.ilike(term),
+                )
+            )
+        return query.order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
 
     def get_by_id(self, employee_id: int) -> Employee | None:
         return self._query().filter(Employee.id == employee_id).first()

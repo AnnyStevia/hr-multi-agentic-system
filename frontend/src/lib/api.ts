@@ -43,6 +43,13 @@ import type {
   Training,
   TrainingPayload,
 } from "@/types/training";
+import type {
+  DirectoryResponse,
+  EmployeeOrganization,
+  HierarchyResponse,
+  OrgPosition,
+  PositionPayload,
+} from "@/types/organization";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -235,6 +242,49 @@ class ApiClient {
 
   async deactivateDepartment(id: number): Promise<Department> {
     return this.request<Department>(`/api/v1/departments/${id}/deactivate`, { method: "PATCH" });
+  }
+
+  async listPositions(params?: { department_id?: number; q?: string }): Promise<OrgPosition[]> {
+    const query = new URLSearchParams();
+    if (params?.department_id) query.set("department_id", String(params.department_id));
+    if (params?.q) query.set("q", params.q);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return this.request<OrgPosition[]>(`/api/v1/positions${suffix}`);
+  }
+
+  async createPosition(payload: PositionPayload): Promise<OrgPosition> {
+    return this.request<OrgPosition>("/api/v1/positions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updatePosition(id: number, payload: Partial<PositionPayload>): Promise<OrgPosition> {
+    return this.request<OrgPosition>(`/api/v1/positions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deletePosition(id: number): Promise<void> {
+    return this.requestVoid(`/api/v1/positions/${id}`, { method: "DELETE" });
+  }
+
+  async getMyOrganization(): Promise<EmployeeOrganization> {
+    return this.request<EmployeeOrganization>("/api/v1/me/organization");
+  }
+
+  async getEmployeeOrganization(id: number): Promise<EmployeeOrganization> {
+    return this.request<EmployeeOrganization>(`/api/v1/employees/${id}/organization`);
+  }
+
+  async getOrganizationHierarchy(): Promise<HierarchyResponse> {
+    return this.request<HierarchyResponse>("/api/v1/organization/hierarchy");
+  }
+
+  async getOrganizationDirectory(q?: string): Promise<DirectoryResponse> {
+    const suffix = q ? `?q=${encodeURIComponent(q)}` : "";
+    return this.request<DirectoryResponse>(`/api/v1/organization/directory${suffix}`);
   }
 
   async listEmployees(params?: {

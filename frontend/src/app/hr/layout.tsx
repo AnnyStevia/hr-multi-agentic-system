@@ -5,12 +5,15 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/NotificationBell";
+import { UserMenu } from "@/components/UserMenu";
 import { canAccessHrPortal } from "@/lib/roles";
 
 const NAV_ITEMS = [
   { href: "/hr/dashboard", label: "Dashboard", enabled: true },
   { href: "/hr/employees", label: "Employees", enabled: true },
   { href: "/hr/departments", label: "Departments", enabled: true },
+  { href: "/hr/positions", label: "Positions", enabled: true },
+  { href: "/hr/organization", label: "Organization", enabled: true },
   { href: "/hr/jobs", label: "Job Offers", enabled: true },
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
   { href: "#", label: "Leave", enabled: false },
@@ -19,7 +22,7 @@ const NAV_ITEMS = [
 ];
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -62,34 +65,23 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
           <p className="px-3 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             Core HR
           </p>
-          {NAV_ITEMS.slice(0, 5).map((item) => (
+          {NAV_ITEMS.slice(0, 7).map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
           <p className="px-3 pt-5 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             Coming later
           </p>
-          {NAV_ITEMS.slice(5).map((item) => (
+          {NAV_ITEMS.slice(7).map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
         </nav>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-900">{user.full_name}</p>
-              <p className="text-xs text-gray-500">{user.email}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <NotificationBell variant="hr" />
-              <button
-                onClick={logout}
-                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 transition"
-              >
-                Sign out
-              </button>
-            </div>
+        <header className="bg-white border-b border-gray-200">
+          <div className="px-6 h-14 flex items-center justify-end gap-3">
+            <NotificationBell variant="hr" />
+            <UserMenu editProfileHref="/hr/profile" />
           </div>
         </header>
         <main className="flex-1 p-6">{children}</main>

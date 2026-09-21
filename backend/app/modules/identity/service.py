@@ -135,6 +135,18 @@ class UserService:
         self.db.flush()
         self.db.add(UserRole(user_id=user.id, role_id=hr_role.id))
 
+        from app.modules.employees.repository import PositionRepository
+        from app.modules.employees.service import DepartmentService, PositionService
+
+        position_title = position.strip()
+        position_service = PositionService(
+            PositionRepository(self.db),
+            DepartmentService(DepartmentRepository(self.db)),
+        )
+        org_position = position_service.get_or_create_by_title(
+            position_title, department_id=department.id, commit=False
+        )
+
         employee = Employee(
             employee_number="PENDING",
             first_name=user.first_name,
@@ -142,7 +154,8 @@ class UserService:
             email=email,
             phone=_normalize_phone(phone),
             department_id=department.id,
-            position=position.strip(),
+            position=position_title,
+            position_id=org_position.id,
             hire_date=hire_date,
             employment_status=EmploymentStatus.ACTIVE,
             user_id=user.id,

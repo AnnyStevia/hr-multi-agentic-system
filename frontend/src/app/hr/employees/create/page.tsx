@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { EmployeeForm } from "@/components/EmployeeForm";
 import { api } from "@/lib/api";
 import type { Department } from "@/types/departments";
-import type { EmployeePayload } from "@/types/employees";
+import type { Employee, EmployeePayload } from "@/types/employees";
+import type { OrgPosition } from "@/types/organization";
 
 const emptyForm = (): EmployeePayload => ({
   first_name: "",
@@ -15,6 +16,8 @@ const emptyForm = (): EmployeePayload => ({
   phone: "",
   department_id: 0,
   position: "",
+  position_id: null,
+  manager_id: null,
   hire_date: "",
 });
 
@@ -22,15 +25,24 @@ export default function CreateEmployeePage() {
   const router = useRouter();
   const [values, setValues] = useState<EmployeePayload>(emptyForm());
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [positions, setPositions] = useState<OrgPosition[]>([]);
+  const [managers, setManagers] = useState<Employee[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
-        setDepartments(await api.listDepartments("active"));
+        const [deps, pos, employees] = await Promise.all([
+          api.listDepartments("active"),
+          api.listPositions(),
+          api.listEmployees({ status: "active" }),
+        ]);
+        setDepartments(deps);
+        setPositions(pos);
+        setManagers(employees.items);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load departments");
+        setError(err instanceof Error ? err.message : "Failed to load form data");
       }
     };
     load();
@@ -41,7 +53,17 @@ export default function CreateEmployeePage() {
     setError("");
     setSubmitting(true);
     try {
-      const created = await api.createEmployee(values);
+      const payload: EmployeePayload = {
+        ...values,
+        position_id: values.position_id || undefined,
+        manager_id: values.manager_id ?? null,
+      };
+      if (!payload.position_id && payload.position) {
+        // keep legacy string path
+      } else if (payload.position_id) {
+        delete (payload as { position?: string }).position;
+      }
+      const created = await api.createEmployee(payload);
       router.push(`/hr/employees/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create employee");
@@ -63,9 +85,16 @@ export default function CreateEmployeePage() {
           Create an active department first. <Link href="/hr/departments" className="font-medium underline">Manage departments</Link>
         </p>
       )}
+      {positions.length === 0 && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 px-4 py-3 rounded-lg">
+          Create a position first. <Link href="/hr/positions" className="font-medium underline">Manage positions</Link>
+        </p>
+      )}
       <EmployeeForm
         values={values}
         departments={departments}
+        positions={positions}
+        managers={managers}
         submitting={submitting}
         submitLabel="Create employee"
         onChange={setValues}

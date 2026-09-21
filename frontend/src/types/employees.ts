@@ -11,6 +11,8 @@ export interface Employee {
   department_id: number;
   department: string;
   position: string;
+  position_id: number | null;
+  manager_id: number | null;
   hire_date: string;
   employment_status: EmploymentStatus;
   user_id: number | null;
@@ -29,7 +31,9 @@ export interface EmployeePayload {
   email: string;
   phone: string;
   department_id: number;
-  position: string;
+  position?: string;
+  position_id?: number | null;
+  manager_id?: number | null;
   hire_date: string;
 }
 
@@ -40,5 +44,7 @@ export interface EmployeeUpdatePayload {
   phone?: string;
   department_id?: number;
   position?: string;
+  position_id?: number | null;
+  manager_id?: number | null;
   hire_date?: string;
 }

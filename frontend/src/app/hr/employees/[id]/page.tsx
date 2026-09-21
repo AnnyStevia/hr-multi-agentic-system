@@ -4,16 +4,19 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { EmployeeOrganizationCard } from "@/components/EmployeeOrganizationCard";
 import { EmployeeProfileSection } from "@/components/EmployeeProfileSection";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
+import type { EmployeeOrganization } from "@/types/organization";
 
 export default function EmployeeProfilePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const employeeId = Number(params.id);
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [organization, setOrganization] = useState<EmployeeOrganization | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [deactivating, setDeactivating] = useState(false);
@@ -23,7 +26,12 @@ export default function EmployeeProfilePage() {
       setError("");
       setLoading(true);
       try {
-        setEmployee(await api.getEmployee(employeeId));
+        const [emp, org] = await Promise.all([
+          api.getEmployee(employeeId),
+          api.getEmployeeOrganization(employeeId),
+        ]);
+        setEmployee(emp);
+        setOrganization(org);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load employee");
       } finally {
@@ -109,6 +117,10 @@ export default function EmployeeProfilePage() {
         <p className="text-sm text-gray-800">Hire date: {employee.hire_date}</p>
         <p className="text-sm text-gray-800">Status: {employee.employment_status}</p>
       </ApplicationSection>
+
+      {organization && (
+        <EmployeeOrganizationCard organization={organization} title="Organizational place" />
+      )}
 
       <EmployeeProfileSection mode="hr" employeeId={employee.id} />
 

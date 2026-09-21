@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -40,6 +40,28 @@ class Department(Base):
     )
 
     employees: Mapped[list["Employee"]] = relationship(back_populates="department")
+    positions: Mapped[list["Position"]] = relationship(back_populates="department")
+
+
+class Position(Base):
+    __tablename__ = "positions"
+    __table_args__ = (UniqueConstraint("title", name="uq_positions_title"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    department_id: Mapped[int | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    department: Mapped["Department | None"] = relationship(back_populates="positions")
+    employees: Mapped[list["Employee"]] = relationship(back_populates="org_position")
 
 
 class Employee(Base):
@@ -56,6 +78,12 @@ class Employee(Base):
         ForeignKey("departments.id", ondelete="RESTRICT"), nullable=False
     )
     position: Mapped[str] = mapped_column(String(120), nullable=False)
+    position_id: Mapped[int | None] = mapped_column(
+        ForeignKey("positions.id", ondelete="RESTRICT"), nullable=True
+    )
+    manager_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     employment_status: Mapped[EmploymentStatus] = mapped_column(
         SAEnum(
@@ -85,6 +113,18 @@ class Employee(Base):
     )
 
     department: Mapped["Department"] = relationship(back_populates="employees")
+    org_position: Mapped["Position | None"] = relationship(
+        back_populates="employees", foreign_keys=[position_id]
+    )
+    manager: Mapped["Employee | None"] = relationship(
+        remote_side="Employee.id",
+        foreign_keys=[manager_id],
+        back_populates="direct_reports",
+    )
+    direct_reports: Mapped[list["Employee"]] = relationship(
+        back_populates="manager",
+        foreign_keys=[manager_id],
+    )
 
     @property
     def full_name(self) -> str:

@@ -1,9 +1,12 @@
 from datetime import date
 from io import BytesIO
 
-from app.modules.employees.models import Employee
+from sqlalchemy.orm import joinedload
+
+from app.modules.employees.models import Department, DepartmentStatus, Employee, EmploymentStatus
 from app.modules.employees.repository import EmployeeRepository
 from app.modules.employees.service import _normalize_phone
+from app.modules.identity.models import User, UserRole
 from app.modules.profile.image_validation import sanitize_filename, validate_profile_picture
 from app.modules.profile.models import EmployeeEducation, EmployeeExperience
 from app.modules.profile.repository import ProfileRepository
@@ -23,6 +26,10 @@ from app.shared.storage.base import StorageService
 from app.shared.storage.exceptions import StorageException
 
 PRESIGNED_URL_EXPIRES_IN = 300
+STAFF_PROFILE_ROLES = frozenset({"admin", "hr"})
+DEFAULT_STAFF_DEPARTMENT = "Human Resources"
+DEFAULT_STAFF_PHONE = "00000000"
+
 
 
 class ProfileService:
@@ -273,15 +280,95 @@ class ProfileService:
 
     def _require_employee_for_user(self, user_id: int) -> Employee:
         employee = self.employees.get_by_user_id(user_id)
-        if employee is None:
-            raise AppException("Employee profile not found", status_code=404)
-        return employee
+        if employee is not None:
+            return employee
+        provisioned = self._provision_staff_employee_if_needed(user_id)
+        if provisioned is not None:
+            return provisioned
+        raise AppException("Employee profile not found", status_code=404)
+
+    def _provision_staff_employee_if_needed(self, user_id: int) -> Employee | None:
+        """Create a linked employee row for HR/admin users who can edit My Profile."""
+        user = (
+            self.employees.db.query(User)
+            .options(joinedload(User.user_roles).joinedload(UserRole.role))
+            .filter(User.id == user_id)
+            .first()
+        )
+        if user is None or not user.is_active:
+            return None
+        role_names = {user_role.role.name for user_role in user.user_roles}
+        if not role_names.intersection(STAFF_PROFILE_ROLES):
+            return None
+
+        existing_by_email = self.employees.get_by_email(user.email)
+        if existing_by_email is not None:
+            if existing_by_email.user_id is None:
+                existing_by_email.user_id = user.id
+                return self.employees.save(existing_by_email)
+            if existing_by_email.user_id != user.id:
+                raise AppException(
+                    "An employee record already exists for this email",
+                    status_code=409,
+                )
+            return existing_by_email
+
+        department = self._ensure_staff_department()
+        title = "HR Staff" if "hr" in role_names else "Administrator"
+        from app.modules.employees.models import Position
+
+        position = (
+            self.employees.db.query(Position).filter(Position.title == title).first()
+        )
+        if position is None:
+            position = Position(title=title, description=None, department_id=department.id)
+            self.employees.db.add(position)
+            self.employees.db.flush()
+
+        employee = Employee(
+            employee_number="PENDING",
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
+            phone=_normalize_phone(DEFAULT_STAFF_PHONE),
+            department_id=department.id,
+            position=title,
+            position_id=position.id,
+            hire_date=date.today(),
+            employment_status=EmploymentStatus.ACTIVE,
+            user_id=user.id,
+        )
+        return self.employees.add(employee)
+
+    def _ensure_staff_department(self) -> Department:
+        db = self.employees.db
+        department = (
+            db.query(Department)
+            .filter(Department.status == DepartmentStatus.ACTIVE)
+            .order_by(Department.id.asc())
+            .first()
+        )
+        if department is not None:
+            return department
+        named = (
+            db.query(Department)
+            .filter(Department.name == DEFAULT_STAFF_DEPARTMENT)
+            .first()
+        )
+        if named is not None:
+            return named
+        department = Department(name=DEFAULT_STAFF_DEPARTMENT, status=DepartmentStatus.ACTIVE)
+        db.add(department)
+        db.commit()
+        db.refresh(department)
+        return department
 
     def _require_employee(self, employee_id: int) -> Employee:
         employee = self.employees.get_by_id(employee_id)
         if employee is None:
             raise AppException("Employee not found", status_code=404)
         return employee
+
 
 
 def build_profile_response(employee: Employee) -> EmployeeProfileResponse:

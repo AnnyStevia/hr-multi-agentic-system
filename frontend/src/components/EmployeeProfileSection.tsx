@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { api } from "@/lib/api";
+import { notifyProfilePictureChanged } from "@/lib/profileEvents";
 import type {
   EducationPayload,
   EmployeeEducation,
@@ -168,6 +169,7 @@ export function EmployeeProfileSection({ mode, employeeId }: EmployeeProfileSect
       const updated = await api.uploadMyProfilePicture(file);
       setProfile(updated);
       await loadPicture(true);
+      notifyProfilePictureChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload picture");
     } finally {
@@ -192,6 +194,7 @@ export function EmployeeProfileSection({ mode, employeeId }: EmployeeProfileSect
           : current,
       );
       setPictureUrl(null);
+      notifyProfilePictureChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove picture");
     } finally {
@@ -265,9 +268,27 @@ export function EmployeeProfileSection({ mode, employeeId }: EmployeeProfileSect
   }
 
   if (!profile) {
+    const missingProfile =
+      /not found/i.test(error) || error.toLowerCase().includes("employee profile");
+    if (missingProfile || !error) {
+      return (
+        <div className="rounded-lg border border-gray-200 bg-white px-5 py-6 text-sm text-gray-700">
+          <p className="font-medium text-gray-900">No employee profile linked</p>
+          <p className="mt-1 text-gray-600">
+            Your account does not have an employee record yet, so personal profile
+            details cannot be edited here. Use an HR account that was created with
+            an employee link, or ask an administrator to link your user to an
+            employee.
+          </p>
+          {error && error !== "Profile not found" && (
+            <p className="mt-3 text-xs text-gray-500">{error}</p>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-        {error || "Profile not found"}
+        {error}
       </div>
     );
   }

@@ -303,3 +303,21 @@ def test_hr_can_view_employee_profile(client, db_session):
         ).status_code
         == 403
     )
+
+
+def test_seeded_admin_can_open_my_profile(client, db_session):
+    headers = auth_header(client)
+    assert (
+        db_session.query(Employee).filter(Employee.email == "admin@test.com").first()
+        is None
+    )
+
+    response = client.get("/api/v1/me/profile", headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["email"] == "admin@test.com"
+    assert data["position"] == "Administrator"
+    assert data["department"] == "Human Resources"
+
+    linked = db_session.query(Employee).filter(Employee.email == "admin@test.com").one()
+    assert linked.user_id is not None

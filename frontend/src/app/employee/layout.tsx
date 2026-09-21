@@ -4,15 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { UserMenu } from "@/components/UserMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessEmployeePortal, needsOnboarding } from "@/lib/roles";
 
 const ONBOARDING_ALLOWED = new Set(["/employee/onboarding", "/employee/profile"]);
 
 export default function EmployeeLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading } = useAuth();
   const pathname = usePathname();
   const allowDuringOnboarding = ONBOARDING_ALLOWED.has(pathname);
+  const onboarding = needsOnboarding(user);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,7 +28,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
       </div>
     );
@@ -36,8 +38,8 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (!canAccessEmployeePortal(user)) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-white rounded-xl shadow-sm border p-8 max-w-md text-center">
+      <div className="min-h-screen flex items-center justify-center px-4 bg-slate-50">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
           <h1 className="text-xl font-bold text-gray-900">Access denied</h1>
           <p className="mt-2 text-sm text-gray-600">This portal is reserved for employees.</p>
         </div>
@@ -45,48 +47,67 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
     );
   }
 
-  if (needsOnboarding(user) && !allowDuringOnboarding) {
+  if (onboarding && !allowDuringOnboarding) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-xl font-bold text-gray-900">Employee Portal</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {needsOnboarding(user) ? "Complete your onboarding" : "Your workspace"}
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {!needsOnboarding(user) && (
-              <Link href="/employee/dashboard" className="text-sm text-gray-600 hover:text-gray-900">
-                Dashboard
-              </Link>
-            )}
-            <Link href="/employee/profile" className="text-sm text-gray-600 hover:text-gray-900">
-              Profile
-            </Link>
-            <Link href="/employee/onboarding" className="text-sm text-gray-600 hover:text-gray-900">
-              Onboarding
-            </Link>
-            <NotificationBell variant="employee" />
-            <span className="text-sm text-gray-600">{user.full_name}</span>
-            <button
-              onClick={logout}
-              className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 transition"
-            >
-              Sign out
-            </button>
-          </div>
+    <div className="min-h-screen flex bg-slate-50">
+      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
+        <div className="px-5 py-5 border-b border-gray-100">
+          <p className="text-sm font-semibold tracking-tight text-gray-900">Employee</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {onboarding ? "Onboarding in progress" : "Workspace"}
+          </p>
         </div>
-      </header>
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {!onboarding && (
+            <>
+              <SideLink href="/employee/dashboard" pathname={pathname} label="Dashboard" />
+              <SideLink href="/employee/organization" pathname={pathname} label="Organization" />
+            </>
+          )}
+          <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />
+        </nav>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="bg-white border-b border-gray-200">
+          <div className="px-6 h-14 flex items-center justify-end gap-3">
+            <NotificationBell variant="employee" />
+            <UserMenu editProfileHref="/employee/profile" />
+          </div>
+        </header>
+        <main className="flex-1 px-6 py-8 max-w-5xl w-full mx-auto">{children}</main>
+      </div>
     </div>
+  );
+}
+
+function SideLink({
+  href,
+  pathname,
+  label,
+}: {
+  href: string;
+  pathname: string;
+  label: string;
+}) {
+  const active = pathname === href || pathname.startsWith(`${href}/`);
+  return (
+    <Link
+      href={href}
+      className={`block px-3 py-2 rounded-md text-sm transition ${
+        active
+          ? "bg-brand-50 text-brand-700 font-medium"
+          : "text-gray-600 hover:bg-slate-50 hover:text-gray-900"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
