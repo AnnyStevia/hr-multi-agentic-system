@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { LeaveApprovalStages } from "@/components/LeaveApprovalStages";
 import { api } from "@/lib/api";
 import {
   LEAVE_REQUEST_STATUS_LABELS,
@@ -106,6 +107,10 @@ export default function HrLeaveRequestsPage() {
           <p className="mt-1 text-sm text-brand-300">Review and approve employee leave requests.</p>
         </div>
         <div className="flex flex-wrap gap-2 text-sm">
+          <Link href="/hr/leave/my" className="text-brand-600 hover:text-brand-700">
+            My leave
+          </Link>
+          <span className="text-brand-100">·</span>
           <Link href="/hr/leave/types" className="text-brand-600 hover:text-brand-700">
             Leave types
           </Link>
@@ -181,16 +186,17 @@ export default function HrLeaveRequestsPage() {
                     <p className="mt-1 text-xs text-brand-300">
                       {LEAVE_REQUEST_STATUS_LABELS[request.status]}
                     </p>
+                    <LeaveApprovalStages request={request} />
                   </div>
                   {request.status === "pending" && rejectingId !== request.id && (
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        disabled={actingId === request.id}
+                        disabled={actingId === request.id || request.hr_approval === "approved"}
                         onClick={() => handleApprove(request.id)}
                         className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
                       >
-                        Approve
+                        {request.manager_approval === "approved" ? "HR approve" : "Approve"}
                       </button>
                       <button
                         type="button"

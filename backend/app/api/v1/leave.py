@@ -7,6 +7,7 @@ from app.modules.leave.dependencies import get_leave_service
 from app.modules.leave.models import LeaveRequestStatus
 from app.modules.leave.schemas import (
     LeaveBalanceResponse,
+    LeaveCalendarResponse,
     LeavePolicyCreateRequest,
     LeavePolicyResponse,
     LeavePolicyUpdateRequest,
@@ -183,8 +184,9 @@ def get_leave_request(
     try:
         request = service.get_request_for_hr(request_id)
         if not (
-            service._is_hr_staff_user(current_user.id)
+            service._is_admin_user(current_user.id)
             or service.can_user_review_request(request, current_user.id)
+            or service._is_hr_staff_user(current_user.id)
         ):
             raise AppException("Leave request not found", status_code=404)
         return build_leave_request_response(request)
@@ -232,6 +234,44 @@ def list_my_leave_balances(
 ) -> list[LeaveBalanceResponse]:
     try:
         return service.get_balances_for_user(current_user.id, year=year)
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.get("/calendar", response_model=LeaveCalendarResponse)
+def get_my_leave_calendar(
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    service: LeaveService = Depends(get_leave_service),
+) -> LeaveCalendarResponse:
+    try:
+        return service.get_calendar_for_user(current_user.id, year, month)
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.get("/team-requests", response_model=list[LeaveRequestResponse])
+def list_my_team_leave_requests(
+    status: str | None = Query("pending"),
+    current_user: User = Depends(get_current_user),
+    service: LeaveService = Depends(get_leave_service),
+) -> list[LeaveRequestResponse]:
+    try:
+        status_filter: LeaveRequestStatus | None
+        if status is None or status == "":
+            status_filter = None
+        else:
+            try:
+                status_filter = LeaveRequestStatus(status)
+            except ValueError as exc:
+                raise AppException("Invalid leave request status", status_code=400) from exc
+        return [
+            build_leave_request_response(item)
+            for item in service.list_team_requests_for_user(
+                current_user.id, status=status_filter
+            )
+        ]
     except AppException as exc:
         _handle(exc)
 
@@ -319,5 +359,22 @@ def list_employee_leave_balances(
 ) -> list[LeaveBalanceResponse]:
     try:
         return service.get_balances(employee_id, year=year)
+    except AppException as exc:
+        _handle(exc)
+
+
+@employees_router.get(
+    "/{employee_id}/leave/calendar",
+    response_model=LeaveCalendarResponse,
+)
+def get_employee_leave_calendar(
+    employee_id: int,
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    _: User = Depends(require_hr_staff("leaves:read")),
+    service: LeaveService = Depends(get_leave_service),
+) -> LeaveCalendarResponse:
+    try:
+        return service.get_calendar_for_employee(employee_id, year, month)
     except AppException as exc:
         _handle(exc)

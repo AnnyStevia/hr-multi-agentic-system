@@ -33,6 +33,7 @@ import type {
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
 import type {
   LeaveBalance,
+  LeaveCalendar,
   LeavePolicy,
   LeavePolicyPayload,
   LeavePolicyUpdatePayload,
@@ -842,6 +843,25 @@ class ApiClient {
   async listEmployeeLeaveBalances(employeeId: number, year?: number): Promise<LeaveBalance[]> {
     const query = year != null ? `?year=${year}` : "";
     return this.request<LeaveBalance[]>(`/api/v1/employees/${employeeId}/leave/balances${query}`);
+  }
+
+  async getMyLeaveCalendar(year: number, month: number): Promise<LeaveCalendar> {
+    return this.request<LeaveCalendar>(`/api/v1/me/leave/calendar?year=${year}&month=${month}`);
+  }
+
+  async getEmployeeLeaveCalendar(
+    employeeId: number,
+    year: number,
+    month: number
+  ): Promise<LeaveCalendar> {
+    return this.request<LeaveCalendar>(
+      `/api/v1/employees/${employeeId}/leave/calendar?year=${year}&month=${month}`
+    );
+  }
+
+  async listMyTeamLeaveRequests(status: LeaveRequestStatus | "" = "pending"): Promise<LeaveRequest[]> {
+    const query = status ? `?status=${status}` : "?status=";
+    return this.request<LeaveRequest[]>(`/api/v1/me/leave/team-requests${query}`);
   }
 
   async listMyLeaveRequests(): Promise<LeaveRequest[]> {

@@ -9,6 +9,7 @@ import { EmployeeOrganizationCard } from "@/components/EmployeeOrganizationCard"
 import { EmployeeProfileSection } from "@/components/EmployeeProfileSection";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { DocumentsSection } from "@/components/DocumentsSection";
+import { OnLeaveBanner } from "@/components/OnLeaveBanner";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
 import type { EmployeeOrganization } from "@/types/organization";
@@ -119,6 +120,10 @@ export default function EmployeeProfilePage() {
         <p className="text-sm text-gray-800">Hire date: {employee.hire_date}</p>
         <p className="text-sm text-gray-800">Status: {employee.employment_status}</p>
       </ApplicationSection>
+
+      {employee.current_work_status === "ON_LEAVE" && employee.current_leave && (
+        <OnLeaveBanner currentLeave={employee.current_leave} />
+      )}
 
       {organization && (
         <EmployeeOrganizationCard organization={organization} title="Organizational place" />

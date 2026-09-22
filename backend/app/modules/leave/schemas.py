@@ -1,8 +1,9 @@
 from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from app.modules.leave.models import LeaveRequestStatus
+from app.modules.leave.models import LeaveApprovalStatus, LeaveRequestStatus
 
 
 class LeaveTypeCreateRequest(BaseModel):
@@ -103,7 +104,46 @@ class LeaveRequestResponse(BaseModel):
     approved_at: datetime | None
     rejected_at: datetime | None
     reviewed_by: int | None
+    manager_approval: LeaveApprovalStatus
+    manager_approved_by: int | None = None
+    manager_approved_at: datetime | None = None
+    hr_approval: LeaveApprovalStatus
+    hr_approved_by: int | None = None
+    hr_approved_at: datetime | None = None
+    admin_override: LeaveApprovalStatus
+    admin_approved_by: int | None = None
+    admin_approved_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LeaveCalendarPeriod(BaseModel):
+    request_id: int
+    leave_type_name: str
+    status: LeaveRequestStatus
+    start_date: date
+    end_date: date
+
+
+class LeaveCalendarResponse(BaseModel):
+    year: int
+    month: int
+    periods: list[LeaveCalendarPeriod]
+
+
+class CurrentLeaveSummary(BaseModel):
+    leave_type: str
+    start_date: date
+    end_date: date
+
+
+class CurrentWorkStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    ON_LEAVE = "ON_LEAVE"
+
+
+class CurrentWorkStatusPayload(BaseModel):
+    current_work_status: CurrentWorkStatus
+    current_leave: CurrentLeaveSummary | None = None

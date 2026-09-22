@@ -11,6 +11,7 @@ export type NotificationType =
   | "onboarding_training_completed"
   | "onboarding_completed"
   | "leave_request_submitted"
+  | "leave_request_manager_approved"
   | "leave_request_approved"
   | "leave_request_rejected"
   | "leave_request_cancelled";

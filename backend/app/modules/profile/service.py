@@ -1,7 +1,9 @@
 from datetime import date
 from io import BytesIO
 
-from sqlalchemy.orm import joinedload
+from app.modules.leave.schemas import CurrentWorkStatus
+from app.modules.leave.status import derive_current_work_status
+from sqlalchemy.orm import joinedload, object_session
 
 from app.modules.employees.models import Department, DepartmentStatus, Employee, EmploymentStatus
 from app.modules.employees.repository import EmployeeRepository
@@ -425,6 +427,12 @@ class ProfileService:
 
 
 def build_profile_response(employee: Employee) -> EmployeeProfileResponse:
+    session = object_session(employee)
+    work = (
+        derive_current_work_status(session, employee.id)
+        if session is not None
+        else None
+    )
     return EmployeeProfileResponse(
         employee_id=employee.id,
         employee_number=employee.employee_number,
@@ -444,6 +452,15 @@ def build_profile_response(employee: Employee) -> EmployeeProfileResponse:
         has_profile_picture=bool(employee.profile_picture_storage_key),
         profile_picture_filename=employee.profile_picture_filename,
         profile_picture_content_type=employee.profile_picture_content_type,
+        employment_status=(
+            employee.employment_status.value
+            if employee.employment_status is not None
+            else None
+        ),
+        current_work_status=(
+            work.current_work_status if work is not None else CurrentWorkStatus.ACTIVE
+        ),
+        current_leave=work.current_leave if work is not None else None,
     )
 
 

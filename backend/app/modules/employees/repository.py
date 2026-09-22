@@ -142,6 +142,15 @@ class EmployeeRepository:
     def get_by_user_id(self, user_id: int) -> Employee | None:
         return self._query().filter(Employee.user_id == user_id).first()
 
+    def list_direct_report_ids(self, manager_employee_id: int) -> list[int]:
+        rows = (
+            self.db.query(Employee.id)
+            .filter(Employee.manager_id == manager_employee_id)
+            .order_by(Employee.id.asc())
+            .all()
+        )
+        return [row[0] for row in rows]
+
     def add(self, employee: Employee, *, commit: bool = True) -> Employee:
         if not employee.employee_number or employee.employee_number == "PENDING":
             employee.employee_number = f"TMP-{uuid4().hex[:12]}"

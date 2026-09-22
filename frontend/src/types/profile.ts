@@ -17,6 +17,13 @@ export type EmployeeProfile = {
   has_profile_picture: boolean;
   profile_picture_filename: string | null;
   profile_picture_content_type: string | null;
+  employment_status?: string | null;
+  current_work_status?: "ACTIVE" | "ON_LEAVE";
+  current_leave?: {
+    leave_type: string;
+    start_date: string;
+    end_date: string;
+  } | null;
 };
 
 export type ProfileUpdatePayload = {

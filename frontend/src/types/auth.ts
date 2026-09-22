@@ -42,6 +42,7 @@ export interface CreateHRPayload {
   department_id: number;
   position: string;
   hire_date: string;
+  manager_id?: number | null;
 }
 
 export interface CandidateRegisterPayload {

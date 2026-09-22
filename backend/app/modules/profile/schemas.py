@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.modules.leave.schemas import CurrentLeaveSummary, CurrentWorkStatus
+
 
 class ProfileUpdateRequest(BaseModel):
     model_config = {"extra": "forbid"}
@@ -32,6 +34,9 @@ class EmployeeProfileResponse(BaseModel):
     has_profile_picture: bool
     profile_picture_filename: str | None
     profile_picture_content_type: str | None
+    employment_status: str | None = None
+    current_work_status: CurrentWorkStatus = CurrentWorkStatus.ACTIVE
+    current_leave: CurrentLeaveSummary | None = None
 
 
 class PresignedProfilePictureUrlResponse(BaseModel):

@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/PasswordInput";
 import { api } from "@/lib/api";
 import { isAdmin } from "@/lib/roles";
 import type { Department } from "@/types/departments";
+import type { Employee } from "@/types/employees";
 
 export default function CreateHRPage() {
   const { user, loading, logout } = useAuth();
@@ -19,7 +20,9 @@ export default function CreateHRPage() {
   const [departmentId, setDepartmentId] = useState(0);
   const [position, setPosition] = useState("HR Officer");
   const [hireDate, setHireDate] = useState("");
+  const [managerId, setManagerId] = useState<number | "">("");
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -34,11 +37,15 @@ export default function CreateHRPage() {
     if (!user || !isAdmin(user)) return;
     const load = async () => {
       try {
-        const items = await api.listDepartments("active");
+        const [items, empPage] = await Promise.all([
+          api.listDepartments("active"),
+          api.listEmployees({ status: "active" }),
+        ]);
         setDepartments(items);
+        setEmployees(empPage.items);
         if (items.length === 1) setDepartmentId(items[0].id);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load departments");
+        setError(err instanceof Error ? err.message : "Failed to load form data");
       }
     };
     load();
@@ -98,6 +105,7 @@ export default function CreateHRPage() {
         department_id: departmentId,
         position,
         hire_date: hireDate,
+        manager_id: managerId === "" ? null : managerId,
       });
       setSuccess(
         `HR account created for ${created.full_name} (${created.email}). They also appear in Employees.`
@@ -110,6 +118,7 @@ export default function CreateHRPage() {
       setPhone("");
       setPosition("HR Officer");
       setHireDate("");
+      setManagerId("");
       setDepartmentId(departments.length === 1 ? departments[0].id : 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create HR account");
@@ -143,6 +152,7 @@ export default function CreateHRPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <p className="text-sm text-gray-600 mb-6">
           Creates a login (HR role) and an employee record so they appear in the Employees list.
+          Assign a position such as HR Manager and an organizational manager when needed.
         </p>
 
         {departments.length === 0 && (
@@ -247,9 +257,35 @@ export default function CreateHRPage() {
                   required
                   value={position}
                   onChange={(e) => setPosition(e.target.value)}
+                  placeholder="e.g. HR Manager"
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="manager" className="block text-sm font-medium text-gray-700 mb-1">
+                Manager (optional)
+              </label>
+              <select
+                id="manager"
+                value={managerId}
+                onChange={(e) =>
+                  setManagerId(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
+              >
+                <option value="">No manager</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name}
+                    {emp.position ? ` · ${emp.position}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Organizational manager for leave approval (e.g. HR Manager reports to a director).
+              </p>
             </div>
 
             <div>

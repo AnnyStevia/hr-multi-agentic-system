@@ -49,6 +49,7 @@ def create_hr_account(
             department_id=payload.department_id,
             position=payload.position,
             hire_date=payload.hire_date,
+            manager_id=payload.manager_id,
         )
     except AppException as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc

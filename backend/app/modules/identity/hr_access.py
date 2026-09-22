@@ -5,6 +5,8 @@ from app.modules.identity.dependencies import get_current_user
 from app.modules.identity.models import Role, User, UserRole
 
 HR_STAFF_ROLE_NAMES = frozenset({"admin", "hr"})
+HR_ROLE_NAME = "hr"
+ADMIN_ROLE_NAME = "admin"
 
 
 def list_hr_staff_user_ids(db: Session) -> list[int]:
@@ -19,6 +21,38 @@ def list_hr_staff_user_ids(db: Session) -> list[int]:
         .all()
     )
     return [row[0] for row in rows]
+
+
+def list_hr_role_user_ids(db: Session) -> list[int]:
+    """Return active user ids with the HR application role only (not admin)."""
+    rows = (
+        db.query(User.id)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(User.is_active.is_(True), Role.name == HR_ROLE_NAME)
+        .distinct()
+        .order_by(User.id.asc())
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def list_admin_user_ids(db: Session) -> list[int]:
+    """Return active user ids with the admin role (deduplicated, sorted)."""
+    rows = (
+        db.query(User.id)
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .filter(User.is_active.is_(True), Role.name == ADMIN_ROLE_NAME)
+        .distinct()
+        .order_by(User.id.asc())
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def user_has_admin_role(user: User) -> bool:
+    return any(ur.role.name == ADMIN_ROLE_NAME for ur in user.user_roles)
 
 
 def require_hr_staff(*required_permissions: str):

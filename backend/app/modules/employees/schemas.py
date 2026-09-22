@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field, model_validator
 
 from app.modules.employees.models import DepartmentStatus, EmploymentStatus
+from app.modules.leave.schemas import CurrentLeaveSummary, CurrentWorkStatus
 from app.shared.email import EmailAddress
 
 
@@ -103,6 +104,8 @@ class EmployeeResponse(BaseModel):
     manager_id: int | None
     hire_date: date
     employment_status: EmploymentStatus
+    current_work_status: CurrentWorkStatus = CurrentWorkStatus.ACTIVE
+    current_leave: CurrentLeaveSummary | None = None
     user_id: int | None
     created_at: datetime
     updated_at: datetime

@@ -32,6 +32,7 @@ class CreateHRRequest(BaseModel):
     department_id: int
     position: str = Field(min_length=1, max_length=120)
     hire_date: date
+    manager_id: int | None = None
 
 
 class CandidateRegisterRequest(BaseModel):

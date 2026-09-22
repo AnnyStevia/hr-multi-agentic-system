@@ -20,6 +20,7 @@ class NotificationType(str, Enum):
     ONBOARDING_TRAINING_COMPLETED = "onboarding_training_completed"
     ONBOARDING_COMPLETED = "onboarding_completed"
     LEAVE_REQUEST_SUBMITTED = "leave_request_submitted"
+    LEAVE_REQUEST_MANAGER_APPROVED = "leave_request_manager_approved"
     LEAVE_REQUEST_APPROVED = "leave_request_approved"
     LEAVE_REQUEST_REJECTED = "leave_request_rejected"
     LEAVE_REQUEST_CANCELLED = "leave_request_cancelled"

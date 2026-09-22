@@ -1,13 +1,30 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from app.modules.employees.models import Employee
 from app.modules.employees.repository import EmployeeRepository
-from app.modules.identity.hr_access import list_hr_staff_user_ids
+from app.modules.identity.hr_access import list_admin_user_ids, list_hr_staff_user_ids
+from app.modules.leave.approval import (
+    ApprovalActor,
+    classify_actor,
+    resolve_requirements,
+    would_finalize_after_manager,
+)
 from app.modules.leave.days import calculate_requested_days
-from app.modules.leave.models import LeavePolicy, LeaveRequest, LeaveRequestStatus, LeaveType
+from app.modules.leave.models import (
+    LeaveApprovalStatus,
+    LeavePolicy,
+    LeaveRequest,
+    LeaveRequestStatus,
+    LeaveType,
+)
 from app.modules.leave.repository import LeaveRepository
 from app.modules.leave.schemas import (
+    CurrentLeaveSummary,
+    CurrentWorkStatus,
+    CurrentWorkStatusPayload,
     LeaveBalanceResponse,
+    LeaveCalendarPeriod,
+    LeaveCalendarResponse,
     LeavePolicyCreateRequest,
     LeavePolicyResponse,
     LeavePolicyUpdateRequest,
@@ -57,6 +74,15 @@ def build_leave_request_response(request: LeaveRequest) -> LeaveRequestResponse:
         approved_at=request.approved_at,
         rejected_at=request.rejected_at,
         reviewed_by=request.reviewed_by,
+        manager_approval=request.manager_approval,
+        manager_approved_by=request.manager_approved_by,
+        manager_approved_at=request.manager_approved_at,
+        hr_approval=request.hr_approval,
+        hr_approved_by=request.hr_approved_by,
+        hr_approved_at=request.hr_approved_at,
+        admin_override=request.admin_override,
+        admin_approved_by=request.admin_approved_by,
+        admin_approved_at=request.admin_approved_at,
         created_at=request.created_at,
         updated_at=request.updated_at,
     )
@@ -285,35 +311,176 @@ class LeaveService:
 
     def approve_request(self, request_id: int, reviewer_user_id: int) -> LeaveRequest:
         request = self.get_request_for_hr(request_id)
-        self._assert_can_review(request, reviewer_user_id)
+        employee = self.employees.get_by_id(request.employee_id)
+        if employee is None:
+            raise AppException("Leave request not found", status_code=404)
+
+        if employee.user_id is not None and employee.user_id == reviewer_user_id:
+            raise AppException("You cannot approve your own leave request", status_code=403)
+
         if request.status != LeaveRequestStatus.PENDING:
             raise AppException("Only pending leave requests can be approved", status_code=400)
-        request.status = LeaveRequestStatus.APPROVED
-        request.approved_at = datetime.now(UTC)
-        request.rejected_at = None
-        request.rejection_reason = None
-        request.reviewed_by = reviewer_user_id
-        saved = self.repository.save_request(request)
-        self._notify_employee(
-            saved,
-            NotificationType.LEAVE_REQUEST_APPROVED,
-            "Leave request approved",
-            f"Your leave request ({saved.start_date} to {saved.end_date}) was approved.",
-        )
-        return saved
+
+        actor = classify_actor(self.repository.db, request, employee, reviewer_user_id)
+        if actor is None:
+            raise AppException("Not allowed to review this leave request", status_code=403)
+
+        reqs = resolve_requirements(self.repository.db, request, employee)
+        now = datetime.now(UTC)
+
+        if actor == ApprovalActor.ADMIN:
+            request.admin_override = LeaveApprovalStatus.APPROVED
+            request.admin_approved_by = reviewer_user_id
+            request.admin_approved_at = now
+            self._mark_fully_approved(request, reviewer_user_id, now)
+            saved = self.repository.save_request(request)
+            self._notify_employee(
+                saved,
+                NotificationType.LEAVE_REQUEST_APPROVED,
+                "Leave request approved",
+                f"Your leave request ({saved.start_date} to {saved.end_date}) was approved.",
+            )
+            return saved
+
+        if actor == ApprovalActor.MANAGER:
+            if not reqs.manager_available:
+                raise AppException(
+                    "Manager approval is not required while the manager is on leave",
+                    status_code=400,
+                )
+            if request.manager_approval == LeaveApprovalStatus.APPROVED:
+                raise AppException("Manager has already approved this request", status_code=400)
+            if employee.manager_id is None:
+                raise AppException(
+                    "This employee has no manager configured. An administrator must handle this request.",
+                    status_code=400,
+                )
+            request.manager_approval = LeaveApprovalStatus.APPROVED
+            request.manager_approved_by = reviewer_user_id
+            request.manager_approved_at = now
+            request.reviewed_by = reviewer_user_id
+
+            if would_finalize_after_manager(reqs):
+                self._mark_fully_approved(request, reviewer_user_id, now)
+                saved = self.repository.save_request(request)
+                self._notify_employee(
+                    saved,
+                    NotificationType.LEAVE_REQUEST_APPROVED,
+                    "Leave request approved",
+                    f"Your leave request ({saved.start_date} to {saved.end_date}) was approved.",
+                )
+                return saved
+
+            saved = self.repository.save_request(request)
+            # Recompute with manager satisfied for HR notify list
+            refreshed = resolve_requirements(self.repository.db, saved, employee)
+            self._notify_manager_approved(saved, employee, refreshed.available_hr_user_ids)
+            return saved
+
+        if actor == ApprovalActor.HR:
+            if reqs.requester_is_hr:
+                raise AppException(
+                    "HR cannot approve this leave request; the requester's manager or an administrator must review it",
+                    status_code=403,
+                )
+            # Manager must approve first when manager is available and not yet done
+            if reqs.manager_available and request.manager_approval != LeaveApprovalStatus.APPROVED:
+                raise AppException(
+                    "Manager approval is required before HR can approve this request",
+                    status_code=400,
+                )
+            if not reqs.hr_available and request.manager_approval == LeaveApprovalStatus.APPROVED:
+                raise AppException(
+                    "HR approval is not required while no HR approvers are available",
+                    status_code=400,
+                )
+            if not reqs.hr_available and not reqs.manager_available:
+                raise AppException(
+                    "No HR approvers are available. An administrator must handle this request.",
+                    status_code=400,
+                )
+            if request.hr_approval == LeaveApprovalStatus.APPROVED:
+                raise AppException("HR has already approved this request", status_code=400)
+
+            request.hr_approval = LeaveApprovalStatus.APPROVED
+            request.hr_approved_by = reviewer_user_id
+            request.hr_approved_at = now
+            self._mark_fully_approved(request, reviewer_user_id, now)
+            saved = self.repository.save_request(request)
+            self._notify_employee(
+                saved,
+                NotificationType.LEAVE_REQUEST_APPROVED,
+                "Leave request approved",
+                f"Your leave request ({saved.start_date} to {saved.end_date}) was approved.",
+            )
+            return saved
+
+        raise AppException("Not allowed to review this leave request", status_code=403)
 
     def reject_request(
         self, request_id: int, reviewer_user_id: int, rejection_reason: str
     ) -> LeaveRequest:
         request = self.get_request_for_hr(request_id)
-        self._assert_can_review(request, reviewer_user_id)
         if request.status != LeaveRequestStatus.PENDING:
             raise AppException("Only pending leave requests can be rejected", status_code=400)
+
+        employee = self.employees.get_by_id(request.employee_id)
+        if employee is None:
+            raise AppException("Leave request not found", status_code=404)
+
+        if employee.user_id is not None and employee.user_id == reviewer_user_id:
+            raise AppException("You cannot approve your own leave request", status_code=403)
+
+        actor = classify_actor(self.repository.db, request, employee, reviewer_user_id)
+        if actor is None:
+            raise AppException("Not allowed to review this leave request", status_code=403)
+
+        # HR cannot reject HR self-leave (same as approve)
+        reqs = resolve_requirements(self.repository.db, request, employee)
+        if actor == ApprovalActor.HR and reqs.requester_is_hr:
+            raise AppException(
+                "HR cannot reject this leave request; the requester's manager or an administrator must review it",
+                status_code=403,
+            )
+
+        if actor == ApprovalActor.MANAGER:
+            if employee.manager_id is None:
+                raise AppException(
+                    "This employee has no manager configured. An administrator must handle this request.",
+                    status_code=400,
+                )
+            if request.manager_approval != LeaveApprovalStatus.PENDING:
+                raise AppException("Manager has already reviewed this request", status_code=400)
+
+        if actor == ApprovalActor.HR:
+            if reqs.manager_available and request.manager_approval != LeaveApprovalStatus.APPROVED:
+                raise AppException(
+                    "Manager approval is required before HR can reject this request",
+                    status_code=400,
+                )
+            if request.hr_approval != LeaveApprovalStatus.PENDING:
+                raise AppException("HR has already reviewed this request", status_code=400)
+
         reason = rejection_reason.strip()
         if not reason:
             raise AppException("A rejection reason is required", status_code=400)
+
+        now = datetime.now(UTC)
+        if actor == ApprovalActor.MANAGER:
+            request.manager_approval = LeaveApprovalStatus.REJECTED
+            request.manager_approved_by = reviewer_user_id
+            request.manager_approved_at = now
+        elif actor == ApprovalActor.HR:
+            request.hr_approval = LeaveApprovalStatus.REJECTED
+            request.hr_approved_by = reviewer_user_id
+            request.hr_approved_at = now
+        elif actor == ApprovalActor.ADMIN:
+            request.admin_override = LeaveApprovalStatus.REJECTED
+            request.admin_approved_by = reviewer_user_id
+            request.admin_approved_at = now
+
         request.status = LeaveRequestStatus.REJECTED
-        request.rejected_at = datetime.now(UTC)
+        request.rejected_at = now
         request.approved_at = None
         request.rejection_reason = reason
         request.reviewed_by = reviewer_user_id
@@ -326,18 +493,122 @@ class LeaveService:
         )
         return saved
 
+    def _mark_fully_approved(
+        self, request: LeaveRequest, reviewer_user_id: int, now: datetime
+    ) -> None:
+        request.status = LeaveRequestStatus.APPROVED
+        request.approved_at = now
+        request.rejected_at = None
+        request.rejection_reason = None
+        request.reviewed_by = reviewer_user_id
+
+    def get_calendar_for_employee(
+        self, employee_id: int, year: int, month: int
+    ) -> LeaveCalendarResponse:
+        if month < 1 or month > 12:
+            raise AppException("month must be between 1 and 12", status_code=400)
+        if self.employees.get_by_id(employee_id) is None:
+            raise AppException("Employee not found", status_code=404)
+        month_start = date(year, month, 1)
+        if month == 12:
+            month_end = date(year, 12, 31)
+        else:
+            month_end = date(year, month + 1, 1) - timedelta(days=1)
+
+        periods = self.repository.list_calendar_periods(
+            employee_id, month_start=month_start, month_end=month_end
+        )
+        return LeaveCalendarResponse(
+            year=year,
+            month=month,
+            periods=[
+                LeaveCalendarPeriod(
+                    request_id=item.id,
+                    leave_type_name=item.leave_type.name if item.leave_type else "",
+                    status=item.status,
+                    start_date=item.start_date,
+                    end_date=item.end_date,
+                )
+                for item in periods
+            ],
+        )
+
+    def get_calendar_for_user(self, user_id: int, year: int, month: int) -> LeaveCalendarResponse:
+        employee = self._require_employee_for_user(user_id)
+        return self.get_calendar_for_employee(employee.id, year, month)
+
+    def get_current_work_status(
+        self, employee_id: int, *, as_of: date | None = None
+    ) -> CurrentWorkStatusPayload:
+        if self.employees.get_by_id(employee_id) is None:
+            raise AppException("Employee not found", status_code=404)
+        day = as_of or date.today()
+        covering = self.repository.find_approved_covering(employee_id, day)
+        if covering is None:
+            return CurrentWorkStatusPayload(
+                current_work_status=CurrentWorkStatus.ACTIVE,
+                current_leave=None,
+            )
+        return CurrentWorkStatusPayload(
+            current_work_status=CurrentWorkStatus.ON_LEAVE,
+            current_leave=CurrentLeaveSummary(
+                leave_type=covering.leave_type.name if covering.leave_type else "",
+                start_date=covering.start_date,
+                end_date=covering.end_date,
+            ),
+        )
+
+    def list_team_requests_for_user(
+        self, user_id: int, *, status: LeaveRequestStatus | None = LeaveRequestStatus.PENDING
+    ) -> list[LeaveRequest]:
+        manager = self._require_employee_for_user(user_id)
+        report_ids = self.employees.list_direct_report_ids(manager.id)
+        return self.repository.list_requests_for_employees(report_ids, status=status)
+
     def can_user_review_request(self, request: LeaveRequest, user_id: int) -> bool:
-        if self._is_hr_staff_user(user_id):
-            return True
-        reviewer_employee = self.employees.get_by_user_id(user_id)
-        if reviewer_employee is None:
+        if request.status != LeaveRequestStatus.PENDING:
             return False
         employee = self.employees.get_by_id(request.employee_id)
-        return employee is not None and employee.manager_id == reviewer_employee.id
+        if employee is None:
+            return False
+        if employee.user_id is not None and employee.user_id == user_id:
+            return False
+
+        actor = classify_actor(self.repository.db, request, employee, user_id)
+        if actor is None:
+            return False
+
+        reqs = resolve_requirements(self.repository.db, request, employee)
+        if actor == ApprovalActor.ADMIN:
+            return True
+        if actor == ApprovalActor.MANAGER:
+            return reqs.manager_available and request.manager_approval == LeaveApprovalStatus.PENDING
+        if actor == ApprovalActor.HR:
+            if reqs.requester_is_hr:
+                return False
+            if reqs.manager_available and request.manager_approval != LeaveApprovalStatus.APPROVED:
+                return False
+            return reqs.hr_available and request.hr_approval == LeaveApprovalStatus.PENDING
+        return False
 
     def _assert_can_review(self, request: LeaveRequest, user_id: int) -> None:
+        """Legacy helper kept for callers; prefer can_user_review_request."""
         if not self.can_user_review_request(request, user_id):
+            employee = self.employees.get_by_id(request.employee_id)
+            if employee is not None and employee.user_id == user_id:
+                raise AppException("You cannot approve your own leave request", status_code=403)
+            if employee is not None and employee.manager_id is None and not self._is_admin_user(user_id):
+                raise AppException(
+                    "This employee has no manager configured. An administrator must handle this request.",
+                    status_code=400,
+                )
             raise AppException("Not allowed to review this leave request", status_code=403)
+
+    def _is_hr_staff_user(self, user_id: int) -> bool:
+        return user_id in set(list_hr_staff_user_ids(self.repository.db))
+
+    def _is_admin_user(self, user_id: int) -> bool:
+        return user_id in set(list_admin_user_ids(self.repository.db))
 
     def _create_request(
         self, employee: Employee, payload: LeaveRequestCreateRequest
@@ -407,6 +678,9 @@ class LeaveService:
                 requested_days=requested_days,
                 reason=reason,
                 status=LeaveRequestStatus.PENDING,
+                manager_approval=LeaveApprovalStatus.PENDING,
+                hr_approval=LeaveApprovalStatus.PENDING,
+                admin_override=LeaveApprovalStatus.PENDING,
             )
         )
         self._notify_submitted(saved, employee)
@@ -418,9 +692,6 @@ class LeaveService:
             raise AppException("Employee profile not found", status_code=404)
         return employee
 
-    def _is_hr_staff_user(self, user_id: int) -> bool:
-        return user_id in set(list_hr_staff_user_ids(self.repository.db))
-
     def _notify_submitted(self, request: LeaveRequest, employee: Employee) -> None:
         if self.notifications is None:
             return
@@ -429,11 +700,14 @@ class LeaveService:
             f"{employee_name} requested {request.requested_days} day(s) "
             f"from {request.start_date} to {request.end_date}."
         )
-        recipients = set(list_hr_staff_user_ids(self.repository.db))
-        if employee.manager_id is not None:
-            manager = self.employees.get_by_id(employee.manager_id)
-            if manager is not None and manager.user_id is not None:
-                recipients.add(manager.user_id)
+        reqs = resolve_requirements(self.repository.db, request, employee)
+        recipients: set[int] = set()
+        if reqs.manager_user_id is not None and reqs.manager_available:
+            recipients.add(reqs.manager_user_id)
+        if not reqs.requester_is_hr:
+            # Notify HR when the HR step will be needed (or is already actionable)
+            if reqs.hr_available:
+                recipients.update(reqs.available_hr_user_ids)
         for recipient_id in recipients:
             if employee.user_id is not None and recipient_id == employee.user_id:
                 continue
@@ -441,6 +715,28 @@ class LeaveService:
                 recipient_user_id=recipient_id,
                 type=NotificationType.LEAVE_REQUEST_SUBMITTED,
                 title="Leave request submitted",
+                message=message,
+                related_entity_type="leave_request",
+                related_entity_id=request.id,
+            )
+
+    def _notify_manager_approved(
+        self, request: LeaveRequest, employee: Employee, hr_user_ids: list[int]
+    ) -> None:
+        if self.notifications is None:
+            return
+        employee_name = f"{employee.first_name} {employee.last_name}".strip()
+        message = (
+            f"Manager approved {employee_name}'s leave request "
+            f"({request.start_date} to {request.end_date}). HR approval is required."
+        )
+        for recipient_id in hr_user_ids:
+            if employee.user_id is not None and recipient_id == employee.user_id:
+                continue
+            self.notifications.create_if_absent(
+                recipient_user_id=recipient_id,
+                type=NotificationType.LEAVE_REQUEST_MANAGER_APPROVED,
+                title="Leave awaiting HR approval",
                 message=message,
                 related_entity_type="leave_request",
                 related_entity_id=request.id,
@@ -459,11 +755,12 @@ class LeaveService:
             f"{employee_name} cancelled a leave request "
             f"({request.start_date} to {request.end_date})."
         )
-        recipients = set(list_hr_staff_user_ids(self.repository.db))
-        if employee is not None and employee.manager_id is not None:
-            manager = self.employees.get_by_id(employee.manager_id)
-            if manager is not None and manager.user_id is not None:
-                recipients.add(manager.user_id)
+        recipients: set[int] = set()
+        if employee is not None:
+            reqs = resolve_requirements(self.repository.db, request, employee)
+            if reqs.manager_user_id is not None:
+                recipients.add(reqs.manager_user_id)
+            recipients.update(reqs.available_hr_user_ids)
         for recipient_id in recipients:
             self.notifications.create_if_absent(
                 recipient_user_id=recipient_id,

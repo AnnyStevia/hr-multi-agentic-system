@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { OnLeaveBanner } from "@/components/OnLeaveBanner";
 import { api } from "@/lib/api";
 import { notifyProfilePictureChanged } from "@/lib/profileEvents";
 import type {
@@ -299,6 +300,10 @@ export function EmployeeProfileSection({ mode, employeeId }: EmployeeProfileSect
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
+      )}
+
+      {profile.current_work_status === "ON_LEAVE" && profile.current_leave && (
+        <OnLeaveBanner currentLeave={profile.current_leave} />
       )}
 
       <ApplicationSection title="Personal information">

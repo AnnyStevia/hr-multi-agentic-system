@@ -26,6 +26,19 @@ class LeaveRequestStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class LeaveApprovalStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+leave_approval_status_enum = SAEnum(
+    LeaveApprovalStatus,
+    name="leave_approval_status",
+    values_callable=lambda enum: [item.value for item in enum],
+)
+
+
 class LeaveType(Base):
     __tablename__ = "leave_types"
     __table_args__ = (UniqueConstraint("name", name="uq_leave_types_name"),)
@@ -111,6 +124,39 @@ class LeaveRequest(Base):
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    manager_approval: Mapped[LeaveApprovalStatus] = mapped_column(
+        leave_approval_status_enum,
+        nullable=False,
+        default=LeaveApprovalStatus.PENDING,
+    )
+    manager_approved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    manager_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    hr_approval: Mapped[LeaveApprovalStatus] = mapped_column(
+        leave_approval_status_enum,
+        nullable=False,
+        default=LeaveApprovalStatus.PENDING,
+    )
+    hr_approved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    hr_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    admin_override: Mapped[LeaveApprovalStatus] = mapped_column(
+        leave_approval_status_enum,
+        nullable=False,
+        default=LeaveApprovalStatus.PENDING,
+    )
+    admin_approved_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    admin_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

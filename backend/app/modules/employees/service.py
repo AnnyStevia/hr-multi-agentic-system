@@ -33,6 +33,9 @@ from app.modules.employees.schemas import (
     DepartmentResponse,
 )
 from app.modules.identity.models import Role, UserRole
+from app.modules.leave.schemas import CurrentWorkStatus
+from app.modules.leave.status import derive_current_work_status
+from sqlalchemy.orm import object_session
 from app.modules.recruitment.models import Application
 from app.shared.exceptions import AppException
 
@@ -467,6 +470,12 @@ class EmployeeService:
 
 
 def build_employee_response(employee: Employee) -> EmployeeResponse:
+    session = object_session(employee)
+    work = (
+        derive_current_work_status(session, employee.id)
+        if session is not None
+        else None
+    )
     return EmployeeResponse(
         id=employee.id,
         employee_number=employee.employee_number,
@@ -482,6 +491,10 @@ def build_employee_response(employee: Employee) -> EmployeeResponse:
         manager_id=employee.manager_id,
         hire_date=employee.hire_date,
         employment_status=employee.employment_status,
+        current_work_status=(
+            work.current_work_status if work is not None else CurrentWorkStatus.ACTIVE
+        ),
+        current_leave=work.current_leave if work is not None else None,
         user_id=employee.user_id,
         created_at=employee.created_at,
         updated_at=employee.updated_at,

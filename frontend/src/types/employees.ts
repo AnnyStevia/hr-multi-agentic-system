@@ -1,3 +1,5 @@
+import type { CurrentLeaveSummary, CurrentWorkStatus } from "@/types/leave";
+
 export type EmploymentStatus = "active" | "inactive" | "on_leave";
 
 export interface Employee {
@@ -15,6 +17,8 @@ export interface Employee {
   manager_id: number | null;
   hire_date: string;
   employment_status: EmploymentStatus;
+  current_work_status?: CurrentWorkStatus;
+  current_leave?: CurrentLeaveSummary | null;
   user_id: number | null;
   created_at: string;
   updated_at: string;

@@ -106,6 +106,7 @@ class UserService:
         department_id: int,
         position: str,
         hire_date: date,
+        manager_id: int | None = None,
     ) -> User:
         existing = self.db.query(User).filter(User.email == email).first()
         if existing is not None:
@@ -119,6 +120,12 @@ class UserService:
             raise AppException("Department not found", status_code=400)
         if department.status != DepartmentStatus.ACTIVE:
             raise AppException("Department is not active", status_code=400)
+
+        manager = None
+        if manager_id is not None:
+            manager = EmployeeRepository(self.db).get_by_id(manager_id)
+            if manager is None:
+                raise AppException("Manager not found", status_code=400)
 
         hr_role = self.db.query(Role).filter(Role.name == self.HR_ROLE_NAME).first()
         if hr_role is None:
@@ -156,6 +163,7 @@ class UserService:
             department_id=department.id,
             position=position_title,
             position_id=org_position.id,
+            manager_id=manager.id if manager is not None else None,
             hire_date=hire_date,
             employment_status=EmploymentStatus.ACTIVE,
             user_id=user.id,

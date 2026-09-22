@@ -1,7 +1,7 @@
 from datetime import date
 
 from app.core.security import verify_password
-from app.modules.employees.models import Department, DepartmentStatus, Employee
+from app.modules.employees.models import Department, DepartmentStatus, Employee, EmploymentStatus
 from app.modules.identity.models import Candidate, Role, User
 from app.modules.identity.service import SeedService, UserService
 from app.shared.exceptions import AppException
@@ -18,6 +18,22 @@ def _active_department(db_session, name: str = "Human Resources") -> Department:
 def test_create_hr_assigns_hr_role_and_hashes_password(db_session):
     department = _active_department(db_session)
     service = UserService(db_session)
+    manager = Employee(
+        employee_number="PENDING",
+        first_name="Dir",
+        last_name="Ector",
+        email="director@test.com",
+        phone="+21620111000",
+        department_id=department.id,
+        position="Director",
+        hire_date=date(2020, 1, 1),
+        employment_status=EmploymentStatus.ACTIVE,
+    )
+    db_session.add(manager)
+    db_session.flush()
+    manager.employee_number = f"EMP-{manager.id:06d}"
+    db_session.commit()
+
     user = service.create_hr_account(
         first_name="Sara",
         last_name="Khelifi",
@@ -25,8 +41,9 @@ def test_create_hr_assigns_hr_role_and_hashes_password(db_session):
         password="hrpass123",
         phone="+216 20 333 444",
         department_id=department.id,
-        position="HR Specialist",
+        position="HR Manager",
         hire_date=date(2024, 3, 1),
+        manager_id=manager.id,
     )
 
     assert user.email == "sara.hr@test.com"
@@ -38,6 +55,8 @@ def test_create_hr_assigns_hr_role_and_hashes_password(db_session):
     assert employee.email == "sara.hr@test.com"
     assert employee.employee_number.startswith("EMP-")
     assert employee.department_id == department.id
+    assert employee.manager_id == manager.id
+    assert employee.position == "HR Manager"
 
 
 def test_create_hr_rejects_duplicate_email(db_session):

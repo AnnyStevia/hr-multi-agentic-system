@@ -186,3 +186,60 @@ class LeaveRepository:
             .scalar()
         )
         return int(total or 0)
+
+    def list_calendar_periods(
+        self,
+        employee_id: int,
+        *,
+        month_start: date,
+        month_end: date,
+    ) -> list[LeaveRequest]:
+        active = [LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED]
+        return (
+            self.db.query(LeaveRequest)
+            .options(joinedload(LeaveRequest.leave_type))
+            .filter(
+                LeaveRequest.employee_id == employee_id,
+                LeaveRequest.status.in_(active),
+                LeaveRequest.start_date <= month_end,
+                LeaveRequest.end_date >= month_start,
+            )
+            .order_by(LeaveRequest.start_date.asc(), LeaveRequest.id.asc())
+            .all()
+        )
+
+    def find_approved_covering(
+        self, employee_id: int, as_of: date
+    ) -> LeaveRequest | None:
+        return (
+            self.db.query(LeaveRequest)
+            .options(joinedload(LeaveRequest.leave_type))
+            .filter(
+                LeaveRequest.employee_id == employee_id,
+                LeaveRequest.status == LeaveRequestStatus.APPROVED,
+                LeaveRequest.start_date <= as_of,
+                LeaveRequest.end_date >= as_of,
+            )
+            .order_by(LeaveRequest.start_date.asc(), LeaveRequest.id.asc())
+            .first()
+        )
+
+    def list_requests_for_employees(
+        self,
+        employee_ids: list[int],
+        *,
+        status: LeaveRequestStatus | None = None,
+    ) -> list[LeaveRequest]:
+        if not employee_ids:
+            return []
+        query = (
+            self.db.query(LeaveRequest)
+            .options(
+                joinedload(LeaveRequest.leave_type),
+                joinedload(LeaveRequest.employee),
+            )
+            .filter(LeaveRequest.employee_id.in_(employee_ids))
+        )
+        if status is not None:
+            query = query.filter(LeaveRequest.status == status)
+        return query.order_by(LeaveRequest.created_at.desc(), LeaveRequest.id.desc()).all()
