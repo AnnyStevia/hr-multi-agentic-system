@@ -11,6 +11,7 @@ from app.api.v1 import (
     employees,
     interviews,
     jobs,
+    leave,
     notifications,
     onboarding,
     organization,
@@ -39,6 +40,11 @@ api_router.include_router(onboarding.router)
 api_router.include_router(training.catalog_router)
 api_router.include_router(training.onboarding_router)
 api_router.include_router(training.me_router)
+api_router.include_router(leave.types_router)
+api_router.include_router(leave.policies_router)
+api_router.include_router(leave.requests_router)
+api_router.include_router(leave.me_router)
+api_router.include_router(leave.employees_router)
 api_router.include_router(jobs.router)
 api_router.include_router(applications.router)
 api_router.include_router(careers.router)

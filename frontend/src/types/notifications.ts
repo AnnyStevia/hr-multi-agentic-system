@@ -9,7 +9,11 @@ export type NotificationType =
   | "onboarding_task_completed"
   | "onboarding_training_assigned"
   | "onboarding_training_completed"
-  | "onboarding_completed";
+  | "onboarding_completed"
+  | "leave_request_submitted"
+  | "leave_request_approved"
+  | "leave_request_rejected"
+  | "leave_request_cancelled";
 
 export interface Notification {
   id: number;

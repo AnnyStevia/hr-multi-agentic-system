@@ -66,6 +66,10 @@ export default function HrNotificationsPage() {
   };
 
   const handleClick = async (notification: Notification) => {
+    if (notification.related_entity_type === "leave_request") {
+      await openRelated(notification);
+      return;
+    }
     try {
       await markRead(notification);
       setExpandedId((current) => (current === notification.id ? null : notification.id));
@@ -82,6 +86,8 @@ export default function HrNotificationsPage() {
         router.push(`/hr/applications/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
         router.push(`/hr/onboarding/${notification.related_entity_id}`);
+      } else if (notification.related_entity_type === "leave_request") {
+        router.push("/hr/leave");
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         const interview = await api.getInterview(notification.related_entity_id);
         router.push(`/hr/applications/${interview.application_id}`);

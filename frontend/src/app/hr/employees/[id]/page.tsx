@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { EmployeeLeaveBalancesSection } from "@/components/EmployeeLeaveBalancesSection";
 import { EmployeeOrganizationCard } from "@/components/EmployeeOrganizationCard";
 import { EmployeeProfileSection } from "@/components/EmployeeProfileSection";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
+import { DocumentsSection } from "@/components/DocumentsSection";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
 import type { EmployeeOrganization } from "@/types/organization";
@@ -124,8 +126,12 @@ export default function EmployeeProfilePage() {
 
       <EmployeeProfileSection mode="hr" employeeId={employee.id} />
 
+      <DocumentsSection mode="hr" employeeId={employee.id} allowDelete />
+
+      <EmployeeLeaveBalancesSection employeeId={employee.id} />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {["Documents", "Leave", "Training", "Evaluations"].map((label) => (
+        {["Training", "Evaluations"].map((label) => (
           <div key={label} className="bg-white rounded-xl border shadow-sm p-5">
             <p className="text-sm font-medium text-gray-900">{label}</p>
             <p className="mt-1 text-sm text-gray-500">Coming later</p>

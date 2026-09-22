@@ -101,6 +101,10 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   };
 
   const handleNotificationClick = async (notification: Notification) => {
+    if (notification.related_entity_type === "leave_request") {
+      await navigateFromNotification(notification);
+      return;
+    }
     try {
       await markReadLocally(notification);
       setExpandedId((current) => (current === notification.id ? null : notification.id));
@@ -121,6 +125,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
           notification.related_entity_type === "onboarding_training"
         ) {
           router.push("/employee/onboarding");
+        } else if (notification.related_entity_type === "leave_request") {
+          router.push("/employee/leave");
         }
       } else if (variant === "candidate") {
         if (notification.related_entity_type === "application" && notification.related_entity_id) {
@@ -133,6 +139,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
         router.push(`/hr/applications/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
         router.push(`/hr/onboarding/${notification.related_entity_id}`);
+      } else if (notification.related_entity_type === "leave_request") {
+        router.push("/hr/leave");
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         const interview = await api.getInterview(notification.related_entity_id);
         router.push(`/hr/applications/${interview.application_id}`);
@@ -145,15 +153,19 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   };
 
   const viewAllHref =
-    variant === "hr" ? "/hr/notifications" : variant === "employee" ? "/employee/onboarding" : "/careers/notifications";
+    variant === "hr" ? "/hr/notifications" : variant === "employee" ? "/employee/leave" : "/careers/notifications";
   const expanded = expandedId ? notifications.find((n) => n.id === expandedId) : undefined;
   const ctaLabel =
     variant === "employee"
-      ? "View onboarding"
+      ? expanded?.related_entity_type === "leave_request"
+        ? "View leave"
+        : "View onboarding"
       : variant === "hr"
         ? expanded?.related_entity_type === "onboarding"
           ? "View onboarding"
-          : "View application"
+          : expanded?.related_entity_type === "leave_request"
+            ? "View leave"
+            : "View application"
         : expanded?.related_entity_type === "interview"
           ? "View interview"
           : "View application";

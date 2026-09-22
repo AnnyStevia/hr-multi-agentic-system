@@ -28,7 +28,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-brand-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
       </div>
     );
@@ -38,10 +38,10 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (!canAccessEmployeePortal(user)) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-slate-50">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
-          <h1 className="text-xl font-bold text-gray-900">Access denied</h1>
-          <p className="mt-2 text-sm text-gray-600">This portal is reserved for employees.</p>
+      <div className="min-h-screen flex items-center justify-center px-4 bg-brand-50">
+        <div className="bg-white rounded-xl border border-brand-200 p-8 max-w-md text-center">
+          <h1 className="text-xl font-bold text-brand-900">Access denied</h1>
+          <p className="mt-2 text-sm text-brand-300">This portal is reserved for employees.</p>
         </div>
       </div>
     );
@@ -49,18 +49,18 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
 
   if (onboarding && !allowDuringOnboarding) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-brand-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
-      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0">
-        <div className="px-5 py-5 border-b border-gray-100">
-          <p className="text-sm font-semibold tracking-tight text-gray-900">Employee</p>
-          <p className="mt-0.5 text-xs text-gray-500">
+    <div className="min-h-screen flex bg-brand-50">
+      <aside className="w-56 bg-white border-r border-brand-200 flex flex-col shrink-0">
+        <div className="px-5 py-5 border-b border-brand-200">
+          <p className="text-sm font-semibold tracking-tight text-brand-900">Employee</p>
+          <p className="mt-0.5 text-xs text-brand-300">
             {onboarding ? "Onboarding in progress" : "Workspace"}
           </p>
         </div>
@@ -69,6 +69,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
             <>
               <SideLink href="/employee/dashboard" pathname={pathname} label="Dashboard" />
               <SideLink href="/employee/organization" pathname={pathname} label="Organization" />
+              <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
             </>
           )}
           <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />
@@ -76,7 +77,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-gray-200">
+        <header className="bg-white border-b border-brand-200">
           <div className="px-6 h-14 flex items-center justify-end gap-3">
             <NotificationBell variant="employee" />
             <UserMenu editProfileHref="/employee/profile" />
@@ -103,8 +104,8 @@ function SideLink({
       href={href}
       className={`block px-3 py-2 rounded-md text-sm transition ${
         active
-          ? "bg-brand-50 text-brand-700 font-medium"
-          : "text-gray-600 hover:bg-slate-50 hover:text-gray-900"
+          ? "bg-brand-100 text-brand-900 font-medium"
+          : "text-brand-900 hover:bg-brand-100"
       }`}
     >
       {label}

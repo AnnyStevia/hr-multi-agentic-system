@@ -32,6 +32,18 @@ import type {
 } from "@/types/onboarding";
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
 import type {
+  LeaveBalance,
+  LeavePolicy,
+  LeavePolicyPayload,
+  LeavePolicyUpdatePayload,
+  LeaveRequest,
+  LeaveRequestCreatePayload,
+  LeaveRequestStatus,
+  LeaveType,
+  LeaveTypePayload,
+  LeaveTypeUpdatePayload,
+} from "@/types/leave";
+import type {
   EducationPayload,
   EmployeeEducation,
   EmployeeExperience,
@@ -765,6 +777,114 @@ class ApiClient {
     return this.request<PresignedProfilePictureUrl>(
       `/api/v1/employees/${employeeId}/profile/picture/url`,
     );
+  }
+
+  // --- Leave ---
+
+  async listLeaveTypes(activeOnly = false): Promise<LeaveType[]> {
+    const query = activeOnly ? "?active_only=true" : "";
+    return this.request<LeaveType[]>(`/api/v1/leave/types${query}`);
+  }
+
+  async listMyLeaveTypes(): Promise<LeaveType[]> {
+    return this.request<LeaveType[]>("/api/v1/me/leave/types");
+  }
+
+  async createLeaveType(payload: LeaveTypePayload): Promise<LeaveType> {
+    return this.request<LeaveType>("/api/v1/leave/types", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateLeaveType(id: number, payload: LeaveTypeUpdatePayload): Promise<LeaveType> {
+    return this.request<LeaveType>(`/api/v1/leave/types/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteLeaveType(id: number): Promise<LeaveType> {
+    return this.request<LeaveType>(`/api/v1/leave/types/${id}`, { method: "DELETE" });
+  }
+
+  async listLeavePolicies(params?: { leave_type_id?: number; year?: number }): Promise<LeavePolicy[]> {
+    const search = new URLSearchParams();
+    if (params?.leave_type_id != null) search.set("leave_type_id", String(params.leave_type_id));
+    if (params?.year != null) search.set("year", String(params.year));
+    const query = search.toString() ? `?${search.toString()}` : "";
+    return this.request<LeavePolicy[]>(`/api/v1/leave/policies${query}`);
+  }
+
+  async createLeavePolicy(payload: LeavePolicyPayload): Promise<LeavePolicy> {
+    return this.request<LeavePolicy>("/api/v1/leave/policies", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateLeavePolicy(id: number, payload: LeavePolicyUpdatePayload): Promise<LeavePolicy> {
+    return this.request<LeavePolicy>(`/api/v1/leave/policies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteLeavePolicy(id: number): Promise<void> {
+    return this.requestVoid(`/api/v1/leave/policies/${id}`, { method: "DELETE" });
+  }
+
+  async listMyLeaveBalances(year?: number): Promise<LeaveBalance[]> {
+    const query = year != null ? `?year=${year}` : "";
+    return this.request<LeaveBalance[]>(`/api/v1/me/leave/balances${query}`);
+  }
+
+  async listEmployeeLeaveBalances(employeeId: number, year?: number): Promise<LeaveBalance[]> {
+    const query = year != null ? `?year=${year}` : "";
+    return this.request<LeaveBalance[]>(`/api/v1/employees/${employeeId}/leave/balances${query}`);
+  }
+
+  async listMyLeaveRequests(): Promise<LeaveRequest[]> {
+    return this.request<LeaveRequest[]>("/api/v1/me/leave/requests");
+  }
+
+  async createMyLeaveRequest(payload: LeaveRequestCreatePayload): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>("/api/v1/me/leave/requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async cancelMyLeaveRequest(requestId: number): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(`/api/v1/me/leave/requests/${requestId}/cancel`, {
+      method: "PATCH",
+    });
+  }
+
+  async listLeaveRequests(params?: {
+    employee_id?: number;
+    leave_type_id?: number;
+    status?: LeaveRequestStatus;
+  }): Promise<LeaveRequest[]> {
+    const search = new URLSearchParams();
+    if (params?.employee_id != null) search.set("employee_id", String(params.employee_id));
+    if (params?.leave_type_id != null) search.set("leave_type_id", String(params.leave_type_id));
+    if (params?.status) search.set("status", params.status);
+    const query = search.toString() ? `?${search.toString()}` : "";
+    return this.request<LeaveRequest[]>(`/api/v1/leave/requests${query}`);
+  }
+
+  async approveLeaveRequest(requestId: number): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(`/api/v1/leave/requests/${requestId}/approve`, {
+      method: "PATCH",
+    });
+  }
+
+  async rejectLeaveRequest(requestId: number, rejectionReason: string): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(`/api/v1/leave/requests/${requestId}/reject`, {
+      method: "PATCH",
+      body: JSON.stringify({ rejection_reason: rejectionReason }),
+    });
   }
 
   logout(): void {
