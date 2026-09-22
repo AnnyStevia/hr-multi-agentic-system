@@ -6,6 +6,8 @@ from app.modules.documents.models import Document, DocumentType
 from app.modules.documents.repository import DocumentRepository
 from app.modules.documents.schemas import DocumentResponse, PresignedDocumentUrlResponse
 from app.modules.employees.repository import EmployeeRepository
+from app.modules.onboarding.models import OnboardingTaskType
+from app.modules.onboarding.sync import sync_onboarding_tasks_for_employee
 from app.shared.exceptions import AppException
 from app.shared.storage.base import StorageService
 from app.shared.storage.exceptions import StorageException
@@ -86,6 +88,14 @@ class DocumentService:
             except StorageException:
                 pass
         self.repository.delete(document)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee_id,
+            task_types={OnboardingTaskType.DOCUMENT},
+        )
+
+    def has_document_of_type(self, employee_id: int, document_type: DocumentType) -> bool:
+        return self.repository.exists_for_employee(employee_id, document_type)
 
     def _upload(
         self,
@@ -118,7 +128,13 @@ class DocumentService:
             self.repository.db.rollback()
             raise AppException(exc.message, status_code=exc.status_code) from exc
         document.storage_key = storage_key
-        return self.repository.save(document)
+        saved = self.repository.save(document)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee_id,
+            task_types={OnboardingTaskType.DOCUMENT},
+        )
+        return saved
 
     def _presign(self, document: Document, *, download: bool) -> PresignedDocumentUrlResponse:
         try:

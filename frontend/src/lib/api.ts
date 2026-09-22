@@ -26,6 +26,8 @@ import type {
   OnboardingProgress,
   OnboardingTask,
   OnboardingTaskCreatePayload,
+  OnboardingTaskTemplate,
+  OnboardingTaskTemplatePayload,
   OnboardingTaskUpdatePayload,
 } from "@/types/onboarding";
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
@@ -464,6 +466,44 @@ class ApiClient {
     return this.request<OnboardingTask[]>(`/api/v1/onboarding/${onboardingId}/tasks`);
   }
 
+  async listOnboardingTaskTemplates(activeOnly = false): Promise<OnboardingTaskTemplate[]> {
+    const query = activeOnly ? "?active_only=true" : "";
+    return this.request<OnboardingTaskTemplate[]>(`/api/v1/onboarding/task-templates${query}`);
+  }
+
+  async createOnboardingTaskTemplate(
+    payload: OnboardingTaskTemplatePayload,
+  ): Promise<OnboardingTaskTemplate> {
+    return this.request<OnboardingTaskTemplate>("/api/v1/onboarding/task-templates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOnboardingTaskTemplate(
+    id: number,
+    payload: Partial<OnboardingTaskTemplatePayload>,
+  ): Promise<OnboardingTaskTemplate> {
+    return this.request<OnboardingTaskTemplate>(`/api/v1/onboarding/task-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteOnboardingTaskTemplate(id: number): Promise<OnboardingTaskTemplate | void> {
+    const token = this.getToken();
+    const response = await fetch(`${this.baseUrl}/api/v1/onboarding/task-templates/${id}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 204) return;
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(formatApiDetail(data.detail) || "Request failed");
+    }
+    return response.json();
+  }
+
   async createOnboardingTask(
     onboardingId: number,
     payload: OnboardingTaskCreatePayload,
@@ -506,6 +546,18 @@ class ApiClient {
 
   async completeMyOnboardingTask(taskId: number): Promise<OnboardingTask> {
     return this.request<OnboardingTask>(`/api/v1/me/onboarding/tasks/${taskId}/complete`, {
+      method: "PATCH",
+    });
+  }
+
+  async acknowledgeMyOnboardingTask(taskId: number): Promise<OnboardingTask> {
+    return this.request<OnboardingTask>(`/api/v1/me/onboarding/tasks/${taskId}/acknowledge`, {
+      method: "PATCH",
+    });
+  }
+
+  async completeManualOnboardingTask(taskId: number): Promise<OnboardingTask> {
+    return this.request<OnboardingTask>(`/api/v1/onboarding/tasks/${taskId}/complete`, {
       method: "PATCH",
     });
   }

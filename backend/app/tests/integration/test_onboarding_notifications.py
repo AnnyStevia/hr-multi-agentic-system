@@ -42,16 +42,15 @@ def test_hire_notifies_employee_onboarding_started(client, db_session):
     assert any(item["type"] == "onboarding_started" for item in listed.json())
 
 
-def test_employee_task_complete_notifies_hr(client, db_session):
+def test_employee_task_complete_does_not_notify_hr_per_task(client, db_session):
     _application, _job, candidate_headers, headers, body = _hire(
         client, db_session, email="notif.taskdone@test.com"
     )
     onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
-    employee = client.get(f"/api/v1/employees/{body['hired_employee_id']}", headers=headers).json()
 
     created = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Sign handbook"},
+        json={"title": "Sign handbook", "task_type": "acknowledgement"},
         headers=headers,
     )
     assert created.status_code == 201, created.text
@@ -64,30 +63,18 @@ def test_employee_task_complete_notifies_hr(client, db_session):
     )
     assert done.status_code == 200, done.text
 
-    rows = (
-        db_session.query(Notification)
-        .filter(
-            Notification.type == NotificationType.ONBOARDING_TASK_COMPLETED,
-            Notification.related_entity_id == task_id,
-        )
-        .all()
-    )
-    assert len(rows) >= 1
-    assert all("Sign handbook" in row.message for row in rows)
-    assert all(employee["full_name"] in row.message for row in rows)
-    assert _count_type(db_session, notification_type=NotificationType.ONBOARDING_TASK_COMPLETED) > before
+    assert _count_type(db_session, notification_type=NotificationType.ONBOARDING_TASK_COMPLETED) == before
 
     hr_list = client.get("/api/v1/notifications", headers=headers)
     assert hr_list.status_code == 200
-    assert any(item["type"] == "onboarding_task_completed" for item in hr_list.json())
+    assert not any(item["type"] == "onboarding_task_completed" for item in hr_list.json())
 
 
-def test_training_assign_and_complete_notifications(client, db_session):
+def test_training_assign_notifies_employee_complete_does_not_notify_hr(client, db_session):
     _application, _job, candidate_headers, headers, body = _hire(
         client, db_session, email="notif.train@test.com"
     )
     onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
-    employee = client.get(f"/api/v1/employees/{body['hired_employee_id']}", headers=headers).json()
     user = db_session.query(User).filter(User.email == "notif.train@test.com").one()
 
     training = client.post(
@@ -115,23 +102,19 @@ def test_training_assign_and_complete_notifications(client, db_session):
     assert len(assigned_rows) == 1
     assert "Safety 101" in assigned_rows[0].message
 
+    before_hr_training = _count_type(
+        db_session, notification_type=NotificationType.ONBOARDING_TRAINING_COMPLETED
+    )
     completed = client.patch(
         f"/api/v1/me/onboarding/trainings/{assignment_id}/complete",
         headers=candidate_headers,
     )
     assert completed.status_code == 200, completed.text
 
-    done_rows = (
-        db_session.query(Notification)
-        .filter(
-            Notification.type == NotificationType.ONBOARDING_TRAINING_COMPLETED,
-            Notification.related_entity_id == assignment_id,
-        )
-        .all()
+    assert (
+        _count_type(db_session, notification_type=NotificationType.ONBOARDING_TRAINING_COMPLETED)
+        == before_hr_training
     )
-    assert len(done_rows) >= 1
-    assert all("Safety 101" in row.message for row in done_rows)
-    assert all(employee["full_name"] in row.message for row in done_rows)
 
 
 def test_final_task_notifies_employee_and_hr_onboarding_completed(client, db_session):
@@ -144,7 +127,7 @@ def test_final_task_notifies_employee_and_hr_onboarding_completed(client, db_ses
 
     task = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Final step"},
+        json={"title": "Final step", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
 
@@ -188,7 +171,7 @@ def test_retry_complete_does_not_duplicate_notifications(client, db_session):
 
     task = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Only once"},
+        json={"title": "Only once", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
     training = client.post(
@@ -244,6 +227,44 @@ def test_retry_complete_does_not_duplicate_notifications(client, db_session):
         == train_count
     )
     assert _count_type(db_session, notification_type=NotificationType.ONBOARDING_COMPLETED) == done_count
+    assert task_count == 0
+    assert train_count == 0
+    assert done_count >= 1
+
+
+def test_hr_complete_onboarding_notifies_employee_and_hr(client, db_session):
+    _application, _job, _candidate_headers, headers, body = _hire(
+        client, db_session, email="notif.hrcomplete@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+    user = db_session.query(User).filter(User.email == "notif.hrcomplete@test.com").one()
+    employee = client.get(f"/api/v1/employees/{body['hired_employee_id']}", headers=headers).json()
+
+    completed = client.post(f"/api/v1/onboarding/{onboarding_id}/complete", headers=headers)
+    assert completed.status_code == 200, completed.text
+
+    employee_rows = (
+        db_session.query(Notification)
+        .filter(
+            Notification.recipient_user_id == user.id,
+            Notification.type == NotificationType.ONBOARDING_COMPLETED,
+            Notification.related_entity_id == onboarding_id,
+        )
+        .all()
+    )
+    assert len(employee_rows) == 1
+
+    hr_rows = (
+        db_session.query(Notification)
+        .filter(
+            Notification.type == NotificationType.ONBOARDING_COMPLETED,
+            Notification.related_entity_id == onboarding_id,
+            Notification.recipient_user_id != user.id,
+        )
+        .all()
+    )
+    assert len(hr_rows) >= 1
+    assert all(employee["full_name"] in row.message for row in hr_rows)
 
 
 def test_failed_hire_does_not_create_onboarding_started(client, db_session):
@@ -279,7 +300,7 @@ def test_other_employee_cannot_trigger_task_complete_notification(client, db_ses
     onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
     task = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Private task"},
+        json={"title": "Private task", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
 

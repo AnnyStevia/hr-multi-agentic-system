@@ -30,12 +30,12 @@ def test_progress_tasks_only(client, db_session):
     onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
     t1 = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task A"},
+        json={"title": "Task A", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
     client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task B"},
+        json={"title": "Task B", "task_type": "acknowledgement"},
         headers=headers,
     )
     client.patch(
@@ -102,12 +102,12 @@ def test_progress_combined_and_documents_ignored(client, db_session):
 
     t1 = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task 1"},
+        json={"title": "Task 1", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
     client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task 2"},
+        json={"title": "Task 2", "task_type": "acknowledgement"},
         headers=headers,
     )
     client.patch(
@@ -185,12 +185,12 @@ def test_final_task_completes_onboarding_non_final_does_not(client, db_session):
     onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
     first = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "First"},
+        json={"title": "First", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
     second = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Last"},
+        json={"title": "Last", "task_type": "acknowledgement"},
         headers=headers,
     ).json()
 

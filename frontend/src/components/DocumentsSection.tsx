@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { api } from "@/lib/api";
 import {
@@ -15,6 +15,8 @@ type DocumentsSectionProps = {
   mode: "employee" | "hr";
   employeeId?: number;
   allowDelete?: boolean;
+  preferredDocumentType?: DocumentType;
+  onChanged?: () => void | Promise<void>;
 };
 
 function formatDateTime(value: string): string {
@@ -29,14 +31,25 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DocumentsSection({ mode, employeeId, allowDelete = false }: DocumentsSectionProps) {
+export function DocumentsSection({
+  mode,
+  employeeId,
+  allowDelete = false,
+  preferredDocumentType = "id_document",
+  onChanged,
+}: DocumentsSectionProps) {
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [documentType, setDocumentType] = useState<DocumentType>("id_document");
+  const [documentType, setDocumentType] = useState<DocumentType>(preferredDocumentType);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDocumentType(preferredDocumentType);
+  }, [preferredDocumentType]);
 
   const load = useCallback(async () => {
     setError("");
@@ -94,7 +107,11 @@ export function DocumentsSection({ mode, employeeId, allowDelete = false }: Docu
         await api.uploadEmployeeDocument(employeeId as number, documentType, file);
       }
       setFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       await load();
+      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload document");
     } finally {
@@ -110,6 +127,7 @@ export function DocumentsSection({ mode, employeeId, allowDelete = false }: Docu
     try {
       await api.deleteEmployeeDocument(employeeId, document.id);
       await load();
+      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete document");
     } finally {
@@ -153,18 +171,22 @@ export function DocumentsSection({ mode, employeeId, allowDelete = false }: Docu
           </label>
           <input
             id="document-file"
+            ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="w-full text-sm"
           />
+          {file && (
+            <p className="mt-1 text-xs text-gray-600 truncate">{file.name}</p>
+          )}
         </div>
         <button
           type="submit"
           disabled={uploading || !file}
           className="bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
         >
-          {uploading ? "Uploading..." : "Upload"}
+          {uploading ? "Uploading..." : file ? "Upload" : "Choose a file first"}
         </button>
       </form>
 

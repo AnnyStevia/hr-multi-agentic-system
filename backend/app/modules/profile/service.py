@@ -21,6 +21,8 @@ from app.modules.profile.schemas import (
     PresignedProfilePictureUrlResponse,
     ProfileUpdateRequest,
 )
+from app.modules.onboarding.models import OnboardingTaskType
+from app.modules.onboarding.sync import sync_onboarding_tasks_for_employee
 from app.shared.exceptions import AppException
 from app.shared.storage.base import StorageService
 from app.shared.storage.exceptions import StorageException
@@ -69,7 +71,13 @@ class ProfileService:
                     value = value.strip() or None
                 setattr(employee, field, value)
 
-        return self.employees.save(employee)
+        saved = self.employees.save(employee)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            saved.id,
+            task_types={OnboardingTaskType.PROFILE_PERSONAL_INFO},
+        )
+        return saved
 
     def upload_picture_for_user(
         self,
@@ -103,7 +111,13 @@ class ProfileService:
         employee.profile_picture_content_type = upload.content_type
         employee.profile_picture_filename = upload.filename
         employee.profile_picture_size_bytes = len(upload.content)
-        return self.employees.save(employee)
+        saved = self.employees.save(employee)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            saved.id,
+            task_types={OnboardingTaskType.PROFILE_PICTURE},
+        )
+        return saved
 
     def presigned_url_for_user(self, user_id: int) -> PresignedProfilePictureUrlResponse:
         employee = self._require_employee_for_user(user_id)
@@ -127,6 +141,11 @@ class ProfileService:
         employee.profile_picture_filename = None
         employee.profile_picture_size_bytes = None
         self.employees.save(employee)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.PROFILE_PICTURE},
+        )
 
     def list_educations_for_user(self, user_id: int) -> list[EmployeeEducation]:
         employee = self._require_employee_for_user(user_id)
@@ -150,7 +169,13 @@ class ProfileService:
             end_date=payload.end_date,
             description=_optional_text(payload.description),
         )
-        return self.repository.add_education(education)
+        saved = self.repository.add_education(education)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EDUCATION},
+        )
+        return saved
 
     def update_education_for_user(
         self, user_id: int, education_id: int, payload: EducationUpdateRequest
@@ -175,7 +200,13 @@ class ProfileService:
             education.description = _optional_text(data["description"])
 
         _validate_date_range(education.start_date, education.end_date)
-        return self.repository.save_education(education)
+        saved = self.repository.save_education(education)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EDUCATION},
+        )
+        return saved
 
     def delete_education_for_user(self, user_id: int, education_id: int) -> None:
         employee = self._require_employee_for_user(user_id)
@@ -183,6 +214,11 @@ class ProfileService:
         if education is None:
             raise AppException("Education record not found", status_code=404)
         self.repository.delete_education(education)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EDUCATION},
+        )
 
     def list_experiences_for_user(self, user_id: int) -> list[EmployeeExperience]:
         employee = self._require_employee_for_user(user_id)
@@ -205,7 +241,13 @@ class ProfileService:
             start_date=payload.start_date,
             end_date=payload.end_date,
         )
-        return self.repository.add_experience(experience)
+        saved = self.repository.add_experience(experience)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EXPERIENCE},
+        )
+        return saved
 
     def update_experience_for_user(
         self, user_id: int, experience_id: int, payload: ExperienceUpdateRequest
@@ -228,7 +270,13 @@ class ProfileService:
             experience.description = _optional_text(data["description"])
 
         _validate_date_range(experience.start_date, experience.end_date)
-        return self.repository.save_experience(experience)
+        saved = self.repository.save_experience(experience)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EXPERIENCE},
+        )
+        return saved
 
     def delete_experience_for_user(self, user_id: int, experience_id: int) -> None:
         employee = self._require_employee_for_user(user_id)
@@ -236,6 +284,11 @@ class ProfileService:
         if experience is None:
             raise AppException("Experience record not found", status_code=404)
         self.repository.delete_experience(experience)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee.id,
+            task_types={OnboardingTaskType.EXPERIENCE},
+        )
 
     def is_personal_information_complete(self, employee_id: int) -> bool:
         employee = self.employees.get_by_id(employee_id)

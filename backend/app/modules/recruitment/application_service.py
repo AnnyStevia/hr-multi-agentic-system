@@ -29,6 +29,7 @@ from app.modules.recruitment.schemas import (
     JobSummary,
     PresignedDocumentResponse,
 )
+from app.modules.identity.hr_access import list_hr_staff_user_ids
 from app.modules.notifications.models import NotificationType
 from app.modules.notifications.service import NotificationService
 from app.shared.exceptions import AppException
@@ -135,7 +136,23 @@ class ApplicationService:
         loaded = self.applications.get_by_id(application.id)
         if loaded is None:
             raise AppException("Failed to load submitted application", status_code=500)
+        self._notify_application_submitted(loaded)
         return loaded
+
+    def _notify_application_submitted(self, application: Application) -> None:
+        if self.notifications is None:
+            return
+        candidate_name = application.candidate.user.full_name
+        job_title = application.job.title
+        for recipient_id in list_hr_staff_user_ids(self.db):
+            self.notifications.create_if_absent(
+                recipient_user_id=recipient_id,
+                type=NotificationType.APPLICATION_SUBMITTED,
+                title="New application",
+                message=f"{candidate_name} applied for {job_title}.",
+                related_entity_type="application",
+                related_entity_id=application.id,
+            )
 
     def get_own(self, user: User, application_id: int) -> Application:
         candidate = self._require_candidate(user)

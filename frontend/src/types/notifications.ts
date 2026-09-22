@@ -1,5 +1,6 @@
 export type NotificationType =
   | "application_status_changed"
+  | "application_submitted"
   | "interview_invitation"
   | "interview_scheduled"
   | "interview_reminder"

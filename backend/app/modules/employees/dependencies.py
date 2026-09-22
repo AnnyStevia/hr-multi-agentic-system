@@ -8,10 +8,7 @@ from app.modules.employees.repository import (
     PositionRepository,
 )
 from app.modules.employees.service import DepartmentService, EmployeeService, PositionService
-from app.modules.notifications.repository import NotificationRepository
-from app.modules.notifications.service import NotificationService
-from app.modules.onboarding.repository import OnboardingRepository
-from app.modules.onboarding.service import OnboardingService
+from app.modules.onboarding.dependencies import build_onboarding_service
 
 
 def get_department_service(db: Session = Depends(get_db)) -> DepartmentService:
@@ -25,9 +22,5 @@ def get_position_service(db: Session = Depends(get_db)) -> PositionService:
 def get_employee_service(db: Session = Depends(get_db)) -> EmployeeService:
     departments = DepartmentService(DepartmentRepository(db))
     positions = PositionService(PositionRepository(db), departments)
-    onboarding = OnboardingService(
-        OnboardingRepository(db),
-        EmployeeRepository(db),
-        NotificationService(NotificationRepository(db)),
-    )
+    onboarding = build_onboarding_service(db)
     return EmployeeService(EmployeeRepository(db), departments, onboarding, positions)

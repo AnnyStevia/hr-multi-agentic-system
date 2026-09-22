@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.modules.documents.models import Document
+from app.modules.documents.models import Document, DocumentType
 
 
 class DocumentRepository:
@@ -41,3 +41,14 @@ class DocumentRepository:
     def delete(self, document: Document) -> None:
         self.db.delete(document)
         self.db.commit()
+
+    def exists_for_employee(self, employee_id: int, document_type: DocumentType) -> bool:
+        return (
+            self.db.query(Document.id)
+            .filter(
+                Document.employee_id == employee_id,
+                Document.document_type == document_type,
+            )
+            .first()
+            is not None
+        )

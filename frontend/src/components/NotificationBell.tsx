@@ -129,6 +129,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
         } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
           router.push(`/careers/interviews/${notification.related_entity_id}`);
         }
+      } else if (notification.related_entity_type === "application" && notification.related_entity_id) {
+        router.push(`/hr/applications/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
         router.push(`/hr/onboarding/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {

@@ -1,10 +1,11 @@
 from datetime import UTC, datetime
 
 from app.modules.employees.repository import EmployeeRepository
-from app.modules.identity.hr_access import list_hr_staff_user_ids
 from app.modules.notifications.models import NotificationType
 from app.modules.notifications.service import NotificationService
+from app.modules.onboarding.models import OnboardingTaskType
 from app.modules.onboarding.repository import OnboardingRepository
+from app.modules.onboarding.sync import sync_onboarding_tasks_for_employee
 from app.modules.training.models import OnboardingTraining, OnboardingTrainingStatus, Training
 from app.modules.training.repository import TrainingRepository
 from app.modules.training.schemas import (
@@ -83,15 +84,29 @@ class TrainingService:
         )
         saved = self.repository.add_assignment(assignment)
         self._notify_training_assigned(saved, training)
+        onboarding = self.onboardings.get_by_id(onboarding_id)
+        if onboarding is not None:
+            sync_onboarding_tasks_for_employee(
+                self.repository.db,
+                onboarding.employee_id,
+                task_types={OnboardingTaskType.TRAINING},
+            )
         return saved
 
     def remove_assignment(self, onboarding_id: int, assignment_id: int) -> None:
-        if self.onboardings.get_by_id(onboarding_id) is None:
+        onboarding = self.onboardings.get_by_id(onboarding_id)
+        if onboarding is None:
             raise AppException("Onboarding not found", status_code=404)
         assignment = self.repository.get_assignment_for_onboarding(assignment_id, onboarding_id)
         if assignment is None:
             raise AppException("Training assignment not found", status_code=404)
+        employee_id = onboarding.employee_id
         self.repository.delete_assignment(assignment)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            employee_id,
+            task_types={OnboardingTaskType.TRAINING},
+        )
 
     def list_assignments_for_user(self, user_id: int) -> list[OnboardingTraining]:
         onboarding = self._require_onboarding_for_user(user_id)
@@ -107,7 +122,11 @@ class TrainingService:
         assignment.status = OnboardingTrainingStatus.COMPLETED
         assignment.completed_at = datetime.now(UTC)
         saved = self.repository.save_assignment(assignment)
-        self._notify_training_completed(saved)
+        sync_onboarding_tasks_for_employee(
+            self.repository.db,
+            onboarding.employee_id,
+            task_types={OnboardingTaskType.TRAINING},
+        )
         return saved
 
     def _require_onboarding_for_user(self, user_id: int):
@@ -136,29 +155,6 @@ class TrainingService:
             related_entity_type="onboarding_training",
             related_entity_id=assignment.id,
         )
-
-    def _notify_training_completed(self, assignment: OnboardingTraining) -> None:
-        if self.notifications is None:
-            return
-        onboarding = self.onboardings.get_by_id(assignment.onboarding_id)
-        if onboarding is None:
-            return
-        employee = self.employees.get_by_id(onboarding.employee_id)
-        if employee is None:
-            return
-        training_title = assignment.training.title if assignment.training is not None else "training"
-        employee_name = employee.full_name
-        for recipient_id in list_hr_staff_user_ids(self.repository.db):
-            if employee.user_id is not None and recipient_id == employee.user_id:
-                continue
-            self.notifications.create_if_absent(
-                recipient_user_id=recipient_id,
-                type=NotificationType.ONBOARDING_TRAINING_COMPLETED,
-                title="Training completed",
-                message=f'{employee_name} completed the training "{training_title}".',
-                related_entity_type="onboarding_training",
-                related_entity_id=assignment.id,
-            )
 
 
 def build_training_response(training: Training) -> TrainingResponse:

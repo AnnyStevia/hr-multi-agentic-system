@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/hr/organization", label: "Organization", enabled: true },
   { href: "/hr/jobs", label: "Job Offers", enabled: true },
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
+  { href: "/hr/onboarding/templates", label: "Task catalogue", enabled: true },
   { href: "#", label: "Leave", enabled: false },
   { href: "#", label: "Training", enabled: false },
   { href: "#", label: "Documents", enabled: false },
@@ -65,13 +66,13 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
           <p className="px-3 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             Core HR
           </p>
-          {NAV_ITEMS.slice(0, 7).map((item) => (
+          {NAV_ITEMS.slice(0, 8).map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
           <p className="px-3 pt-5 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             Coming later
           </p>
-          {NAV_ITEMS.slice(7).map((item) => (
+          {NAV_ITEMS.slice(8).map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
         </nav>
@@ -97,7 +98,11 @@ function NavLink({
   item: { href: string; label: string; enabled: boolean };
   pathname: string;
 }) {
-  const active = item.enabled && (pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const active =
+    item.enabled &&
+    (pathname === item.href ||
+      (pathname.startsWith(`${item.href}/`) &&
+        !(item.href === "/hr/onboarding" && pathname.startsWith("/hr/onboarding/templates"))));
 
   if (!item.enabled) {
     return (

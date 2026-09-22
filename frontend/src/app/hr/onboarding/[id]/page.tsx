@@ -11,11 +11,12 @@ import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
-import type {
-  Onboarding,
-  OnboardingProgress,
-  OnboardingTask,
-  OnboardingTaskStatus,
+import {
+  ONBOARDING_TASK_TYPE_LABELS,
+  type Onboarding,
+  type OnboardingProgress,
+  type OnboardingTask,
+  type OnboardingTaskStatus,
 } from "@/types/onboarding";
 
 const inputClass =
@@ -148,16 +149,33 @@ export default function OnboardingDetailPage() {
     setSavingTaskId(taskId);
     setError("");
     try {
-      await api.updateOnboardingTask(taskId, {
+      const task = tasks.find((item) => item.id === taskId);
+      const payload: Parameters<typeof api.updateOnboardingTask>[1] = {
         title: editForm.title.trim(),
         description: editForm.description.trim() || null,
         due_date: editForm.due_date || null,
-        status: editForm.status,
-      });
+      };
+      if (task?.task_type === "manual") {
+        payload.status = editForm.status;
+      }
+      await api.updateOnboardingTask(taskId, payload);
       setEditingTaskId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update task");
+    } finally {
+      setSavingTaskId(null);
+    }
+  };
+
+  const handleCompleteManualTask = async (taskId: number) => {
+    setSavingTaskId(taskId);
+    setError("");
+    try {
+      await api.completeManualOnboardingTask(taskId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to complete task");
     } finally {
       setSavingTaskId(null);
     }
@@ -384,22 +402,24 @@ export default function OnboardingDetailPage() {
                           className={inputClass}
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Status</label>
-                        <select
-                          value={editForm.status}
-                          onChange={(e) =>
-                            setEditForm((current) => ({
-                              ...current,
-                              status: e.target.value as OnboardingTaskStatus,
-                            }))
-                          }
-                          className={inputClass}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      </div>
+                      {task.task_type === "manual" && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Status</label>
+                          <select
+                            value={editForm.status}
+                            onChange={(e) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                status: e.target.value as OnboardingTaskStatus,
+                              }))
+                            }
+                            className={inputClass}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -424,6 +444,11 @@ export default function OnboardingDetailPage() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {task.is_required ? "Required" : "Optional"}
+                          {" · "}
+                          {ONBOARDING_TASK_TYPE_LABELS[task.task_type] || task.task_type}
+                        </p>
                         {task.description && (
                           <p className="mt-1 text-sm text-gray-600">{task.description}</p>
                         )}
@@ -441,6 +466,16 @@ export default function OnboardingDetailPage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {task.task_type === "manual" && task.status === "pending" && (
+                        <button
+                          type="button"
+                          disabled={savingTaskId === task.id}
+                          onClick={() => handleCompleteManualTask(task.id)}
+                          className="bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+                        >
+                          {savingTaskId === task.id ? "Completing..." : "Mark completed"}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => startEdit(task)}

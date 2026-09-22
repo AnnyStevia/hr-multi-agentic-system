@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.employees.models import Employee
-from app.modules.onboarding.models import Onboarding, OnboardingTask
+from app.modules.onboarding.models import Onboarding, OnboardingTask, OnboardingTaskTemplate
 
 
 class OnboardingRepository:
@@ -81,3 +81,64 @@ class OnboardingRepository:
     def delete_task(self, task: OnboardingTask) -> None:
         self.db.delete(task)
         self.db.commit()
+
+    def list_active_templates(self) -> list[OnboardingTaskTemplate]:
+        return (
+            self.db.query(OnboardingTaskTemplate)
+            .filter(OnboardingTaskTemplate.is_active.is_(True))
+            .order_by(OnboardingTaskTemplate.id.asc())
+            .all()
+        )
+
+    def list_templates(self, *, active_only: bool = False) -> list[OnboardingTaskTemplate]:
+        query = self.db.query(OnboardingTaskTemplate)
+        if active_only:
+            query = query.filter(OnboardingTaskTemplate.is_active.is_(True))
+        return query.order_by(OnboardingTaskTemplate.id.asc()).all()
+
+    def get_template_by_id(self, template_id: int) -> OnboardingTaskTemplate | None:
+        return (
+            self.db.query(OnboardingTaskTemplate)
+            .filter(OnboardingTaskTemplate.id == template_id)
+            .first()
+        )
+
+    def get_template_by_title(self, title: str) -> OnboardingTaskTemplate | None:
+        return (
+            self.db.query(OnboardingTaskTemplate)
+            .filter(OnboardingTaskTemplate.title == title)
+            .first()
+        )
+
+    def count_tasks_for_template(self, template_id: int) -> int:
+        return (
+            self.db.query(OnboardingTask)
+            .filter(OnboardingTask.template_id == template_id)
+            .count()
+        )
+
+    def add_template(self, template: OnboardingTaskTemplate) -> OnboardingTaskTemplate:
+        self.db.add(template)
+        self.db.commit()
+        self.db.refresh(template)
+        return template
+
+    def save_template(self, template: OnboardingTaskTemplate) -> OnboardingTaskTemplate:
+        self.db.commit()
+        self.db.refresh(template)
+        return template
+
+    def delete_template(self, template: OnboardingTaskTemplate) -> None:
+        self.db.delete(template)
+        self.db.commit()
+
+    def has_task_for_template(self, onboarding_id: int, template_id: int) -> bool:
+        return (
+            self.db.query(OnboardingTask)
+            .filter(
+                OnboardingTask.onboarding_id == onboarding_id,
+                OnboardingTask.template_id == template_id,
+            )
+            .first()
+            is not None
+        )

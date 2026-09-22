@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from app.modules.identity.dependencies import get_current_user, require_permissions
 from app.modules.identity.models import User
@@ -12,12 +12,16 @@ from app.modules.onboarding.schemas import (
     OnboardingResponse,
     OnboardingTaskCreateRequest,
     OnboardingTaskResponse,
+    OnboardingTaskTemplateCreateRequest,
+    OnboardingTaskTemplateResponse,
+    OnboardingTaskTemplateUpdateRequest,
     OnboardingTaskUpdateRequest,
 )
 from app.modules.onboarding.service import (
     OnboardingService,
     build_onboarding_response,
     build_onboarding_task_response,
+    build_template_response,
 )
 from app.shared.exceptions import AppException
 
@@ -28,6 +32,74 @@ employee_onboarding_router = APIRouter(prefix="/employees", tags=["Onboarding"])
 
 def _handle(exc: AppException) -> None:
     raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.get("/task-templates", response_model=list[OnboardingTaskTemplateResponse])
+def list_task_templates(
+    active_only: bool = Query(default=False),
+    _user: User = Depends(require_permissions("onboarding:read")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> list[OnboardingTaskTemplateResponse]:
+    return [
+        build_template_response(item)
+        for item in onboarding_service.list_templates(active_only=active_only)
+    ]
+
+
+@router.post(
+    "/task-templates",
+    response_model=OnboardingTaskTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_task_template(
+    payload: OnboardingTaskTemplateCreateRequest,
+    _user: User = Depends(require_permissions("onboarding:write")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingTaskTemplateResponse:
+    try:
+        return build_template_response(onboarding_service.create_template(payload))
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.get("/task-templates/{template_id}", response_model=OnboardingTaskTemplateResponse)
+def get_task_template(
+    template_id: int,
+    _user: User = Depends(require_permissions("onboarding:read")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingTaskTemplateResponse:
+    try:
+        return build_template_response(onboarding_service.get_template(template_id))
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.patch("/task-templates/{template_id}", response_model=OnboardingTaskTemplateResponse)
+def update_task_template(
+    template_id: int,
+    payload: OnboardingTaskTemplateUpdateRequest,
+    _user: User = Depends(require_permissions("onboarding:write")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingTaskTemplateResponse:
+    try:
+        return build_template_response(onboarding_service.update_template(template_id, payload))
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.delete("/task-templates/{template_id}")
+def delete_task_template(
+    template_id: int,
+    _user: User = Depends(require_permissions("onboarding:write")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+):
+    try:
+        result = onboarding_service.delete_template(template_id)
+        if result is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return build_template_response(result)
+    except AppException as exc:
+        _handle(exc)
 
 
 @me_router.get("/onboarding", response_model=OnboardingResponse)
@@ -70,8 +142,22 @@ def complete_my_onboarding_task(
     current_user: User = Depends(get_current_user),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskResponse:
+    """Legacy alias: only acknowledgement tasks are allowed."""
     try:
         task = onboarding_service.complete_task_for_employee_user(current_user.id, task_id)
+        return build_onboarding_task_response(task)
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.patch("/onboarding/tasks/{task_id}/acknowledge", response_model=OnboardingTaskResponse)
+def acknowledge_my_onboarding_task(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingTaskResponse:
+    try:
+        task = onboarding_service.acknowledge_task_for_employee(current_user.id, task_id)
         return build_onboarding_task_response(task)
     except AppException as exc:
         _handle(exc)
@@ -125,6 +211,20 @@ def update_onboarding_task(
 ) -> OnboardingTaskResponse:
     try:
         return build_onboarding_task_response(onboarding_service.update_task(task_id, payload))
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.patch("/tasks/{task_id}/complete", response_model=OnboardingTaskResponse)
+def complete_manual_onboarding_task(
+    task_id: int,
+    _user: User = Depends(require_permissions("onboarding:write")),
+    onboarding_service: OnboardingService = Depends(get_onboarding_service),
+) -> OnboardingTaskResponse:
+    try:
+        return build_onboarding_task_response(
+            onboarding_service.complete_manual_task_for_hr(task_id)
+        )
     except AppException as exc:
         _handle(exc)
 

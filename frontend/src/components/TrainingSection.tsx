@@ -8,6 +8,7 @@ import type { OnboardingTrainingAssignment, Training } from "@/types/training";
 type TrainingSectionProps = {
   mode: "employee" | "hr";
   onboardingId?: number;
+  onChanged?: () => void | Promise<void>;
 };
 
 function formatDateTime(value: string | null): string {
@@ -21,7 +22,7 @@ function statusLabel(status: string): string {
   return status === "completed" ? "Completed" : "Pending";
 }
 
-export function TrainingSection({ mode, onboardingId }: TrainingSectionProps) {
+export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSectionProps) {
   const [assignments, setAssignments] = useState<OnboardingTrainingAssignment[]>([]);
   const [catalog, setCatalog] = useState<Training[]>([]);
   const [selectedTrainingId, setSelectedTrainingId] = useState("");
@@ -76,6 +77,7 @@ export function TrainingSection({ mode, onboardingId }: TrainingSectionProps) {
     try {
       await api.completeMyOnboardingTraining(assignmentId);
       await load();
+      await onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to complete training");
     } finally {

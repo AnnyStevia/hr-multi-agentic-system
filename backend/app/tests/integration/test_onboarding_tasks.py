@@ -80,7 +80,7 @@ def test_employee_can_list_and_complete_own_tasks(client, db_session):
 
     created = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Complete IT setup"},
+        json={"title": "Complete IT setup", "task_type": "acknowledgement"},
         headers=headers,
     )
     assert created.status_code == 201, created.text
@@ -291,12 +291,12 @@ def test_completing_last_task_auto_completes_onboarding(client, db_session):
 
     first = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task A"},
+        json={"title": "Task A", "task_type": "acknowledgement"},
         headers=headers,
     )
     second = client.post(
         f"/api/v1/onboarding/{onboarding_id}/tasks",
-        json={"title": "Task B"},
+        json={"title": "Task B", "task_type": "acknowledgement"},
         headers=headers,
     )
     assert first.status_code == 201 and second.status_code == 201

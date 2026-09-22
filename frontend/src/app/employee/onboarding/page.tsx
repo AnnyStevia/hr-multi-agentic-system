@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { DocumentsSection } from "@/components/DocumentsSection";
@@ -9,7 +10,8 @@ import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
-import type { Onboarding, OnboardingProgress, OnboardingTask } from "@/types/onboarding";
+import type { Onboarding, OnboardingProgress, OnboardingTask, OnboardingTaskType } from "@/types/onboarding";
+import { ONBOARDING_TASK_TYPE_LABELS } from "@/types/onboarding";
 
 function formatDateTime(value: string): string {
   const date = new Date(value);
@@ -23,18 +25,50 @@ function formatDate(value: string): string {
   return date.toLocaleDateString();
 }
 
+const PROFILE_TYPES = new Set<OnboardingTaskType>([
+  "profile_personal_info",
+  "profile_picture",
+  "education",
+  "experience",
+]);
+
+function taskAction(
+  task: OnboardingTask,
+): { href?: string; sectionId?: string; label: string } | null {
+  if (task.status !== "pending") return null;
+  if (PROFILE_TYPES.has(task.task_type)) {
+    return { href: "/employee/profile", label: "Go to profile" };
+  }
+  if (task.task_type === "document") {
+    return { sectionId: "documents", label: "Upload document" };
+  }
+  if (task.task_type === "training") {
+    return { sectionId: "trainings", label: "Complete training" };
+  }
+  if (task.task_type === "acknowledgement") {
+    return { label: "Acknowledge" };
+  }
+  if (task.task_type === "manual") {
+    return null;
+  }
+  return null;
+}
+
 export default function EmployeeOnboardingPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
   const [progress, setProgress] = useState<OnboardingProgress | null>(null);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [completingId, setCompletingId] = useState<number | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent ?? false;
     setError("");
-    setLoading(true);
+    // Avoid full-page loading on refresh — focus/file-picker events would unmount
+    // DocumentsSection and wipe an in-progress upload.
+    if (!silent) setLoading(true);
     try {
       const [onboardingData, progressData, taskData] = await Promise.all([
         api.getMyOnboarding(),
@@ -44,31 +78,54 @@ export default function EmployeeOnboardingPage() {
       setOnboarding(onboardingData);
       setProgress(progressData);
       setTasks(taskData);
+      if (onboardingData.status === "completed") {
+        await refreshUser();
+      }
     } catch (err) {
-      setOnboarding(null);
-      setProgress(null);
-      setTasks([]);
+      if (!silent) {
+        setOnboarding(null);
+        setProgress(null);
+        setTasks([]);
+      }
       setError(err instanceof Error ? err.message : "Failed to load onboarding");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }, []);
+  }, [refreshUser]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  const handleCompleteTask = async (taskId: number) => {
-    setCompletingId(taskId);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void load({ silent: true });
+      }
+    };
+    // Do not listen to window "focus" — opening a file picker blurs/focuses the
+    // window and would remount the upload form before submit.
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
+  const handleAcknowledge = async (taskId: number) => {
+    setActingId(taskId);
     setError("");
     try {
-      await api.completeMyOnboardingTask(taskId);
-      await load();
+      await api.acknowledgeMyOnboardingTask(taskId);
+      await load({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to complete task");
+      setError(err instanceof Error ? err.message : "Failed to acknowledge task");
     } finally {
-      setCompletingId(null);
+      setActingId(null);
     }
+  };
+
+  const scrollToSection = (sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (loading) {
@@ -101,6 +158,9 @@ export default function EmployeeOnboardingPage() {
 
   const isComplete = onboarding.status === "completed";
   const pendingCount = tasks.filter((task) => task.status === "pending").length;
+  const preferredDocumentType =
+    tasks.find((task) => task.task_type === "document" && task.status === "pending" && task.document_type)
+      ?.document_type ?? "id_document";
 
   return (
     <div className="space-y-6">
@@ -111,7 +171,7 @@ export default function EmployeeOnboardingPage() {
         <p className="mt-1 text-sm text-gray-600">
           {isComplete
             ? "Your onboarding is complete. You can review your tasks below."
-            : "Complete all assigned tasks below to finish onboarding and unlock the employee portal."}
+            : "Complete the linked actions below. Required tasks unlock full employee access when finished."}
         </p>
       </div>
 
@@ -165,57 +225,93 @@ export default function EmployeeOnboardingPage() {
               </p>
             )}
             <div className="space-y-4">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className={`border rounded-lg p-4 space-y-3 ${
-                    task.status === "completed"
-                      ? "border-green-100 bg-green-50/40"
-                      : "border-gray-200 bg-white"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{task.title}</p>
-                      {task.description && (
-                        <p className="mt-1 text-sm text-gray-600">{task.description}</p>
+              {tasks.map((task) => {
+                const action = taskAction(task);
+                return (
+                  <div
+                    key={task.id}
+                    className={`border rounded-lg p-4 space-y-3 ${
+                      task.status === "completed"
+                        ? "border-green-100 bg-green-50/40"
+                        : "border-gray-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{task.title}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {task.is_required ? "Required" : "Optional"}
+                          {" · "}
+                          {ONBOARDING_TASK_TYPE_LABELS[task.task_type] || task.task_type}
+                        </p>
+                        {task.description && (
+                          <p className="mt-1 text-sm text-gray-600">{task.description}</p>
+                        )}
+                        {task.task_type === "manual" && task.status === "pending" && (
+                          <p className="mt-1 text-xs text-gray-500">Waiting for HR to complete this task.</p>
+                        )}
+                      </div>
+                      <OnboardingTaskStatusBadge status={task.status} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      {task.due_date && (
+                        <div>
+                          <p className="text-xs text-gray-500">Due date</p>
+                          <p className="mt-0.5 text-gray-900">{formatDate(task.due_date)}</p>
+                        </div>
+                      )}
+                      {task.completed_at && (
+                        <div>
+                          <p className="text-xs text-gray-500">Completed</p>
+                          <p className="mt-0.5 text-gray-900">{formatDateTime(task.completed_at)}</p>
+                        </div>
                       )}
                     </div>
-                    <OnboardingTaskStatusBadge status={task.status} />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    {task.due_date && (
-                      <div>
-                        <p className="text-xs text-gray-500">Due date</p>
-                        <p className="mt-0.5 text-gray-900">{formatDate(task.due_date)}</p>
-                      </div>
+                    {action?.href && (
+                      <Link
+                        href={action.href}
+                        className="inline-flex bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700"
+                      >
+                        {action.label}
+                      </Link>
                     )}
-                    {task.completed_at && (
-                      <div>
-                        <p className="text-xs text-gray-500">Completed</p>
-                        <p className="mt-0.5 text-gray-900">{formatDateTime(task.completed_at)}</p>
-                      </div>
+                    {action?.sectionId && (
+                      <button
+                        type="button"
+                        onClick={() => scrollToSection(action.sectionId!)}
+                        className="bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700"
+                      >
+                        {action.label}
+                      </button>
+                    )}
+                    {action && !action.href && !action.sectionId && task.task_type === "acknowledgement" && (
+                      <button
+                        type="button"
+                        disabled={actingId === task.id}
+                        onClick={() => handleAcknowledge(task.id)}
+                        className="bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+                      >
+                        {actingId === task.id ? "Saving..." : "Acknowledge"}
+                      </button>
                     )}
                   </div>
-                  {task.status === "pending" && (
-                    <button
-                      type="button"
-                      disabled={completingId === task.id}
-                      onClick={() => handleCompleteTask(task.id)}
-                      className="bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-                    >
-                      {completingId === task.id ? "Completing..." : "Mark as completed"}
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
       </ApplicationSection>
 
-      <DocumentsSection mode="employee" />
-      <TrainingSection mode="employee" />
+      <div id="documents">
+        <DocumentsSection
+          mode="employee"
+          preferredDocumentType={preferredDocumentType}
+          onChanged={() => load({ silent: true })}
+        />
+      </div>
+      <div id="trainings">
+        <TrainingSection mode="employee" onChanged={() => load({ silent: true })} />
+      </div>
     </div>
   );
 }

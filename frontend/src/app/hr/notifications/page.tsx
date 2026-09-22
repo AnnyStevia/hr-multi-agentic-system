@@ -78,7 +78,9 @@ export default function HrNotificationsPage() {
     setNavigating(true);
     try {
       await markRead(notification);
-      if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
+      if (notification.related_entity_type === "application" && notification.related_entity_id) {
+        router.push(`/hr/applications/${notification.related_entity_id}`);
+      } else if (notification.related_entity_type === "onboarding" && notification.related_entity_id) {
         router.push(`/hr/onboarding/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         const interview = await api.getInterview(notification.related_entity_id);
@@ -163,7 +165,9 @@ export default function HrNotificationsPage() {
                   {expanded && (
                     <div className="px-5 pb-4 bg-amber-50 border-t border-amber-100">
                       <p className="pt-3 text-sm text-amber-950 whitespace-pre-wrap">{notification.message}</p>
-                      {notification.related_entity_type === "interview" && notification.related_entity_id && (
+                      {(notification.related_entity_type === "interview" ||
+                        notification.related_entity_type === "application") &&
+                        notification.related_entity_id && (
                         <button
                           type="button"
                           disabled={navigating}

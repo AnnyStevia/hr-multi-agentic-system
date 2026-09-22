@@ -61,9 +61,16 @@ export function OnboardingProgressSection({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="text-xs text-gray-500">Tasks</p>
+            <p className="text-xs text-gray-500">Required tasks</p>
             <p className="mt-0.5 font-medium text-gray-900">
-              {progress.tasks.completed} / {progress.tasks.total}
+              {progress.required_tasks?.completed ?? progress.tasks.completed} /{" "}
+              {progress.required_tasks?.total ?? progress.tasks.total}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Optional tasks</p>
+            <p className="mt-0.5 font-medium text-gray-900">
+              {progress.optional_tasks?.completed ?? 0} / {progress.optional_tasks?.total ?? 0}
             </p>
           </div>
           <div>
@@ -75,6 +82,12 @@ export function OnboardingProgressSection({
           <div>
             <p className="text-xs text-gray-500">Documents</p>
             <p className="mt-0.5 font-medium text-gray-900">{progress.documents.total}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">All tasks</p>
+            <p className="mt-0.5 font-medium text-gray-900">
+              {progress.tasks.completed} / {progress.tasks.total}
+            </p>
           </div>
         </div>
       </div>

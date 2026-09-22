@@ -12,6 +12,7 @@ interface AuthContextType {
   login: (email: string, password: string, next?: string | null) => Promise<void>;
   register: (payload: CandidateRegisterPayload, next?: string | null) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -61,8 +62,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
+  const refreshUser = useCallback(async () => {
+    if (!api.hasToken()) {
+      setUser(null);
+      return null;
+    }
+    try {
+      const userData = await api.getMe();
+      setUser(userData);
+      return userData;
+    } catch {
+      api.clearToken();
+      setUser(null);
+      return null;
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

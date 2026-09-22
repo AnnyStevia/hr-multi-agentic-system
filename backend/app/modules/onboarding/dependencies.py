@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.documents.repository import DocumentRepository
+from app.modules.documents.service import DocumentService
 from app.modules.employees.repository import EmployeeRepository
 from app.modules.identity.dependencies import require_roles
 from app.modules.identity.models import User
@@ -10,17 +11,61 @@ from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.onboarding.service import OnboardingService
+from app.modules.onboarding.verification import OnboardingTaskVerificationService
+from app.modules.profile.repository import ProfileRepository
+from app.modules.profile.service import ProfileService
 from app.modules.training.repository import TrainingRepository
+from app.shared.storage import StorageService, get_storage_service
 
 
-def get_onboarding_service(db: Session = Depends(get_db)) -> OnboardingService:
+def build_onboarding_service(
+    db: Session,
+    storage: StorageService | None = None,
+) -> OnboardingService:
+    employees = EmployeeRepository(db)
+    documents_repo = DocumentRepository(db)
+    trainings = TrainingRepository(db)
+    profile = ProfileService(ProfileRepository(db), employees, storage) if storage else None
+    documents = DocumentService(documents_repo, employees, storage) if storage else None
+    # When storage is unavailable (sync helper may pass None), still build document checks via repo
+    if documents is None:
+        documents = DocumentService(documents_repo, employees, _NullStorage())
+    if profile is None:
+        profile = ProfileService(ProfileRepository(db), employees, _NullStorage())
+
+    verification = OnboardingTaskVerificationService(
+        profile=profile,
+        documents=documents,
+        trainings=trainings,
+    )
     return OnboardingService(
         OnboardingRepository(db),
-        EmployeeRepository(db),
+        employees,
         NotificationService(NotificationRepository(db)),
-        DocumentRepository(db),
-        TrainingRepository(db),
+        documents_repo,
+        trainings,
+        verification,
     )
+
+
+class _NullStorage:
+    """Placeholder storage for verification-only Document/Profile construction."""
+
+    def upload_file(self, *args, **kwargs):  # pragma: no cover
+        raise RuntimeError("Storage is not available in this context")
+
+    def delete_file(self, *args, **kwargs):  # pragma: no cover
+        pass
+
+    def generate_presigned_url(self, *args, **kwargs):  # pragma: no cover
+        raise RuntimeError("Storage is not available in this context")
+
+
+def get_onboarding_service(
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+) -> OnboardingService:
+    return build_onboarding_service(db, storage)
 
 
 def require_careers_access(
