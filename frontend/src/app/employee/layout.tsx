@@ -70,6 +70,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
               <SideLink href="/employee/dashboard" pathname={pathname} label="Dashboard" />
               <SideLink href="/employee/organization" pathname={pathname} label="Organization" />
               <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
+              <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
             </>
           )}
           <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />

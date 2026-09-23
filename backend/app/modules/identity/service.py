@@ -285,6 +285,8 @@ class SeedService:
         ("training:write", "Manage training", "training", "write"),
         ("documents:read", "Read documents", "documents", "read"),
         ("documents:write", "Manage documents", "documents", "write"),
+        ("company_documents:read", "Read company document library", "company_documents", "read"),
+        ("company_documents:write", "Manage company document library", "company_documents", "write"),
         ("onboarding:read", "Read onboarding data", "onboarding", "read"),
         ("onboarding:write", "Manage onboarding", "onboarding", "write"),
     ]
@@ -303,6 +305,8 @@ class SeedService:
             "training:write",
             "documents:read",
             "documents:write",
+            "company_documents:read",
+            "company_documents:write",
             "onboarding:read",
             "onboarding:write",
         ],
@@ -312,6 +316,7 @@ class SeedService:
             "leaves:write",
             "training:read",
             "documents:read",
+            "company_documents:read",
         ],
         "employee": [
             "employees:read",
@@ -319,11 +324,22 @@ class SeedService:
             "leaves:write",
             "training:read",
             "documents:read",
+            "company_documents:read",
         ],
     }
 
     # Permissions that must not remain on the manager role (historical seed drift).
     MANAGER_PERMISSIONS_TO_REVOKE = frozenset({"recruitment:read", "onboarding:read"})
+
+    INITIAL_COMPANY_DOCUMENT_CATEGORIES = [
+        ("hr_policies", "HR Policies", 1),
+        ("company_policies", "Company Policies", 2),
+        ("procedures", "Procedures", 3),
+        ("employee_handbook", "Employee Handbook", 4),
+        ("it_security", "IT & Security", 5),
+        ("forms_templates", "Forms & Templates", 6),
+        ("other", "Other", 7),
+    ]
 
     def __init__(self, db: Session):
         self.db = db
@@ -332,6 +348,8 @@ class SeedService:
         if self.db.query(Role).first():
             self._ensure_candidate_role()
             self._sync_manager_permissions()
+            self._sync_company_document_permissions()
+            self._ensure_company_document_categories()
             return
 
         permissions: dict[str, Permission] = {}
@@ -368,6 +386,7 @@ class SeedService:
 
         self.db.add(UserRole(user_id=admin_user.id, role_id=roles["admin"].id))
         self.db.commit()
+        self._ensure_company_document_categories()
 
     def _ensure_candidate_role(self) -> None:
         existing = self.db.query(Role).filter(Role.name == "candidate").first()
@@ -396,3 +415,71 @@ class SeedService:
         for row in revoked:
             self.db.delete(row)
         self.db.commit()
+
+    def _sync_company_document_permissions(self) -> None:
+        """Ensure company document permissions exist and are assigned to roles."""
+        permissions: dict[str, Permission] = {
+            perm.name: perm for perm in self.db.query(Permission).all()
+        }
+        created = False
+        for name, desc, resource, action in self.PERMISSIONS:
+            if name in permissions:
+                continue
+            if not name.startswith("company_documents:"):
+                continue
+            perm = Permission(
+                name=name, description=desc, resource=resource, action=action
+            )
+            self.db.add(perm)
+            self.db.flush()
+            permissions[name] = perm
+            created = True
+
+        roles = {role.name: role for role in self.db.query(Role).all()}
+        linked = False
+        for role_name, perm_names in self.ROLE_PERMISSIONS.items():
+            role = roles.get(role_name)
+            if role is None:
+                continue
+            existing = {
+                name
+                for (name,) in self.db.query(Permission.name)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .filter(RolePermission.role_id == role.id)
+                .all()
+            }
+            for perm_name in perm_names:
+                if not perm_name.startswith("company_documents:"):
+                    continue
+                if perm_name in existing:
+                    continue
+                perm = permissions.get(perm_name)
+                if perm is None:
+                    continue
+                self.db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                linked = True
+        if created or linked:
+            self.db.commit()
+
+    def _ensure_company_document_categories(self) -> None:
+        from app.modules.documents.models import CompanyDocumentCategory
+
+        existing = {
+            row.slug
+            for row in self.db.query(CompanyDocumentCategory.slug).all()
+        }
+        added = False
+        for slug, label, sort_order in self.INITIAL_COMPANY_DOCUMENT_CATEGORIES:
+            if slug in existing:
+                continue
+            self.db.add(
+                CompanyDocumentCategory(
+                    slug=slug,
+                    label=label,
+                    sort_order=sort_order,
+                    is_active=True,
+                )
+            )
+            added = True
+        if added:
+            self.db.commit()

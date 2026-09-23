@@ -13,6 +13,7 @@ from app.api.v1 import (
     interviews,
     jobs,
     leave,
+    library_documents,
     notifications,
     onboarding,
     organization,
@@ -36,6 +37,8 @@ api_router.include_router(profile.employees_router)
 api_router.include_router(profile.me_router)
 api_router.include_router(documents.employees_router)
 api_router.include_router(documents.me_router)
+api_router.include_router(library_documents.company_router)
+api_router.include_router(library_documents.private_router)
 api_router.include_router(onboarding.employee_onboarding_router)
 api_router.include_router(onboarding.me_router)
 api_router.include_router(onboarding.router)

@@ -8,7 +8,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { UserMenu } from "@/components/UserMenu";
 import { canAccessHrPortal } from "@/lib/roles";
 
-const NAV_ITEMS = [
+const CORE_NAV_ITEMS = [
   { href: "/hr/dashboard", label: "Dashboard", enabled: true },
   { href: "/hr/employees", label: "Employees", enabled: true },
   { href: "/hr/departments", label: "Departments", enabled: true },
@@ -18,8 +18,11 @@ const NAV_ITEMS = [
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
   { href: "/hr/onboarding/templates", label: "Task catalogue", enabled: true },
   { href: "/hr/leave", label: "Leave", enabled: true },
+  { href: "/hr/documents", label: "Documents", enabled: true },
+];
+
+const LATER_NAV_ITEMS = [
   { href: "#", label: "Training", enabled: false },
-  { href: "#", label: "Documents", enabled: false },
 ];
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
@@ -66,13 +69,13 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
           <p className="px-3 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
             Core HR
           </p>
-          {NAV_ITEMS.slice(0, 9).map((item) => (
+          {CORE_NAV_ITEMS.map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
           <p className="px-3 pt-5 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
             Coming later
           </p>
-          {NAV_ITEMS.slice(9).map((item) => (
+          {LATER_NAV_ITEMS.map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
         </nav>

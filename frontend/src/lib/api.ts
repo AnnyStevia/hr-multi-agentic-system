@@ -33,6 +33,14 @@ import type {
 } from "@/types/onboarding";
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
 import type {
+  CompanyDocument,
+  CompanyDocumentCategory,
+  CompanyDocumentStatus,
+  CompanyDocumentUpdatePayload,
+  PrivateDocument,
+  PrivateDocumentUpdatePayload,
+} from "@/types/libraryDocuments";
+import type {
   LeaveBalance,
   LeaveCalendar,
   LeavePolicy,
@@ -638,6 +646,113 @@ class ApiClient {
     return this.requestVoid(`/api/v1/employees/${employeeId}/documents/${documentId}`, {
       method: "DELETE",
     });
+  }
+
+  async listCompanyDocumentCategories(): Promise<CompanyDocumentCategory[]> {
+    return this.request<CompanyDocumentCategory[]>("/api/v1/company-documents/categories");
+  }
+
+  async listCompanyDocuments(params?: {
+    q?: string;
+    category_id?: number;
+    status?: CompanyDocumentStatus;
+  }): Promise<CompanyDocument[]> {
+    const search = new URLSearchParams();
+    if (params?.q) search.set("q", params.q);
+    if (params?.category_id != null) search.set("category_id", String(params.category_id));
+    if (params?.status) search.set("status", params.status);
+    const query = search.toString();
+    return this.request<CompanyDocument[]>(
+      `/api/v1/company-documents${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async uploadCompanyDocument(payload: {
+    title: string;
+    description?: string;
+    category_id: number;
+    file: File;
+  }): Promise<CompanyDocument> {
+    const form = new FormData();
+    form.append("title", payload.title);
+    form.append("category_id", String(payload.category_id));
+    if (payload.description) form.append("description", payload.description);
+    form.append("file", payload.file);
+    return this.request<CompanyDocument>("/api/v1/company-documents", {
+      method: "POST",
+      body: form,
+    });
+  }
+
+  async updateCompanyDocument(
+    documentId: number,
+    payload: CompanyDocumentUpdatePayload,
+  ): Promise<CompanyDocument> {
+    return this.request<CompanyDocument>(`/api/v1/company-documents/${documentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteCompanyDocument(documentId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/company-documents/${documentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getCompanyDocumentUrl(
+    documentId: number,
+    download = false,
+  ): Promise<PresignedDocumentUrl> {
+    const query = download ? "?download=true" : "";
+    return this.request<PresignedDocumentUrl>(
+      `/api/v1/company-documents/${documentId}/url${query}`,
+    );
+  }
+
+  async listMyPrivateDocuments(): Promise<PrivateDocument[]> {
+    return this.request<PrivateDocument[]>("/api/v1/me/private-documents");
+  }
+
+  async uploadMyPrivateDocument(payload: {
+    title: string;
+    description?: string;
+    file: File;
+  }): Promise<PrivateDocument> {
+    const form = new FormData();
+    form.append("title", payload.title);
+    if (payload.description) form.append("description", payload.description);
+    form.append("file", payload.file);
+    return this.request<PrivateDocument>("/api/v1/me/private-documents", {
+      method: "POST",
+      body: form,
+    });
+  }
+
+  async updateMyPrivateDocument(
+    documentId: number,
+    payload: PrivateDocumentUpdatePayload,
+  ): Promise<PrivateDocument> {
+    return this.request<PrivateDocument>(`/api/v1/me/private-documents/${documentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteMyPrivateDocument(documentId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/me/private-documents/${documentId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async getMyPrivateDocumentUrl(
+    documentId: number,
+    download = false,
+  ): Promise<PresignedDocumentUrl> {
+    const query = download ? "?download=true" : "";
+    return this.request<PresignedDocumentUrl>(
+      `/api/v1/me/private-documents/${documentId}/url${query}`,
+    );
   }
 
   async listTrainings(): Promise<Training[]> {
