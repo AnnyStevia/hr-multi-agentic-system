@@ -13,3 +13,4 @@ httpx==0.28.1
 pytest==8.3.4
 openpyxl==3.1.5
 boto3==1.36.0
+mistralai==1.9.11
