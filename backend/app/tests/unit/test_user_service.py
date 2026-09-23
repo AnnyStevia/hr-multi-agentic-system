@@ -59,6 +59,69 @@ def test_create_hr_assigns_hr_role_and_hashes_password(db_session):
     assert employee.position == "HR Manager"
 
 
+def test_create_hr_rejects_inactive_manager(db_session):
+    department = _active_department(db_session)
+    service = UserService(db_session)
+    manager = Employee(
+        employee_number="PENDING",
+        first_name="Former",
+        last_name="Boss",
+        email="former.boss@test.com",
+        phone="+21620111001",
+        department_id=department.id,
+        position="Director",
+        hire_date=date(2020, 1, 1),
+        employment_status=EmploymentStatus.INACTIVE,
+    )
+    db_session.add(manager)
+    db_session.flush()
+    manager.employee_number = f"EMP-{manager.id:06d}"
+    db_session.commit()
+
+    try:
+        service.create_hr_account(
+            first_name="Sara",
+            last_name="Khelifi",
+            email="sara.inactive.mgr@test.com",
+            password="hrpass123",
+            phone="+216 20 333 444",
+            department_id=department.id,
+            position="HR Manager",
+            hire_date=date(2024, 3, 1),
+            manager_id=manager.id,
+        )
+        raise AssertionError("Expected inactive manager to fail")
+    except AppException as exc:
+        assert exc.status_code == 400
+        assert "active" in str(exc).lower()
+        assert (
+            db_session.query(Employee)
+            .filter(Employee.email == "sara.inactive.mgr@test.com")
+            .count()
+            == 0
+        )
+
+
+def test_create_hr_rejects_nonexistent_manager(db_session):
+    department = _active_department(db_session)
+    service = UserService(db_session)
+    try:
+        service.create_hr_account(
+            first_name="Sara",
+            last_name="Khelifi",
+            email="sara.missing.mgr@test.com",
+            password="hrpass123",
+            phone="+216 20 333 444",
+            department_id=department.id,
+            position="HR Manager",
+            hire_date=date(2024, 3, 1),
+            manager_id=999999,
+        )
+        raise AssertionError("Expected missing manager to fail")
+    except AppException as exc:
+        assert exc.status_code == 404
+
+
 def test_create_hr_rejects_duplicate_email(db_session):
     department = _active_department(db_session)
     service = UserService(db_session)

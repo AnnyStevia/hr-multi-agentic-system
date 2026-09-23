@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.modules.identity.dependencies import require_permissions
+from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.recruitment.application_service import (
     ApplicationService,
@@ -20,7 +20,7 @@ def _handle(exc: AppException) -> None:
 
 @router.get("", response_model=list[JobResponse])
 def list_jobs(
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     job_service: JobService = Depends(get_job_service),
 ) -> list[JobResponse]:
     return [build_job_response(job) for job in job_service.list_jobs()]
@@ -29,7 +29,7 @@ def list_jobs(
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 def create_job(
     payload: JobCreateRequest,
-    current_user: User = Depends(require_permissions("recruitment:write")),
+    current_user: User = Depends(require_hr_staff("recruitment:write")),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:
@@ -41,7 +41,7 @@ def create_job(
 @router.get("/{job_id}", response_model=JobResponse)
 def get_job(
     job_id: int,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:
@@ -54,7 +54,7 @@ def get_job(
 def update_job(
     job_id: int,
     payload: JobUpdateRequest,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:
@@ -66,7 +66,7 @@ def update_job(
 @router.get("/{job_id}/applications", response_model=list[ApplicationListItem])
 def list_job_applications(
     job_id: int,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> list[ApplicationListItem]:
     try:
@@ -81,7 +81,7 @@ def list_job_applications(
 @router.post("/{job_id}/publish", response_model=JobResponse)
 def publish_job(
     job_id: int,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:
@@ -93,7 +93,7 @@ def publish_job(
 @router.post("/{job_id}/close", response_model=JobResponse)
 def close_job(
     job_id: int,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     job_service: JobService = Depends(get_job_service),
 ) -> JobResponse:
     try:

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.modules.employees.models import DepartmentStatus, Employee, EmploymentStatus
 from app.modules.employees.repository import DepartmentRepository, EmployeeRepository
-from app.modules.employees.service import _normalize_phone
+from app.modules.employees.service import _normalize_phone, validate_manager_assignment
 from app.modules.identity.models import Candidate, Permission, Role, RolePermission, User, UserRole
 from app.modules.identity.schemas import UserListItem, UserResponse
 from app.shared.exceptions import AppException
@@ -123,9 +123,13 @@ class UserService:
 
         manager = None
         if manager_id is not None:
-            manager = EmployeeRepository(self.db).get_by_id(manager_id)
-            if manager is None:
-                raise AppException("Manager not found", status_code=400)
+            employee_repo = EmployeeRepository(self.db)
+            validate_manager_assignment(
+                employee_repo,
+                employee_id=None,
+                manager_id=manager_id,
+            )
+            manager = employee_repo.get_by_id(manager_id)
 
         hr_role = self.db.query(Role).filter(Role.name == self.HR_ROLE_NAME).first()
         if hr_role is None:
@@ -304,12 +308,10 @@ class SeedService:
         ],
         "manager": [
             "employees:read",
-            "recruitment:read",
             "leaves:read",
             "leaves:write",
             "training:read",
             "documents:read",
-            "onboarding:read",
         ],
         "employee": [
             "employees:read",
@@ -320,12 +322,16 @@ class SeedService:
         ],
     }
 
+    # Permissions that must not remain on the manager role (historical seed drift).
+    MANAGER_PERMISSIONS_TO_REVOKE = frozenset({"recruitment:read", "onboarding:read"})
+
     def __init__(self, db: Session):
         self.db = db
 
     def seed(self, admin_email: str, admin_password: str) -> None:
         if self.db.query(Role).first():
             self._ensure_candidate_role()
+            self._sync_manager_permissions()
             return
 
         permissions: dict[str, Permission] = {}
@@ -369,4 +375,24 @@ class SeedService:
             return
         description = next(desc for name, desc in self.ROLES if name == "candidate")
         self.db.add(Role(name="candidate", description=description))
+        self.db.commit()
+
+    def _sync_manager_permissions(self) -> None:
+        """Drop over-broad manager permissions from older seeds."""
+        manager = self.db.query(Role).filter(Role.name == "manager").first()
+        if manager is None:
+            return
+        revoked = (
+            self.db.query(RolePermission)
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .filter(
+                RolePermission.role_id == manager.id,
+                Permission.name.in_(self.MANAGER_PERMISSIONS_TO_REVOKE),
+            )
+            .all()
+        )
+        if not revoked:
+            return
+        for row in revoked:
+            self.db.delete(row)
         self.db.commit()

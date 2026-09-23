@@ -334,3 +334,197 @@ def test_org_position_independent_from_app_roles(client, db_session):
     assert employee["position"] == "Engineering Manager Title"
     # Department CRUD still works
     assert create_department(client, name="StillWorks", headers=headers)["name"] == "StillWorks"
+
+
+def test_manager_must_be_active_employee(client, db_session):
+    headers = auth_header(client)
+    department = create_department(client, name="ActiveMgrOrg")
+
+    active_mgr = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Active",
+            "last_name": "Boss",
+            "email": "active.boss@test.com",
+            "phone": "+216 20 400 100",
+            "department_id": department["id"],
+            "position": "Director",
+            "hire_date": "2020-01-01",
+        },
+        headers=headers,
+    )
+    assert active_mgr.status_code == 201
+    active_mgr = active_mgr.json()
+
+    inactive_mgr = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Inactive",
+            "last_name": "Boss",
+            "email": "inactive.boss@test.com",
+            "phone": "+216 20 400 101",
+            "department_id": department["id"],
+            "position": "Former Director",
+            "hire_date": "2019-01-01",
+        },
+        headers=headers,
+    ).json()
+    deactivated = client.patch(
+        f"/api/v1/employees/{inactive_mgr['id']}/deactivate",
+        headers=headers,
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["employment_status"] == "inactive"
+
+    # Active employee can be assigned as manager on create
+    report = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Report",
+            "last_name": "One",
+            "email": "report.one@test.com",
+            "phone": "+216 20 400 102",
+            "department_id": department["id"],
+            "position": "Staff",
+            "hire_date": "2024-01-01",
+            "manager_id": active_mgr["id"],
+        },
+        headers=headers,
+    )
+    assert report.status_code == 201
+    assert report.json()["manager_id"] == active_mgr["id"]
+
+    # Inactive employee cannot be newly assigned as manager
+    blocked_create = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Report",
+            "last_name": "Two",
+            "email": "report.two@test.com",
+            "phone": "+216 20 400 103",
+            "department_id": department["id"],
+            "position": "Staff",
+            "hire_date": "2024-01-01",
+            "manager_id": inactive_mgr["id"],
+        },
+        headers=headers,
+    )
+    assert blocked_create.status_code == 400
+    assert "active" in blocked_create.json()["detail"].lower()
+
+    blocked_update = client.patch(
+        f"/api/v1/employees/{report.json()['id']}",
+        json={"manager_id": inactive_mgr["id"]},
+        headers=headers,
+    )
+    assert blocked_update.status_code == 400
+    assert "active" in blocked_update.json()["detail"].lower()
+
+    # Nonexistent manager is rejected
+    missing = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Report",
+            "last_name": "Three",
+            "email": "report.three@test.com",
+            "phone": "+216 20 400 104",
+            "department_id": department["id"],
+            "position": "Staff",
+            "hire_date": "2024-01-01",
+            "manager_id": 999999,
+        },
+        headers=headers,
+    )
+    assert missing.status_code == 404
+
+    # Self as manager rejected (permissions unchanged: HR gets 400 not 403)
+    self_mgr = client.patch(
+        f"/api/v1/employees/{active_mgr['id']}",
+        json={"manager_id": active_mgr["id"]},
+        headers=headers,
+    )
+    assert self_mgr.status_code == 400
+    assert "themselves" in self_mgr.json()["detail"].lower()
+
+    # Active manager reassignment still works for HR
+    peer = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Peer",
+            "last_name": "Lead",
+            "email": "peer.lead@test.com",
+            "phone": "+216 20 400 105",
+            "department_id": department["id"],
+            "position": "Lead",
+            "hire_date": "2021-01-01",
+        },
+        headers=headers,
+    ).json()
+    reassign = client.patch(
+        f"/api/v1/employees/{report.json()['id']}",
+        json={"manager_id": peer["id"]},
+        headers=headers,
+    )
+    assert reassign.status_code == 200
+    assert reassign.json()["manager_id"] == peer["id"]
+
+
+def test_historical_inactive_manager_relationship_preserved(client, db_session):
+    headers = auth_header(client)
+    department = create_department(client, name="HistMgrOrg")
+
+    manager = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Was",
+            "last_name": "Manager",
+            "email": "was.manager@test.com",
+            "phone": "+216 20 500 100",
+            "department_id": department["id"],
+            "position": "Manager",
+            "hire_date": "2018-01-01",
+        },
+        headers=headers,
+    ).json()
+    report = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Kept",
+            "last_name": "Report",
+            "email": "kept.report@test.com",
+            "phone": "+216 20 500 101",
+            "department_id": department["id"],
+            "position": "Staff",
+            "hire_date": "2022-01-01",
+            "manager_id": manager["id"],
+        },
+        headers=headers,
+    ).json()
+    assert report["manager_id"] == manager["id"]
+
+    assert (
+        client.patch(
+            f"/api/v1/employees/{manager['id']}/deactivate",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+
+    # Existing relationship still readable / updateable with same manager_id
+    same = client.patch(
+        f"/api/v1/employees/{report['id']}",
+        json={"manager_id": manager["id"], "position": "Senior Staff"},
+        headers=headers,
+    )
+    assert same.status_code == 200
+    assert same.json()["manager_id"] == manager["id"]
+    assert same.json()["position"] == "Senior Staff"
+
+    # Other field update without changing manager also works
+    phone_only = client.patch(
+        f"/api/v1/employees/{report['id']}",
+        json={"phone": "+216 20 500 199"},
+        headers=headers,
+    )
+    assert phone_only.status_code == 200
+    assert phone_only.json()["manager_id"] == manager["id"]

@@ -68,10 +68,14 @@ class TrainingRepository:
             .first()
         )
 
-    def add_assignment(self, assignment: OnboardingTraining) -> OnboardingTraining:
+    def add_assignment(
+        self, assignment: OnboardingTraining, *, commit: bool = True
+    ) -> OnboardingTraining:
         self.db.add(assignment)
-        self.db.commit()
-        self.db.refresh(assignment)
+        self.db.flush()
+        if commit:
+            self.db.commit()
+            self.db.refresh(assignment)
         return (
             self.db.query(OnboardingTraining)
             .options(joinedload(OnboardingTraining.training))

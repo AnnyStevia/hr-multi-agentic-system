@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.modules.identity.dependencies import require_permissions
+from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.interviews.dependencies import get_interview_service
 from app.modules.interviews.schemas import (
@@ -37,7 +37,7 @@ def _summary(service: InterviewService, interview) -> InterviewSummary:
 @router.get("/applications/{application_id}", response_model=list[InterviewSummary])
 def list_application_interviews(
     application_id: int,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> list[InterviewSummary]:
     try:
@@ -57,7 +57,7 @@ def list_application_interviews(
 def create_interview_invitation(
     application_id: int,
     payload: InterviewCreateRequest,
-    current_user: User = Depends(require_permissions("recruitment:write")),
+    current_user: User = Depends(require_hr_staff("recruitment:write")),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:
@@ -74,7 +74,7 @@ def create_interview_invitation(
 @router.get("/{interview_id}", response_model=InterviewDetailResponse)
 def get_interview(
     interview_id: int,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:
@@ -87,7 +87,7 @@ def get_interview(
 def complete_interview(
     interview_id: int,
     payload: InterviewCompleteRequest,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:
@@ -101,7 +101,7 @@ def complete_interview(
 def record_interview_outcome(
     interview_id: int,
     payload: InterviewOutcomeRequest,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:

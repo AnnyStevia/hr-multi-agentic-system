@@ -292,7 +292,7 @@ class OnboardingService:
             status=OnboardingTaskStatus.PENDING,
             due_date=payload.due_date,
         )
-        saved = self.repository.add_task(task)
+        saved = self.repository.add_task(task, commit=False)
         if (
             saved.task_type == OnboardingTaskType.TRAINING
             and saved.training_id is not None
@@ -305,8 +305,11 @@ class OnboardingService:
                     training_id=saved.training_id,
                     status=OnboardingTrainingStatus.PENDING,
                     assigned_at=datetime.now(UTC),
-                )
+                ),
+                commit=False,
             )
+        self.repository.db.commit()
+        self.repository.db.refresh(saved)
         self._notify_task_assigned(onboarding, saved)
         return saved
 
@@ -314,6 +317,7 @@ class OnboardingService:
         task = self.repository.get_task_by_id(task_id)
         if task is None:
             raise AppException("Onboarding task not found", status_code=404)
+        self._assert_onboarding_mutable(task.onboarding)
 
         data = payload.model_dump(exclude_unset=True)
         if "title" in data and data["title"] is not None:
@@ -366,6 +370,7 @@ class OnboardingService:
         task = self.repository.get_task_by_id(task_id)
         if task is None:
             raise AppException("Onboarding task not found", status_code=404)
+        self._assert_onboarding_mutable(task.onboarding)
         onboarding_id = task.onboarding_id
         self.repository.delete_task(task)
         self._maybe_complete_onboarding(onboarding_id)
@@ -387,6 +392,8 @@ class OnboardingService:
         if employee is None or employee.user_id != user_id:
             raise AppException("Onboarding task not found", status_code=404)
 
+        self._assert_onboarding_mutable(task.onboarding)
+
         if task.task_type != OnboardingTaskType.ACKNOWLEDGEMENT:
             raise AppException(
                 "Only acknowledgement tasks can be acknowledged by the employee",
@@ -405,6 +412,7 @@ class OnboardingService:
         task = self.repository.get_task_by_id(task_id)
         if task is None:
             raise AppException("Onboarding task not found", status_code=404)
+        self._assert_onboarding_mutable(task.onboarding)
         if task.task_type != OnboardingTaskType.MANUAL:
             raise AppException(
                 "Only manual tasks can be completed by HR this way",
@@ -418,6 +426,15 @@ class OnboardingService:
         saved = self.repository.save_task(task)
         self._maybe_complete_onboarding(saved.onboarding_id)
         return saved
+
+    def _assert_onboarding_mutable(self, onboarding: Onboarding | None) -> None:
+        if onboarding is None:
+            raise AppException("Onboarding not found", status_code=404)
+        if onboarding.status == OnboardingStatus.COMPLETED:
+            raise AppException(
+                "Cannot modify tasks on a completed onboarding",
+                status_code=400,
+            )
 
     def sync_verified_tasks(
         self,

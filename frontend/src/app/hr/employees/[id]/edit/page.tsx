@@ -56,7 +56,20 @@ export default function EditEmployeePage() {
           setDepartments(activeDepartments);
         }
         setPositions(pos);
-        setManagers(employees.items.filter((item) => item.id !== employeeId));
+        const activeManagers = employees.items.filter((item) => item.id !== employeeId);
+        if (
+          employee.manager_id != null &&
+          !activeManagers.some((item) => item.id === employee.manager_id)
+        ) {
+          try {
+            const currentManager = await api.getEmployee(employee.manager_id);
+            setManagers([currentManager, ...activeManagers]);
+          } catch {
+            setManagers(activeManagers);
+          }
+        } else {
+          setManagers(activeManagers);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load employee");
       }

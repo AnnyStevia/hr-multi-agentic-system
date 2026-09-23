@@ -213,3 +213,69 @@ def test_inactive_admin_cannot_create_hr(client, db_session):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 401
+
+
+def test_admin_create_hr_rejects_inactive_manager_allows_active(client, db_session):
+    headers = auth_header(client)
+    department = create_department(client, name="HR Mgr Check")
+
+    active = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Dir",
+            "last_name": "Active",
+            "email": "dir.active.hr@test.com",
+            "phone": "+216 20 600 100",
+            "department_id": department["id"],
+            "position": "Director",
+            "hire_date": "2020-01-01",
+        },
+        headers=headers,
+    ).json()
+    inactive = client.post(
+        "/api/v1/employees",
+        json={
+            "first_name": "Dir",
+            "last_name": "Inactive",
+            "email": "dir.inactive.hr@test.com",
+            "phone": "+216 20 600 101",
+            "department_id": department["id"],
+            "position": "Former Director",
+            "hire_date": "2019-01-01",
+        },
+        headers=headers,
+    ).json()
+    assert (
+        client.patch(
+            f"/api/v1/employees/{inactive['id']}/deactivate",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+
+    blocked = client.post(
+        "/api/v1/users/hr",
+        json=hr_payload(
+            department["id"],
+            email="hr.blocked.mgr@test.com",
+            manager_id=inactive["id"],
+        ),
+        headers=headers,
+    )
+    assert blocked.status_code == 400
+    assert "active" in blocked.json()["detail"].lower()
+
+    allowed = client.post(
+        "/api/v1/users/hr",
+        json=hr_payload(
+            department["id"],
+            email="hr.allowed.mgr@test.com",
+            manager_id=active["id"],
+        ),
+        headers=headers,
+    )
+    assert allowed.status_code == 201
+    employee = (
+        db_session.query(Employee).filter(Employee.email == "hr.allowed.mgr@test.com").one()
+    )
+    assert employee.manager_id == active["id"]

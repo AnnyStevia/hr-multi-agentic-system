@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from app.modules.identity.dependencies import get_current_user, require_permissions
+from app.modules.identity.dependencies import get_current_user
+from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.onboarding.dependencies import (
     get_onboarding_service,
@@ -37,7 +38,7 @@ def _handle(exc: AppException) -> None:
 @router.get("/task-templates", response_model=list[OnboardingTaskTemplateResponse])
 def list_task_templates(
     active_only: bool = Query(default=False),
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> list[OnboardingTaskTemplateResponse]:
     return [
@@ -53,7 +54,7 @@ def list_task_templates(
 )
 def create_task_template(
     payload: OnboardingTaskTemplateCreateRequest,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskTemplateResponse:
     try:
@@ -65,7 +66,7 @@ def create_task_template(
 @router.get("/task-templates/{template_id}", response_model=OnboardingTaskTemplateResponse)
 def get_task_template(
     template_id: int,
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskTemplateResponse:
     try:
@@ -78,7 +79,7 @@ def get_task_template(
 def update_task_template(
     template_id: int,
     payload: OnboardingTaskTemplateUpdateRequest,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskTemplateResponse:
     try:
@@ -90,7 +91,7 @@ def update_task_template(
 @router.delete("/task-templates/{template_id}")
 def delete_task_template(
     template_id: int,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ):
     try:
@@ -172,7 +173,7 @@ def get_employee_home(
 
 @router.get("", response_model=list[OnboardingListItemResponse])
 def list_onboardings(
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> list[OnboardingListItemResponse]:
     return onboarding_service.list_for_hr()
@@ -181,7 +182,7 @@ def list_onboardings(
 @router.get("/{onboarding_id}/progress", response_model=OnboardingProgressResponse)
 def get_onboarding_progress(
     onboarding_id: int,
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingProgressResponse:
     try:
@@ -193,7 +194,7 @@ def get_onboarding_progress(
 @router.post("/{onboarding_id}/complete", response_model=OnboardingResponse)
 def complete_onboarding(
     onboarding_id: int,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingResponse:
     try:
@@ -206,7 +207,7 @@ def complete_onboarding(
 def update_onboarding_task(
     task_id: int,
     payload: OnboardingTaskUpdateRequest,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskResponse:
     try:
@@ -218,7 +219,7 @@ def update_onboarding_task(
 @router.patch("/tasks/{task_id}/complete", response_model=OnboardingTaskResponse)
 def complete_manual_onboarding_task(
     task_id: int,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskResponse:
     try:
@@ -232,7 +233,7 @@ def complete_manual_onboarding_task(
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_onboarding_task(
     task_id: int,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> Response:
     try:
@@ -245,7 +246,7 @@ def delete_onboarding_task(
 @router.get("/{onboarding_id}/tasks", response_model=list[OnboardingTaskResponse])
 def list_onboarding_tasks(
     onboarding_id: int,
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> list[OnboardingTaskResponse]:
     try:
@@ -263,7 +264,7 @@ def list_onboarding_tasks(
 def create_onboarding_task(
     onboarding_id: int,
     payload: OnboardingTaskCreateRequest,
-    _user: User = Depends(require_permissions("onboarding:write")),
+    _user: User = Depends(require_hr_staff("onboarding:write")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingTaskResponse:
     try:
@@ -277,7 +278,7 @@ def create_onboarding_task(
 @router.get("/{onboarding_id}", response_model=OnboardingResponse)
 def get_onboarding(
     onboarding_id: int,
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingResponse:
     try:
@@ -289,7 +290,7 @@ def get_onboarding(
 @employee_onboarding_router.get("/{employee_id}/onboarding", response_model=OnboardingResponse)
 def get_employee_onboarding(
     employee_id: int,
-    _user: User = Depends(require_permissions("onboarding:read")),
+    _user: User = Depends(require_hr_staff("onboarding:read")),
     onboarding_service: OnboardingService = Depends(get_onboarding_service),
 ) -> OnboardingResponse:
     try:

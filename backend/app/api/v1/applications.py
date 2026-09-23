@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.modules.identity.dependencies import require_permissions
+from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.recruitment.application_service import (
     ApplicationService,
@@ -21,7 +21,7 @@ def _handle(exc: AppException) -> None:
 @router.get("/{application_id}", response_model=ApplicationDetail)
 def get_application(
     application_id: int,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> ApplicationDetail:
     try:
@@ -34,7 +34,7 @@ def get_application(
 def update_application_status(
     application_id: int,
     payload: ApplicationStatusUpdateRequest,
-    _user: User = Depends(require_permissions("recruitment:write")),
+    _user: User = Depends(require_hr_staff("recruitment:write")),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> ApplicationDetail:
     try:
@@ -50,7 +50,7 @@ def get_application_document_url(
     application_id: int,
     document_id: int,
     download: bool = False,
-    _user: User = Depends(require_permissions("recruitment:read")),
+    _user: User = Depends(require_hr_staff("recruitment:read")),
     application_service: ApplicationService = Depends(get_application_service),
 ) -> PresignedDocumentResponse:
     try:

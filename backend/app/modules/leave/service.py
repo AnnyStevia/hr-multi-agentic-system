@@ -429,7 +429,7 @@ class LeaveService:
             raise AppException("Leave request not found", status_code=404)
 
         if employee.user_id is not None and employee.user_id == reviewer_user_id:
-            raise AppException("You cannot approve your own leave request", status_code=403)
+            raise AppException("You cannot reject your own leave request", status_code=403)
 
         actor = classify_actor(self.repository.db, request, employee, reviewer_user_id)
         if actor is None:
@@ -496,11 +496,48 @@ class LeaveService:
     def _mark_fully_approved(
         self, request: LeaveRequest, reviewer_user_id: int, now: datetime
     ) -> None:
+        self._assert_can_finalize_approval(request)
         request.status = LeaveRequestStatus.APPROVED
         request.approved_at = now
         request.rejected_at = None
         request.rejection_reason = None
         request.reviewed_by = reviewer_user_id
+
+    def _assert_can_finalize_approval(self, request: LeaveRequest) -> None:
+        """Re-check overlap and balance at final approval time."""
+        if self.repository.find_overlapping(
+            request.employee_id,
+            request.start_date,
+            request.end_date,
+            exclude_request_id=request.id,
+        ):
+            raise AppException(
+                "Cannot approve: another pending or approved leave request overlaps these dates.",
+                status_code=400,
+            )
+
+        year = request.start_date.year
+        days_allowed = self.get_days_allowed(request.employee_id, request.leave_type_id, year)
+        if days_allowed is None:
+            raise AppException(
+                "No leave policy is configured for this leave type and year",
+                status_code=400,
+            )
+        days_used = self.repository.sum_requested_days(
+            request.employee_id, request.leave_type_id, year, LeaveRequestStatus.APPROVED
+        )
+        # Other pending requests still consume headroom; this request is about to leave pending.
+        days_pending_others = self.repository.sum_requested_days(
+            request.employee_id, request.leave_type_id, year, LeaveRequestStatus.PENDING
+        ) - request.requested_days
+        if days_pending_others < 0:
+            days_pending_others = 0
+        available = days_allowed - days_used - days_pending_others
+        if request.requested_days > available:
+            raise AppException(
+                "Cannot approve: this request exceeds the available leave balance for this type.",
+                status_code=400,
+            )
 
     def get_calendar_for_employee(
         self, employee_id: int, year: int, month: int

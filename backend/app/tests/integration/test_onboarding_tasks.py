@@ -40,13 +40,12 @@ def test_hr_can_crud_onboarding_tasks(client, db_session):
 
     updated = client.patch(
         f"/api/v1/onboarding/tasks/{task_id}",
-        json={"title": "Sign and upload contract", "status": "completed"},
+        json={"title": "Sign and upload contract"},
         headers=headers,
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["title"] == "Sign and upload contract"
-    assert updated.json()["status"] == "completed"
-    assert updated.json()["completed_at"] is not None
+    assert updated.json()["status"] == "pending"
 
     deleted = client.delete(f"/api/v1/onboarding/tasks/{task_id}", headers=headers)
     assert deleted.status_code == 204, deleted.text
@@ -54,6 +53,23 @@ def test_hr_can_crud_onboarding_tasks(client, db_session):
     after_delete = client.get(f"/api/v1/onboarding/{onboarding_id}/tasks", headers=headers)
     assert after_delete.status_code == 200
     assert after_delete.json() == []
+
+    # Completing the last required task must not leave tasks deletable after auto-complete
+    recreate = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/tasks",
+        json={"title": "Final sign-off", "is_required": True},
+        headers=headers,
+    )
+    assert recreate.status_code == 201, recreate.text
+    final_id = recreate.json()["id"]
+    completed = client.patch(
+        f"/api/v1/onboarding/tasks/{final_id}",
+        json={"status": "completed"},
+        headers=headers,
+    )
+    assert completed.status_code == 200, completed.text
+    blocked = client.delete(f"/api/v1/onboarding/tasks/{final_id}", headers=headers)
+    assert blocked.status_code == 400, blocked.text
 
 
 def test_admin_can_create_onboarding_task(client, db_session):

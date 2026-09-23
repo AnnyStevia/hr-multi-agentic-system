@@ -324,7 +324,11 @@ class EmployeeService:
                 raise AppException("position_id cannot be cleared", status_code=400)
 
         if "manager_id" in data:
-            self._validate_manager(employee.id, data["manager_id"])
+            self._validate_manager(
+                employee.id,
+                data["manager_id"],
+                current_manager_id=employee.manager_id,
+            )
             employee.manager_id = data["manager_id"]
 
         return self.employees.save(employee)
@@ -441,32 +445,63 @@ class EmployeeService:
             return position.id, position.title
         raise AppException("Position is required", status_code=400)
 
-    def _validate_manager(self, employee_id: int | None, manager_id: int | None) -> None:
-        if manager_id is None:
-            return
-        if employee_id is not None and manager_id == employee_id:
-            raise AppException("An employee cannot report to themselves", status_code=400)
-        manager = self.employees.get_by_id(manager_id)
-        if manager is None:
-            raise AppException("Manager not found", status_code=404)
-        if employee_id is None:
-            return
-        # Walk up from proposed manager; if we hit employee_id, cycle
-        seen: set[int] = set()
-        current_id: int | None = manager_id
-        while current_id is not None:
-            if current_id == employee_id:
-                raise AppException(
-                    "Circular reporting relationship is not allowed",
-                    status_code=400,
-                )
-            if current_id in seen:
-                break
-            seen.add(current_id)
-            current = self.employees.get_by_id(current_id)
-            if current is None:
-                break
-            current_id = current.manager_id
+    def _validate_manager(
+        self,
+        employee_id: int | None,
+        manager_id: int | None,
+        *,
+        current_manager_id: int | None = None,
+    ) -> None:
+        validate_manager_assignment(
+            self.employees,
+            employee_id=employee_id,
+            manager_id=manager_id,
+            current_manager_id=current_manager_id,
+        )
+
+
+def validate_manager_assignment(
+    employees: EmployeeRepository,
+    *,
+    employee_id: int | None,
+    manager_id: int | None,
+    current_manager_id: int | None = None,
+) -> None:
+    """Validate a new or updated manager_id assignment.
+
+    Existing non-ACTIVE managers may be kept when manager_id is unchanged
+    (historical relationships). New assignments require an ACTIVE manager.
+    """
+    if manager_id is None:
+        return
+    if employee_id is not None and manager_id == employee_id:
+        raise AppException("An employee cannot report to themselves", status_code=400)
+    manager = employees.get_by_id(manager_id)
+    if manager is None:
+        raise AppException("Manager not found", status_code=404)
+    if (
+        manager.employment_status != EmploymentStatus.ACTIVE
+        and manager_id != current_manager_id
+    ):
+        raise AppException("Manager must be an active employee", status_code=400)
+    if employee_id is None:
+        return
+    # Walk up from proposed manager; if we hit employee_id, cycle
+    seen: set[int] = set()
+    current_id: int | None = manager_id
+    while current_id is not None:
+        if current_id == employee_id:
+            raise AppException(
+                "Circular reporting relationship is not allowed",
+                status_code=400,
+            )
+        if current_id in seen:
+            break
+        seen.add(current_id)
+        current = employees.get_by_id(current_id)
+        if current is None:
+            break
+        current_id = current.manager_id
 
 
 def build_employee_response(employee: Employee) -> EmployeeResponse:

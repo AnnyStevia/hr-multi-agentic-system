@@ -60,5 +60,12 @@ def test_resaving_shortlisted_does_not_create_duplicate(client, db_session):
     assert response.status_code == 200
     assert len(response.json()) == 1
 
-    count = db_session.query(Notification).count()
+    from app.modules.identity.models import User
+
+    candidate = db_session.query(User).filter(User.email == "shortlist.dup@test.com").one()
+    count = (
+        db_session.query(Notification)
+        .filter(Notification.recipient_user_id == candidate.id)
+        .count()
+    )
     assert count == 1

@@ -128,7 +128,15 @@ class DocumentService:
             self.repository.db.rollback()
             raise AppException(exc.message, status_code=exc.status_code) from exc
         document.storage_key = storage_key
-        saved = self.repository.save(document)
+        try:
+            saved = self.repository.save(document)
+        except Exception:
+            try:
+                self.storage.delete_file(storage_key)
+            except StorageException:
+                pass
+            self.repository.db.rollback()
+            raise
         sync_onboarding_tasks_for_employee(
             self.repository.db,
             employee_id,

@@ -2,8 +2,9 @@ from contextlib import asynccontextmanager
 import asyncio
 import logging
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.api.router import api_router
@@ -11,6 +12,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.modules.identity.service import SeedService
 from app.modules.interviews.reminders import send_upcoming_interview_reminders
+from app.shared.exceptions import AppException
 from app.shared.storage import StorageException, get_storage_service
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,22 @@ def create_app(seed_on_startup: bool = True, enable_reminder_loop: bool | None =
         allow_headers=["*"],
     )
 
+    @app.exception_handler(AppException)
+    async def app_exception_handler(_request: Request, exc: AppException) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+    if not settings.debug:
+
+        @app.exception_handler(Exception)
+        async def unhandled_exception_handler(
+            _request: Request, _exc: Exception
+        ) -> JSONResponse:
+            logger.exception("Unhandled server error")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": "Internal server error"},
+            )
+
     @app.get("/health", status_code=status.HTTP_200_OK, tags=["Health"])
     def health_check() -> dict[str, str]:
         return {"status": "healthy", "service": settings.app_name}
@@ -71,8 +89,8 @@ def create_app(seed_on_startup: bool = True, enable_reminder_loop: bool | None =
         try:
             db.execute(text("SELECT 1"))
             return {"status": "healthy", "database": "connected"}
-        except Exception as exc:
-            return {"status": "unhealthy", "database": str(exc)}
+        except Exception:
+            return {"status": "unhealthy", "database": "unavailable"}
         finally:
             db.close()
 
