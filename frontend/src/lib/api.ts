@@ -10,6 +10,7 @@ import type {
 import type { Job, JobPayload } from "@/types/jobs";
 import type { ApplicationDetail, ApplicationListItem, ApplicationStatus, CandidateApplicationSummary, PresignedDocument } from "@/types/applications";
 import type { Department } from "@/types/departments";
+import type { HrDashboard } from "@/types/dashboard";
 import type { Employee, EmployeeListResponse, EmployeePayload, EmployeeUpdatePayload, EmploymentStatus } from "@/types/employees";
 import type { MarkAllReadResponse, Notification, UnreadCountResponse } from "@/types/notifications";
 import type {
@@ -242,6 +243,10 @@ class ApiClient {
 
   async listJobs(): Promise<Job[]> {
     return this.request<Job[]>("/api/v1/jobs");
+  }
+
+  async getHrDashboard(): Promise<HrDashboard> {
+    return this.request<HrDashboard>("/api/v1/hr/dashboard");
   }
 
   async listDepartments(status = "all"): Promise<Department[]> {

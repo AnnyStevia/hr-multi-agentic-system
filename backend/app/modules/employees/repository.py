@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import uuid4
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.employees.models import (
@@ -172,4 +173,46 @@ class EmployeeRepository:
             self.db.query(Employee)
             .filter(Employee.employment_status == EmploymentStatus.ACTIVE)
             .count()
+        )
+
+    def count_all(self) -> int:
+        return self.db.query(Employee).count()
+
+    def count_by_employment_status(self) -> list[tuple[str, int]]:
+        rows = (
+            self.db.query(Employee.employment_status, func.count(Employee.id))
+            .group_by(Employee.employment_status)
+            .all()
+        )
+        return [(status.value if hasattr(status, "value") else str(status), int(count)) for status, count in rows]
+
+    def count_by_department(self) -> list[tuple[str, int]]:
+        label = func.coalesce(Department.name, "Unassigned")
+        rows = (
+            self.db.query(label, func.count(Employee.id))
+            .outerjoin(Department, Employee.department_id == Department.id)
+            .group_by(label)
+            .order_by(func.count(Employee.id).desc(), label.asc())
+            .all()
+        )
+        return [(str(name), int(count)) for name, count in rows]
+
+    def count_by_position(self) -> list[tuple[str, int]]:
+        label = func.coalesce(Position.title, Employee.position, "Unassigned")
+        rows = (
+            self.db.query(label, func.count(Employee.id))
+            .outerjoin(Position, Employee.position_id == Position.id)
+            .group_by(label)
+            .order_by(func.count(Employee.id).desc(), label.asc())
+            .all()
+        )
+        return [(str(name), int(count)) for name, count in rows]
+
+    def list_recent_hires(self, *, since: date, limit: int = 8) -> list[Employee]:
+        return (
+            self._query()
+            .filter(Employee.hire_date >= since)
+            .order_by(Employee.hire_date.desc(), Employee.id.desc())
+            .limit(limit)
+            .all()
         )

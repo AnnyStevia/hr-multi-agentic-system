@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.employees.models import Employee
 from app.modules.identity.models import Candidate
-from app.modules.interviews.models import Interview, InterviewSlot
+from app.modules.interviews.models import Interview, InterviewSlot, InterviewStatus
 from app.modules.recruitment.models import Application
 
 
@@ -35,6 +37,22 @@ class InterviewRepository:
             .all()
         )
 
+    def list_upcoming_scheduled(
+        self, *, now: datetime, until: datetime, limit: int = 8
+    ) -> list[Interview]:
+        return (
+            self._query()
+            .join(InterviewSlot, Interview.selected_slot_id == InterviewSlot.id)
+            .filter(
+                Interview.status == InterviewStatus.SCHEDULED,
+                InterviewSlot.starts_at >= now,
+                InterviewSlot.starts_at <= until,
+            )
+            .order_by(InterviewSlot.starts_at.asc(), Interview.id.asc())
+            .limit(limit)
+            .all()
+        )
+
     def add(self, interview: Interview) -> Interview:
         self.db.add(interview)
         self.db.commit()
@@ -54,8 +72,6 @@ class InterviewRepository:
         return self.db.query(Employee).filter(Employee.user_id == user_id).first()
 
     def has_proposed_for_application(self, application_id: int) -> bool:
-        from app.modules.interviews.models import InterviewStatus
-
         return (
             self.db.query(Interview)
             .filter(
@@ -68,8 +84,6 @@ class InterviewRepository:
 
     def has_active_invitation_for_application(self, application_id: int) -> bool:
         """Block new invites while proposed, scheduled, or completed without outcome."""
-        from app.modules.interviews.models import InterviewStatus
-
         blocking = (
             self.db.query(Interview)
             .filter(

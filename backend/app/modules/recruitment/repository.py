@@ -1,7 +1,13 @@
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.identity.models import Candidate
-from app.modules.recruitment.models import Application, ApplicationAnswer, Job, JobStatus
+from app.modules.recruitment.models import (
+    Application,
+    ApplicationAnswer,
+    ApplicationStatus,
+    Job,
+    JobStatus,
+)
 
 
 class JobRepository:
@@ -38,6 +44,9 @@ class JobRepository:
         self.db.commit()
         self.db.refresh(job)
         return self.get_by_id(job.id) or job
+
+    def count_by_status(self, status: JobStatus) -> int:
+        return self.db.query(Job).filter(Job.status == status).count()
 
 
 class ApplicationRepository:
@@ -85,5 +94,24 @@ class ApplicationRepository:
             )
             .filter(Application.job_id == job_id)
             .order_by(Application.submitted_at.desc())
+            .all()
+        )
+
+    def count_by_statuses(self, statuses: list[ApplicationStatus]) -> int:
+        if not statuses:
+            return 0
+        return self.db.query(Application).filter(Application.status.in_(statuses)).count()
+
+    def list_pending(self, *, limit: int = 8) -> list[Application]:
+        pending = [ApplicationStatus.SUBMITTED, ApplicationStatus.SCREENING]
+        return (
+            self.db.query(Application)
+            .options(
+                joinedload(Application.candidate).joinedload(Candidate.user),
+                joinedload(Application.job),
+            )
+            .filter(Application.status.in_(pending))
+            .order_by(Application.submitted_at.asc(), Application.id.asc())
+            .limit(limit)
             .all()
         )

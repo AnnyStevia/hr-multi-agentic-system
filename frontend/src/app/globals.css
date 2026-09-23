@@ -1,3 +1,76 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .dash-mesh {
+    background-color: #f4f7f6;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 0% 0%, rgba(2, 152, 112, 0.14), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 100% 0%, rgba(15, 34, 74, 0.1), transparent 50%),
+      radial-gradient(ellipse 60% 40% at 50% 100%, rgba(56, 189, 248, 0.1), transparent 55%),
+      radial-gradient(ellipse 40% 30% at 90% 70%, rgba(245, 158, 11, 0.08), transparent 50%);
+  }
+
+  .dash-card-lift {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .dash-card-lift:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 12px 28px -12px rgba(15, 34, 74, 0.18),
+      0 4px 10px -4px rgba(1, 120, 90, 0.12);
+  }
+
+  .dash-gradient-border {
+    position: relative;
+    background-clip: padding-box;
+  }
+
+  .dash-gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      rgba(2, 152, 112, 0.55),
+      rgba(56, 189, 248, 0.35),
+      rgba(245, 158, 11, 0.4)
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .dash-shimmer-bar {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.55),
+      transparent
+    );
+    background-size: 200% 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-dash-fade-up,
+  .animate-dash-fade-in,
+  .animate-dash-scale-in,
+  .animate-dash-float,
+  .animate-dash-shimmer,
+  .animate-dash-pulse-soft,
+  .animate-dash-orbit {
+    animation: none !important;
+  }
+
+  .dash-card-lift:hover {
+    transform: none;
+  }
+}

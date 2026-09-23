@@ -1,7 +1,15 @@
+from datetime import date
+
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.employees.models import Employee
-from app.modules.onboarding.models import Onboarding, OnboardingTask, OnboardingTaskTemplate
+from app.modules.onboarding.models import (
+    Onboarding,
+    OnboardingStatus,
+    OnboardingTask,
+    OnboardingTaskStatus,
+    OnboardingTaskTemplate,
+)
 
 
 class OnboardingRepository:
@@ -33,6 +41,43 @@ class OnboardingRepository:
             )
             .join(Employee, Onboarding.employee_id == Employee.id)
             .order_by(Onboarding.started_at.desc(), Onboarding.id.desc())
+            .all()
+        )
+
+    def count_by_status(self, status: OnboardingStatus) -> int:
+        return self.db.query(Onboarding).filter(Onboarding.status == status).count()
+
+    def list_by_status(self, status: OnboardingStatus, *, limit: int = 8) -> list[Onboarding]:
+        return (
+            self.db.query(Onboarding)
+            .options(
+                joinedload(Onboarding.employee),
+                selectinload(Onboarding.tasks),
+            )
+            .filter(Onboarding.status == status)
+            .order_by(Onboarding.started_at.asc(), Onboarding.id.asc())
+            .limit(limit)
+            .all()
+        )
+
+    def list_upcoming_task_deadlines(
+        self, *, from_date: date, to_date: date, limit: int = 8
+    ) -> list[OnboardingTask]:
+        return (
+            self.db.query(OnboardingTask)
+            .options(
+                joinedload(OnboardingTask.onboarding).joinedload(Onboarding.employee),
+            )
+            .join(Onboarding, OnboardingTask.onboarding_id == Onboarding.id)
+            .filter(
+                OnboardingTask.status != OnboardingTaskStatus.COMPLETED,
+                OnboardingTask.due_date.is_not(None),
+                OnboardingTask.due_date >= from_date,
+                OnboardingTask.due_date <= to_date,
+                Onboarding.status == OnboardingStatus.IN_PROGRESS,
+            )
+            .order_by(OnboardingTask.due_date.asc(), OnboardingTask.id.asc())
+            .limit(limit)
             .all()
         )
 

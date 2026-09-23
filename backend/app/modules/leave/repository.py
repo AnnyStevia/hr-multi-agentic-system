@@ -224,6 +224,69 @@ class LeaveRepository:
             .first()
         )
 
+    def count_requests(self, *, status: LeaveRequestStatus) -> int:
+        return self.db.query(LeaveRequest).filter(LeaveRequest.status == status).count()
+
+    def list_approved_covering(self, as_of: date) -> list[LeaveRequest]:
+        return (
+            self.db.query(LeaveRequest)
+            .options(
+                joinedload(LeaveRequest.leave_type),
+                joinedload(LeaveRequest.employee),
+            )
+            .filter(
+                LeaveRequest.status == LeaveRequestStatus.APPROVED,
+                LeaveRequest.start_date <= as_of,
+                LeaveRequest.end_date >= as_of,
+            )
+            .order_by(LeaveRequest.end_date.asc(), LeaveRequest.id.asc())
+            .all()
+        )
+
+    def count_employees_on_leave(self, as_of: date) -> int:
+        return (
+            self.db.query(func.count(func.distinct(LeaveRequest.employee_id)))
+            .filter(
+                LeaveRequest.status == LeaveRequestStatus.APPROVED,
+                LeaveRequest.start_date <= as_of,
+                LeaveRequest.end_date >= as_of,
+            )
+            .scalar()
+            or 0
+        )
+
+    def list_returning_soon(
+        self, *, from_date: date, to_date: date, limit: int = 8
+    ) -> list[LeaveRequest]:
+        return (
+            self.db.query(LeaveRequest)
+            .options(
+                joinedload(LeaveRequest.leave_type),
+                joinedload(LeaveRequest.employee),
+            )
+            .filter(
+                LeaveRequest.status == LeaveRequestStatus.APPROVED,
+                LeaveRequest.end_date >= from_date,
+                LeaveRequest.end_date <= to_date,
+            )
+            .order_by(LeaveRequest.end_date.asc(), LeaveRequest.id.asc())
+            .limit(limit)
+            .all()
+        )
+
+    def list_pending_for_dashboard(self, *, limit: int = 8) -> list[LeaveRequest]:
+        return (
+            self.db.query(LeaveRequest)
+            .options(
+                joinedload(LeaveRequest.leave_type),
+                joinedload(LeaveRequest.employee),
+            )
+            .filter(LeaveRequest.status == LeaveRequestStatus.PENDING)
+            .order_by(LeaveRequest.created_at.asc(), LeaveRequest.id.asc())
+            .limit(limit)
+            .all()
+        )
+
     def list_requests_for_employees(
         self,
         employee_ids: list[int],
