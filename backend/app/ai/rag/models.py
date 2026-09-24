@@ -7,6 +7,7 @@ from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -26,10 +27,7 @@ RAG_EMBEDDING_DIMENSIONS = 768
 
 
 class KnowledgeChunk(Base):
-    """Chunk of a company library document pending/holding an embedding.
-
-    Embedding population is deferred to Phase 5.4+.
-    """
+    """Chunk of a company library document with optional embedding vector."""
 
     __tablename__ = "rag_document_chunks"
     __table_args__ = (
@@ -48,6 +46,12 @@ class KnowledgeChunk(Base):
         index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Language-neutral FTS (PostgreSQL 'simple') for mixed EN/FR HR content.
+    content_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', coalesce(content, ''))", persisted=True),
+        nullable=True,
+    )
     page_start: Mapped[int] = mapped_column(Integer, nullable=False)
     page_end: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

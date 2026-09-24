@@ -34,3 +34,17 @@ class KnowledgeChunkRepository:
             .order_by(KnowledgeChunk.chunk_index.asc())
             .all()
         )
+
+    def get_by_id(self, chunk_id: int) -> KnowledgeChunk | None:
+        return (
+            self.db.query(KnowledgeChunk)
+            .filter(KnowledgeChunk.id == chunk_id)
+            .first()
+        )
+
+    def save_embeddings(self, chunks: list[KnowledgeChunk]) -> list[KnowledgeChunk]:
+        """Flush embedding column updates for the given chunks."""
+        for chunk in chunks:
+            self.db.add(chunk)
+        self.db.flush()
+        return chunks
