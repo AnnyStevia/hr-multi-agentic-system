@@ -121,6 +121,22 @@ class S3StorageService(StorageService):
             content_length=response.get("ContentLength"),
         )
 
+    def download_file(self, key: str) -> bytes:
+        object_key = _require_key(key)
+        try:
+            response = self._client.get_object(Bucket=self._bucket_name, Key=object_key)
+            body = response["Body"].read()
+        except ClientError as exc:
+            error_code = _client_error_code(exc)
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                raise StorageException("Object not found", status_code=404) from exc
+            raise _storage_error(exc, "Failed to download object") from exc
+        except BotoCoreError as exc:
+            raise _storage_error(exc, "Failed to download object") from exc
+        if not isinstance(body, (bytes, bytearray)):
+            raise StorageException("Failed to download object", status_code=502)
+        return bytes(body)
+
     def check_connectivity(self) -> None:
         try:
             self._client.list_objects_v2(Bucket=self._bucket_name, MaxKeys=1)

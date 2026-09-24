@@ -16,6 +16,7 @@ from app.modules.onboarding import models as onboarding_models  # noqa: F401
 from app.modules.documents import models as document_models  # noqa: F401
 from app.modules.training import models as training_models  # noqa: F401
 from app.modules.profile import models as profile_models  # noqa: F401
+from app.ai.rag import models as rag_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

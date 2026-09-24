@@ -60,6 +60,15 @@ class _NullStorage:
     def generate_presigned_url(self, *args, **kwargs):  # pragma: no cover
         raise RuntimeError("Storage is not available in this context")
 
+    def download_file(self, *args, **kwargs):  # pragma: no cover
+        raise RuntimeError("Storage is not available in this context")
+
+    def get_file_metadata(self, *args, **kwargs):  # pragma: no cover
+        raise RuntimeError("Storage is not available in this context")
+
+    def check_connectivity(self, *args, **kwargs):  # pragma: no cover
+        raise RuntimeError("Storage is not available in this context")
+
 
 def get_onboarding_service(
     db: Session = Depends(get_db),

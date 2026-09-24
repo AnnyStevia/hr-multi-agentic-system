@@ -50,5 +50,9 @@ class StorageService(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def download_file(self, key: str) -> bytes:
+        raise NotImplementedError
+
+    @abstractmethod
     def check_connectivity(self) -> None:
         raise NotImplementedError

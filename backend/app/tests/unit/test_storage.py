@@ -146,6 +146,28 @@ def test_get_file_metadata_not_found():
     assert exc.value.status_code == 404
 
 
+def test_download_file_reads_object_body():
+    client = MagicMock()
+    body = MagicMock()
+    body.read.return_value = b"%PDF-1.4"
+    client.get_object.return_value = {"Body": body}
+
+    data = _service(client).download_file("docs/cv.pdf")
+
+    client.get_object.assert_called_once_with(Bucket=BUCKET, Key="docs/cv.pdf")
+    assert data == b"%PDF-1.4"
+
+
+def test_download_file_not_found():
+    client = MagicMock()
+    client.get_object.side_effect = _client_error("NoSuchKey", "GetObject")
+
+    with pytest.raises(StorageException) as exc:
+        _service(client).download_file("missing.pdf")
+
+    assert exc.value.status_code == 404
+
+
 def test_check_connectivity_lists_bucket():
     client = MagicMock()
     _service(client).check_connectivity()

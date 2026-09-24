@@ -28,16 +28,22 @@ engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+def _sqlite_tables():
+    """Core HR tables only — exclude pgvector-backed RAG tables from SQLite create_all."""
+    return [t for t in Base.metadata.sorted_tables if not t.name.startswith("rag_")]
+
+
 @pytest.fixture
 def db_session():
-    Base.metadata.create_all(bind=engine)
+    tables = _sqlite_tables()
+    Base.metadata.create_all(bind=engine, tables=tables)
     session = TestingSessionLocal()
     SeedService(session).seed("admin@test.com", "testpass123")
     try:
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
+        Base.metadata.drop_all(bind=engine, tables=tables)
 
 
 @pytest.fixture
