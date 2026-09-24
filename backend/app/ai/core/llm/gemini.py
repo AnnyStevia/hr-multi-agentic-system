@@ -60,6 +60,7 @@ class GeminiLLMProvider(LLMProvider):
     ) -> LLMTextResponse:
         response = self._generate(
             messages,
+            temperature=temperature,
             max_tokens=max_tokens,
         )
         return LLMTextResponse(
@@ -80,6 +81,7 @@ class GeminiLLMProvider(LLMProvider):
             raise LLMConfigurationError("A JSON schema is required for structured output")
         response = self._generate(
             messages,
+            temperature=temperature,
             max_tokens=max_tokens,
             response_mime_type="application/json",
             response_json_schema=schema,
@@ -115,6 +117,7 @@ class GeminiLLMProvider(LLMProvider):
             )
         response = self._generate(
             messages,
+            temperature=temperature,
             max_tokens=max_tokens,
             tools=gemini_tools,
             tool_config=tool_config,
@@ -134,6 +137,7 @@ class GeminiLLMProvider(LLMProvider):
         messages: Sequence[LLMMessage],
         *,
         max_tokens: int | None,
+        temperature: float | None = None,
         tools: list[types.Tool] | None = None,
         tool_config: types.ToolConfig | None = None,
         response_mime_type: str | None = None,
@@ -146,6 +150,8 @@ class GeminiLLMProvider(LLMProvider):
         }
         if max_tokens is not None:
             config_kwargs["max_output_tokens"] = max_tokens
+        if temperature is not None:
+            config_kwargs["temperature"] = temperature
         if system_instruction:
             config_kwargs["system_instruction"] = system_instruction
         if tools:

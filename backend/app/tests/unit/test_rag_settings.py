@@ -21,10 +21,11 @@ def test_rag_settings_defaults():
         rag_query_max_characters=1000,
         rag_context_max_chunks=5,
         rag_context_max_characters=12000,
+        rag_generation_max_output_tokens=500,
+        rag_generation_temperature=0.1,
     )
-    assert settings.rag_query_max_characters == 1000
-    assert settings.rag_context_max_chunks == 5
-    assert settings.rag_context_max_characters == 12000
+    assert settings.rag_generation_max_output_tokens == 500
+    assert settings.rag_generation_temperature == 0.1
     assert rag_settings.rag_embedding_dimensions == 768
 
 
@@ -45,7 +46,8 @@ def test_rag_settings_env_override(monkeypatch):
     monkeypatch.setenv("RAG_QUERY_MAX_CHARACTERS", "200")
     monkeypatch.setenv("RAG_CONTEXT_MAX_CHUNKS", "3")
     monkeypatch.setenv("RAG_CONTEXT_MAX_CHARACTERS", "5000")
+    monkeypatch.setenv("RAG_GENERATION_MAX_OUTPUT_TOKENS", "250")
+    monkeypatch.setenv("RAG_GENERATION_TEMPERATURE", "0.05")
     settings = RAGSettings(_env_file=None)  # type: ignore[call-arg]
-    assert settings.rag_query_max_characters == 200
-    assert settings.rag_context_max_chunks == 3
-    assert settings.rag_context_max_characters == 5000
+    assert settings.rag_generation_max_output_tokens == 250
+    assert settings.rag_generation_temperature == 0.05

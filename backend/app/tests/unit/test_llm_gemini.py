@@ -116,6 +116,20 @@ def test_generate_text_normalizes_response_and_usage():
     assert config.max_output_tokens is None
 
 
+def test_generate_text_forwards_temperature_and_max_tokens():
+    client = MagicMock()
+    client.models.generate_content.return_value = _response(text="ok")
+    provider = GeminiLLMProvider(api_key="key", model="gemini-3.8-flash", client=client)
+    provider.generate_text(
+        [LLMMessage(role="user", content="Hi")],
+        temperature=0.1,
+        max_tokens=500,
+    )
+    config = client.models.generate_content.call_args.kwargs["config"]
+    assert config.temperature == 0.1
+    assert config.max_output_tokens == 500
+
+
 def test_generate_with_tools_parses_function_calls():
     client = MagicMock()
     function_call = SimpleNamespace(name="get_current_ai_context", args={}, id="call_1")

@@ -14,6 +14,7 @@ class RAGSettings(BaseSettings):
     Vector retrieval uses cosine distance in PostgreSQL/pgvector.
     Hybrid retrieval (Phase 5.6) fuses vector + FTS ranks with RRF.
     RAG query pipeline (Phase 5.7) embeds the user query then assembles context.
+    Grounded generation (Phase 5.8) answers from authorized context only.
     """
 
     model_config = SettingsConfigDict(
@@ -39,6 +40,8 @@ class RAGSettings(BaseSettings):
     rag_query_max_characters: int = 1000
     rag_context_max_chunks: int = 5
     rag_context_max_characters: int = 12000
+    rag_generation_max_output_tokens: int = 500
+    rag_generation_temperature: float = 0.1
 
 
 rag_settings = RAGSettings()
