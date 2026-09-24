@@ -6,17 +6,21 @@ from app.ai.core.llm.base import (
     LLMStructuredResponse,
     LLMTextResponse,
     LLMToolResponse,
+    LLMUsage,
     ToolCall,
     ToolDefinition,
 )
+from app.ai.core.llm.gemini import GeminiLLMProvider
 from app.ai.core.llm.mistral import MistralLLMProvider
 
 __all__ = [
+    "GeminiLLMProvider",
     "LLMMessage",
     "LLMProvider",
     "LLMStructuredResponse",
     "LLMTextResponse",
     "LLMToolResponse",
+    "LLMUsage",
     "MistralLLMProvider",
     "ToolCall",
     "ToolDefinition",
@@ -32,6 +36,11 @@ def get_llm_provider(settings=None) -> LLMProvider:
         return MistralLLMProvider(
             api_key=cfg.mistral_api_key,
             model=cfg.mistral_model,
+        )
+    if provider == "gemini":
+        return GeminiLLMProvider(
+            api_key=cfg.gemini_api_key,
+            model=cfg.gemini_model,
         )
     if not provider:
         raise LLMConfigurationError("AI_LLM_PROVIDER is required")

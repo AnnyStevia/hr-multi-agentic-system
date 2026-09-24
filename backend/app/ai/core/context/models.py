@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AIExecutionContext:
-    """Authenticated identity facts for the AI layer (informational only).
+    """Authenticated identity facts for the AI layer.
 
-    Does not grant permissions. Tool authorization is enforced later via
-    Core HR services using these facts plus existing RBAC.
+    Built only from JWT/DB identity — never from LLM claims.
+    Tool authorization reads these facts against ToolMetadata using Core HR RBAC semantics.
     """
 
     user_id: int

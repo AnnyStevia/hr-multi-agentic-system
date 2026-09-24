@@ -15,5 +15,9 @@ class ToolValidationError(AIException):
     """Raised when tool arguments fail schema validation."""
 
 
+class ToolAuthorizationError(AIException):
+    """Raised when the caller is not allowed to execute a tool."""
+
+
 class ToolExecutionError(AIException):
-    """Raised when tool execution fails or context is missing."""
+    """Raised when tool execution fails."""

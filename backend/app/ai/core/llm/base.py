@@ -26,18 +26,32 @@ class LLMMessage:
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
+    # Provider-specific payload (e.g. Gemini Content with thought signatures).
+    native_content: Any | None = None
+
+
+@dataclass(frozen=True)
+class LLMUsage:
+    """Token usage reported by a provider response (when available)."""
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    thinking_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 @dataclass(frozen=True)
 class LLMTextResponse:
     content: str
     model: str
+    usage: LLMUsage | None = None
 
 
 @dataclass(frozen=True)
 class LLMStructuredResponse:
     data: dict[str, Any]
     model: str
+    usage: LLMUsage | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +59,8 @@ class LLMToolResponse:
     content: str | None
     tool_calls: tuple[ToolCall, ...]
     model: str
+    usage: LLMUsage | None = None
+    native_content: Any | None = None
 
 
 class LLMProvider(ABC):

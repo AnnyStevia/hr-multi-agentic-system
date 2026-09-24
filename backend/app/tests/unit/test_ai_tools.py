@@ -4,6 +4,7 @@ import pytest
 from app.ai.core.context import AIExecutionContext
 from app.ai.tools import (
     BaseTool,
+    ToolAuthorizationError,
     ToolExecutor,
     ToolExecutionError,
     ToolMetadata,
@@ -112,7 +113,7 @@ def test_executor_requires_context():
     registry.register(EchoTool())
     executor = ToolExecutor(registry)
 
-    with pytest.raises(ToolExecutionError, match="AIExecutionContext is required"):
+    with pytest.raises(ToolAuthorizationError, match="Not authorized"):
         executor.execute(None, "echo", {"message": "hello"})
 
 

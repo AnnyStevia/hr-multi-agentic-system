@@ -14,6 +14,7 @@ class ToolResult(BaseModel):
     success: bool
     data: dict[str, Any] | None = None
     error: str | None = None
+    may_require_confirmation: bool = False
 
 
 ToolOperation = Literal["read", "write"]

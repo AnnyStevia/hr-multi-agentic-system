@@ -113,7 +113,7 @@ def test_mistral_provider_requires_api_key_and_model():
 
 def test_get_llm_provider_rejects_unknown_provider():
     settings = AISettings(
-        ai_llm_provider="gemini",
+        ai_llm_provider="openai",
         mistral_api_key="key",
         mistral_model="mistral-small-latest",
     )

@@ -13,7 +13,7 @@ ToolOperation = Literal["read", "write"]
 
 @dataclass(frozen=True)
 class ToolMetadata:
-    """Declarative tool metadata for later authorization (not enforced yet)."""
+    """Declarative tool metadata enforced by the authorization layer."""
 
     operation: ToolOperation
     required_roles: frozenset[str] = field(default_factory=frozenset)
