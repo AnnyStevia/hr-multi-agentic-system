@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import type { ApplicationDetail } from "@/types/applications";
+import type { ApplicationDetail, CvExtractionResult } from "@/types/applications";
 import type { EducationEntry, ExperienceEntry } from "@/types/applications";
 import type { Job, JobQuestion } from "@/types/jobs";
 
@@ -14,6 +14,48 @@ const inputClass =
 
 const emptyEducation = (): EducationEntry => ({ institution: "", degree: "", field_of_study: "" });
 const emptyExperience = (): ExperienceEntry => ({ company: "", title: "", description: "" });
+
+function isBlankEducation(rows: EducationEntry[]): boolean {
+  return rows.every(
+    (row) =>
+      !row.institution.trim() &&
+      !(row.degree || "").trim() &&
+      !(row.field_of_study || "").trim()
+  );
+}
+
+function isBlankExperience(rows: ExperienceEntry[]): boolean {
+  return rows.every(
+    (row) =>
+      !row.company.trim() &&
+      !row.title.trim() &&
+      !(row.description || "").trim()
+  );
+}
+
+function mapExtractedEducation(extraction: CvExtractionResult): EducationEntry[] {
+  return extraction.education
+    .filter((item) => (item.institution || "").trim())
+    .map((item) => ({
+      institution: (item.institution || "").trim(),
+      degree: item.degree?.trim() || "",
+      field_of_study: item.field_of_study?.trim() || "",
+      start_year: item.start_year,
+      end_year: item.end_year,
+    }));
+}
+
+function mapExtractedExperience(extraction: CvExtractionResult): ExperienceEntry[] {
+  return extraction.experience
+    .filter((item) => (item.company || "").trim() && (item.title || "").trim())
+    .map((item) => ({
+      company: (item.company || "").trim(),
+      title: (item.title || "").trim(),
+      description: item.description?.trim() || "",
+      start_year: item.start_year,
+      end_year: item.end_year,
+    }));
+}
 
 export default function ApplyPage() {
   const params = useParams<{ id: string }>();
@@ -25,6 +67,8 @@ export default function ApplyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [fieldError, setFieldError] = useState("");
+  const [extractHint, setExtractHint] = useState("");
+  const [extracting, setExtracting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [phone, setPhone] = useState("");
   const [education, setEducation] = useState<EducationEntry[]>([emptyEducation()]);
@@ -61,6 +105,40 @@ export default function ApplyPage() {
       load();
     }
   }, [jobId]);
+
+  const handleCvSelected = async (file: File | null) => {
+    setCv(file);
+    setExtractHint("");
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+      setExtractHint("Automatic pre-fill works with PDF CVs. You can still fill the form manually.");
+      return;
+    }
+    setExtracting(true);
+    try {
+      const { extraction } = await api.extractCvFromUpload(file);
+      if (extraction.phone?.trim()) {
+        setPhone((current) => (current.trim() ? current : extraction.phone!.trim()));
+      }
+      const mappedEdu = mapExtractedEducation(extraction);
+      if (mappedEdu.length > 0) {
+        setEducation((current) => (isBlankEducation(current) ? mappedEdu : current));
+      }
+      const mappedExp = mapExtractedExperience(extraction);
+      if (mappedExp.length > 0) {
+        setExperience((current) => (isBlankExperience(current) ? mappedExp : current));
+      }
+      setExtractHint("We pre-filled empty fields from your CV. Review before submitting.");
+    } catch (err) {
+      setExtractHint(
+        err instanceof Error
+          ? `${err.message} You can still fill the form manually.`
+          : "Could not read the CV. You can still fill the form manually."
+      );
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -147,7 +225,7 @@ export default function ApplyPage() {
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">Apply</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Required fields are marked. Cover letter is optional.
+          Upload your CV first to pre-fill the form. Cover letter is optional.
         </p>
       </div>
 
@@ -157,6 +235,41 @@ export default function ApplyPage() {
             {fieldError || error}
           </div>
         )}
+        {extractHint && !error && !fieldError && (
+          <div className="bg-brand-50 border border-brand-100 text-brand-800 px-4 py-3 rounded-lg text-sm">
+            {extracting ? "Reading your CV..." : extractHint}
+          </div>
+        )}
+        {extracting && !extractHint && (
+          <div className="bg-brand-50 border border-brand-100 text-brand-800 px-4 py-3 rounded-lg text-sm">
+            Reading your CV...
+          </div>
+        )}
+
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-gray-900">Documents</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">CV (required)</label>
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(e) => {
+                void handleCvSelected(e.target.files?.[0] || null);
+              }}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              PDF, DOC, or DOCX. Max 5 MB. PDF enables automatic form pre-fill.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cover letter (optional)</label>
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(e) => setCoverLetter(e.target.files?.[0] || null)}
+            />
+          </div>
+        </section>
 
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-gray-900">Contact</h2>
@@ -258,26 +371,6 @@ export default function ApplyPage() {
             ))}
           </section>
         )}
-
-        <section className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">CV (required)</label>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(e) => setCv(e.target.files?.[0] || null)}
-            />
-            <p className="mt-1 text-xs text-gray-500">PDF, DOC, or DOCX. Max 5 MB.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cover letter (optional)</label>
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(e) => setCoverLetter(e.target.files?.[0] || null)}
-            />
-          </div>
-        </section>
 
         <button
           type="submit"

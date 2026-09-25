@@ -12,7 +12,7 @@ import type {
   User,
 } from "@/types/auth";
 import type { Job, JobPayload } from "@/types/jobs";
-import type { ApplicationDetail, ApplicationListItem, ApplicationStatus, CandidateApplicationSummary, PresignedDocument } from "@/types/applications";
+import type { ApplicationDetail, ApplicationListItem, ApplicationStatus, CandidateApplicationSummary, CvExtractionResponse, PresignedDocument } from "@/types/applications";
 import type { Department } from "@/types/departments";
 import type { HrDashboard } from "@/types/dashboard";
 import type { Employee, EmployeeListResponse, EmployeePayload, EmployeeUpdatePayload, EmploymentStatus } from "@/types/employees";
@@ -393,6 +393,15 @@ class ApiClient {
 
   async applyToJob(jobId: number, formData: FormData): Promise<ApplicationDetail> {
     return this.request<ApplicationDetail>(`/api/v1/careers/jobs/${jobId}/applications`, {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async extractCvFromUpload(file: File): Promise<CvExtractionResponse> {
+    const formData = new FormData();
+    formData.append("cv", file);
+    return this.request<CvExtractionResponse>("/api/v1/careers/cv/extract", {
       method: "POST",
       body: formData,
     });

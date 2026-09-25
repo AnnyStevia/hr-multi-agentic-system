@@ -1,5 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.ai.agents.recruitment import (
+    CvExtractionResponse,
+    CvExtractionService,
+    RecruitmentExtractionError,
+    RecruitmentExtractionUnsupportedError,
+    RecruitmentExtractionValidationError,
+)
 from app.modules.identity.models import User
 from app.modules.onboarding.dependencies import require_careers_access
 from app.modules.recruitment.application_service import (
@@ -11,6 +18,45 @@ from app.modules.recruitment.schemas import ApplicationDetail, CandidateApplicat
 from app.shared.exceptions import AppException
 
 router = APIRouter(prefix="/careers", tags=["Careers"])
+
+
+def get_cv_extraction_service() -> CvExtractionService:
+    return CvExtractionService()
+
+
+@router.post("/cv/extract", response_model=CvExtractionResponse)
+async def extract_cv_fields(
+    cv: UploadFile = File(...),
+    _candidate: User = Depends(require_careers_access),
+    service: CvExtractionService = Depends(get_cv_extraction_service),
+) -> CvExtractionResponse:
+    """Extract structured fields from an uploaded CV PDF for form pre-fill.
+
+    Does not persist results or mutate candidate/user records.
+    """
+    content = await cv.read()
+    try:
+        extraction = service.extract_from_upload(
+            filename=cv.filename,
+            content_type=cv.content_type,
+            content=content,
+        )
+        return CvExtractionResponse(extraction=extraction)
+    except RecruitmentExtractionValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.message,
+        ) from exc
+    except RecruitmentExtractionUnsupportedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.message,
+        ) from exc
+    except RecruitmentExtractionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=exc.message,
+        ) from exc
 
 
 @router.get("/my-applications", response_model=list[CandidateApplicationSummary])

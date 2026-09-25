@@ -84,6 +84,39 @@ export interface CandidateApplicationSummary {
   job_title: string;
 }
 
+export interface CvExtractedEducation {
+  institution: string | null;
+  degree: string | null;
+  field_of_study: string | null;
+  start_year: number | null;
+  end_year: number | null;
+}
+
+export interface CvExtractedExperience {
+  company: string | null;
+  title: string | null;
+  start_year: number | null;
+  end_year: number | null;
+  description: string | null;
+}
+
+export interface CvExtractionResult {
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  education: CvExtractedEducation[];
+  experience: CvExtractedExperience[];
+  skills: string[];
+  languages: string[];
+  certifications: string[];
+  projects: string[];
+}
+
+export interface CvExtractionResponse {
+  extraction: CvExtractionResult;
+}
+
 export interface PresignedDocument {
   url: string;
   filename: string;
