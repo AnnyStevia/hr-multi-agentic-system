@@ -77,6 +77,7 @@ export default function JobApplicationsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fit</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">CV</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cover letter</th>
                 <th className="px-4 py-3" />
@@ -90,6 +91,11 @@ export default function JobApplicationsPage() {
                   <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDate(application.submitted_at)}</td>
                   <td className="px-4 py-3 text-sm">
                     <StatusBadge status={application.status} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                    {application.fit_score != null
+                      ? `${application.fit_score}${application.fit_level ? ` · ${application.fit_level}` : ""}`
+                      : "—"}
                   </td>
                   <td className="px-4 py-3 text-sm">
                     {application.has_cv ? (

@@ -1,6 +1,6 @@
 import json
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
 from app.modules.identity.models import User
@@ -10,6 +10,7 @@ from app.modules.recruitment.application_service import (
     build_application_detail,
 )
 from app.modules.recruitment.dependencies import get_application_service, get_job_service
+from app.modules.recruitment.fit_analysis_runner import run_application_fit_analysis
 from app.modules.recruitment.schemas import ApplicationDetail, ApplicationPayload, JobResponse
 from app.modules.recruitment.service import JobService, build_job_response
 from app.shared.exceptions import AppException
@@ -59,6 +60,7 @@ def get_own_job_application(
 @router.post("/{job_id}/applications", response_model=ApplicationDetail, status_code=201)
 def apply_to_job(
     job_id: int,
+    background_tasks: BackgroundTasks,
     education: str = Form(...),
     experience: str = Form(...),
     answers: str = Form("[]"),
@@ -97,6 +99,7 @@ def apply_to_job(
             cover_letter_content_type=cover_type,
             cover_letter_content=cover_content,
         )
+        background_tasks.add_task(run_application_fit_analysis, application.id)
         return build_application_detail(application)
     except AppException as exc:
         _handle(exc)

@@ -190,6 +190,8 @@ class ApplicationListItem(BaseModel):
     candidate: CandidateSummary
     has_cv: bool
     has_cover_letter: bool
+    fit_score: int | None = None
+    fit_level: str | None = None
 
 
 class CandidateApplicationSummary(BaseModel):
@@ -206,6 +208,20 @@ class ApplicationStatusUpdateRequest(BaseModel):
     status: ApplicationStatus
 
 
+class FitAssessmentResponse(BaseModel):
+    """HR-facing fit assessment. Never returned on candidate routes."""
+
+    fit_score: int
+    fit_level: str
+    matching_skills: list[str] = Field(default_factory=list)
+    missing_skills: list[str] = Field(default_factory=list)
+    experience_match: str | None = None
+    education_match: str | None = None
+    explanation: str | None = None
+    analysis_version: str | None = None
+    analyzed_at: datetime | None = None
+
+
 class ApplicationDetail(BaseModel):
     id: int
     status: ApplicationStatus
@@ -218,6 +234,12 @@ class ApplicationDetail(BaseModel):
     experience: list[ExperienceResponse]
     answers: list[AnswerResponse]
     documents: list[DocumentResponse]
+
+
+class HrApplicationDetail(ApplicationDetail):
+    """Application detail for HR/admin, including optional fit assessment."""
+
+    fit_assessment: FitAssessmentResponse | None = None
 
 
 class PresignedDocumentResponse(BaseModel):

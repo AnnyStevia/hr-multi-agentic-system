@@ -4,11 +4,14 @@ from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.recruitment.application_service import (
     ApplicationService,
-    build_application_detail,
-    build_application_list_item,
+    build_hr_application_detail,
 )
 from app.modules.recruitment.dependencies import get_application_service
-from app.modules.recruitment.schemas import ApplicationDetail, ApplicationListItem, ApplicationStatusUpdateRequest, PresignedDocumentResponse
+from app.modules.recruitment.schemas import (
+    ApplicationStatusUpdateRequest,
+    HrApplicationDetail,
+    PresignedDocumentResponse,
+)
 from app.shared.exceptions import AppException
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
@@ -18,27 +21,27 @@ def _handle(exc: AppException) -> None:
     raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
-@router.get("/{application_id}", response_model=ApplicationDetail)
+@router.get("/{application_id}", response_model=HrApplicationDetail)
 def get_application(
     application_id: int,
     _user: User = Depends(require_hr_staff("recruitment:read")),
     application_service: ApplicationService = Depends(get_application_service),
-) -> ApplicationDetail:
+) -> HrApplicationDetail:
     try:
-        return build_application_detail(application_service.get_for_hr(application_id))
+        return build_hr_application_detail(application_service.get_for_hr(application_id))
     except AppException as exc:
         _handle(exc)
 
 
-@router.patch("/{application_id}/status", response_model=ApplicationDetail)
+@router.patch("/{application_id}/status", response_model=HrApplicationDetail)
 def update_application_status(
     application_id: int,
     payload: ApplicationStatusUpdateRequest,
     _user: User = Depends(require_hr_staff("recruitment:write")),
     application_service: ApplicationService = Depends(get_application_service),
-) -> ApplicationDetail:
+) -> HrApplicationDetail:
     try:
-        return build_application_detail(
+        return build_hr_application_detail(
             application_service.update_status(application_id, payload.status)
         )
     except AppException as exc:

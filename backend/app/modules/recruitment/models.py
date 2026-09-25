@@ -2,7 +2,9 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from app.modules.identity.models import Candidate
 
@@ -141,6 +143,15 @@ class Application(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+    fit_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fit_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    fit_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    matching_skills: Mapped[list | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+    missing_skills: Mapped[list | None] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
+    experience_match: Mapped[str | None] = mapped_column(Text, nullable=True)
+    education_match: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fit_analysis_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fit_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     candidate: Mapped["Candidate"] = relationship()
     job: Mapped["Job"] = relationship(back_populates="applications")

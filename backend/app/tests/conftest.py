@@ -59,3 +59,12 @@ def client(db_session):
     with TestClient(test_app) as test_client:
         yield test_client
     test_app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _disable_background_fit_analysis(monkeypatch):
+    """API tests must not call Gemini via BackgroundTasks after apply."""
+    monkeypatch.setattr(
+        "app.api.v1.careers.run_application_fit_analysis",
+        lambda _application_id: None,
+    )

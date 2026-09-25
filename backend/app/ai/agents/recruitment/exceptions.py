@@ -13,3 +13,11 @@ class RecruitmentExtractionValidationError(RecruitmentExtractionError):
 
 class RecruitmentExtractionUnsupportedError(RecruitmentExtractionError):
     """Raised when the CV file type cannot be parsed."""
+
+
+class RecruitmentFitError(AIException):
+    """Base error for candidate/job fit analysis."""
+
+
+class RecruitmentFitValidationError(RecruitmentFitError):
+    """Raised when fit input or LLM structured output is invalid."""

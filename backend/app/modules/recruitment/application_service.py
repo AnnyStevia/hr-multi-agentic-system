@@ -26,6 +26,8 @@ from app.modules.recruitment.schemas import (
     ApplicationPayload,
     CandidateSummary,
     DocumentResponse,
+    FitAssessmentResponse,
+    HrApplicationDetail,
     JobSummary,
     PresignedDocumentResponse,
 )
@@ -369,6 +371,24 @@ def build_application_list_item(application: Application) -> ApplicationListItem
         candidate=build_candidate_summary(application),
         has_cv=DocumentKind.CV in kinds,
         has_cover_letter=DocumentKind.COVER_LETTER in kinds,
+        fit_score=application.fit_score,
+        fit_level=application.fit_level,
+    )
+
+
+def build_fit_assessment(application: Application) -> FitAssessmentResponse | None:
+    if application.fit_analyzed_at is None or application.fit_score is None:
+        return None
+    return FitAssessmentResponse(
+        fit_score=application.fit_score,
+        fit_level=application.fit_level or "",
+        matching_skills=list(application.matching_skills or []),
+        missing_skills=list(application.missing_skills or []),
+        experience_match=application.experience_match,
+        education_match=application.education_match,
+        explanation=application.fit_explanation,
+        analysis_version=application.fit_analysis_version,
+        analyzed_at=application.fit_analyzed_at,
     )
 
 
@@ -405,4 +425,12 @@ def build_application_detail(application: Application) -> ApplicationDetail:
             DocumentResponse.model_validate(document)
             for document in application.documents
         ],
+    )
+
+
+def build_hr_application_detail(application: Application) -> HrApplicationDetail:
+    base = build_application_detail(application)
+    return HrApplicationDetail(
+        **base.model_dump(),
+        fit_assessment=build_fit_assessment(application),
     )

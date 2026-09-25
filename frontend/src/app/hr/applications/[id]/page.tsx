@@ -391,6 +391,68 @@ export default function ApplicationDetailPage() {
         )}
       </ApplicationSection>
 
+      <ApplicationSection title="Fit assessment">
+        {application.fit_assessment ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <p className="text-3xl font-semibold text-gray-900">
+                {application.fit_assessment.fit_score}
+                <span className="text-lg font-normal text-gray-500"> / 100</span>
+              </p>
+              <p className="text-sm font-medium text-gray-700">
+                {application.fit_assessment.fit_level === "GOOD"
+                  ? "GOOD MATCH"
+                  : application.fit_assessment.fit_level === "MEDIUM"
+                    ? "MEDIUM MATCH"
+                    : application.fit_assessment.fit_level === "BAD"
+                      ? "WEAK MATCH"
+                      : application.fit_assessment.fit_level}
+              </p>
+            </div>
+            {application.fit_assessment.matching_skills.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Matching skills</p>
+                <ul className="space-y-1">
+                  {application.fit_assessment.matching_skills.map((skill) => (
+                    <li key={skill} className="text-sm text-gray-900">
+                      ✓ {skill}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {application.fit_assessment.missing_skills.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Missing / not identified</p>
+                <ul className="space-y-1">
+                  {application.fit_assessment.missing_skills.map((skill) => (
+                    <li key={skill} className="text-sm text-gray-700">
+                      • {skill}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {application.fit_assessment.experience_match && (
+              <Detail label="Experience" value={application.fit_assessment.experience_match} />
+            )}
+            {application.fit_assessment.education_match && (
+              <Detail label="Education" value={application.fit_assessment.education_match} />
+            )}
+            {application.fit_assessment.explanation && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">AI assessment</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                  {application.fit_assessment.explanation}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Analysis pending. Refresh shortly after a new application.</p>
+        )}
+      </ApplicationSection>
+
       {interviews.length > 0 && (
         <ApplicationSection title="Interviews" collapsible defaultOpen={false}>
           <ul className="space-y-4">

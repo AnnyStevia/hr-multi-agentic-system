@@ -60,6 +60,20 @@ export interface ApplicationListItem {
   candidate: CandidateSummary;
   has_cv: boolean;
   has_cover_letter: boolean;
+  fit_score?: number | null;
+  fit_level?: string | null;
+}
+
+export interface FitAssessment {
+  fit_score: number;
+  fit_level: string;
+  matching_skills: string[];
+  missing_skills: string[];
+  experience_match?: string | null;
+  education_match?: string | null;
+  explanation?: string | null;
+  analysis_version?: string | null;
+  analyzed_at?: string | null;
 }
 
 export interface ApplicationDetail {
@@ -74,6 +88,8 @@ export interface ApplicationDetail {
   experience: Array<ExperienceEntry & { id: number }>;
   answers: ApplicationAnswer[];
   documents: ApplicationDocument[];
+  /** Present on HR detail responses only. */
+  fit_assessment?: FitAssessment | null;
 }
 
 export interface CandidateApplicationSummary {
