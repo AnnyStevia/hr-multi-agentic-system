@@ -2,6 +2,8 @@ export type LeaveRequestStatus = "pending" | "approved" | "rejected" | "cancelle
 
 export type LeaveApprovalStatus = "pending" | "approved" | "rejected";
 
+export type LeaveCancellationStatus = "none" | "requested" | "rejected";
+
 export interface LeaveType {
   id: number;
   name: string;
@@ -82,6 +84,13 @@ export interface LeaveRequest {
   admin_override: LeaveApprovalStatus;
   admin_approved_by: number | null;
   admin_approved_at: string | null;
+  cancellation_status: LeaveCancellationStatus;
+  cancellation_requested_at: string | null;
+  cancellation_requested_by: number | null;
+  cancellation_reason: string | null;
+  cancellation_processed_at: string | null;
+  cancellation_processed_by: number | null;
+  cancellation_rejection_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -126,6 +135,12 @@ export const LEAVE_APPROVAL_STATUS_LABELS: Record<LeaveApprovalStatus, string> =
   pending: "Pending",
   approved: "Approved",
   rejected: "Rejected",
+};
+
+export const LEAVE_CANCELLATION_STATUS_LABELS: Record<LeaveCancellationStatus, string> = {
+  none: "None",
+  requested: "Cancellation requested",
+  rejected: "Cancellation rejected",
 };
 
 /** Inclusive calendar days — keep in sync with backend leave.days.calculate_requested_days */

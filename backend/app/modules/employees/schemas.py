@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.modules.employees.models import DepartmentStatus, EmploymentStatus
 from app.modules.leave.schemas import CurrentLeaveSummary, CurrentWorkStatus
+from app.modules.recruitment.models import EmploymentType
 from app.shared.email import EmailAddress
 
 
@@ -67,11 +68,29 @@ class EmployeeCreateRequest(BaseModel):
     position_id: int | None = None
     manager_id: int | None = None
     hire_date: date
+    employment_type: EmploymentType = EmploymentType.FULL_TIME
+    employment_end_date: date | None = None
 
     @model_validator(mode="after")
     def require_position(self) -> "EmployeeCreateRequest":
         if self.position_id is None and (self.position is None or not self.position.strip()):
             raise ValueError("Either position_id or position is required")
+        return self
+
+    @model_validator(mode="after")
+    def validate_employment_dates(self) -> "EmployeeCreateRequest":
+        if (
+            self.employment_type == EmploymentType.INTERNSHIP
+            and self.employment_end_date is None
+        ):
+            raise ValueError("employment_end_date is required for internship employees")
+        if (
+            self.employment_type != EmploymentType.INTERNSHIP
+            and self.employment_end_date is not None
+        ):
+            raise ValueError("employment_end_date is only allowed for internship employees")
+        if self.employment_end_date is not None and self.employment_end_date < self.hire_date:
+            raise ValueError("employment_end_date must be on or after hire_date")
         return self
 
 
@@ -87,6 +106,8 @@ class EmployeeUpdateRequest(BaseModel):
     position_id: int | None = None
     manager_id: int | None = None
     hire_date: date | None = None
+    employment_type: EmploymentType | None = None
+    employment_end_date: date | None = None
 
 
 class EmployeeResponse(BaseModel):
@@ -103,6 +124,8 @@ class EmployeeResponse(BaseModel):
     position_id: int | None
     manager_id: int | None
     hire_date: date
+    employment_type: EmploymentType = EmploymentType.FULL_TIME
+    employment_end_date: date | None = None
     employment_status: EmploymentStatus
     current_work_status: CurrentWorkStatus = CurrentWorkStatus.ACTIVE
     current_leave: CurrentLeaveSummary | None = None

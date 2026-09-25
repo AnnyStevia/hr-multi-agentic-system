@@ -29,6 +29,15 @@ class CompanyDocumentStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class CompanyDocumentRagIndexStatus(str, Enum):
+    """Operational RAG indexing lifecycle (separate from library active/archived)."""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -112,6 +121,20 @@ class CompanyDocument(Base):
         default=CompanyDocumentStatus.ACTIVE,
         index=True,
     )
+    rag_index_status: Mapped[CompanyDocumentRagIndexStatus] = mapped_column(
+        SAEnum(
+            CompanyDocumentRagIndexStatus,
+            name="company_document_rag_index_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=CompanyDocumentRagIndexStatus.PENDING,
+        index=True,
+    )
+    rag_indexed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rag_indexing_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

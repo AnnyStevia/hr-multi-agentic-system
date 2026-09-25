@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.modules.documents.models import CompanyDocumentCategory
 from app.shared.storage import get_storage_service
 from app.shared.storage.base import StoredObject
@@ -7,6 +9,15 @@ from app.tests.helpers import auth_header, create_department, create_user_with_r
 from app.tests.integration.test_onboarding import _hire
 
 PDF = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
+
+
+@pytest.fixture(autouse=True)
+def _disable_background_rag_indexing(monkeypatch):
+    """Unit/integration API tests must not call Gemini via BackgroundTasks."""
+    monkeypatch.setattr(
+        "app.api.v1.library_documents.run_company_document_indexing",
+        lambda _document_id: None,
+    )
 
 
 def _mock_storage() -> MagicMock:

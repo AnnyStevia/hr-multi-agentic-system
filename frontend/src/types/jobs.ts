@@ -26,6 +26,7 @@ export interface Job {
   position: string | null;
   location: string | null;
   employment_type: EmploymentType;
+  internship_duration_months?: number | null;
   requirements: string | null;
   status: JobStatus;
   published_at: string | null;
@@ -43,6 +44,7 @@ export interface JobPayload {
   position?: string;
   location?: string;
   employment_type: EmploymentType;
+  internship_duration_months?: number | null;
   requirements?: string;
   questions?: JobQuestionInput[];
 }

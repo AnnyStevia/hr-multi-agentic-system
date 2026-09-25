@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import calendar
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from app.modules.employees.models import (
@@ -36,7 +37,7 @@ from app.modules.identity.models import Role, UserRole
 from app.modules.leave.schemas import CurrentWorkStatus
 from app.modules.leave.status import derive_current_work_status
 from sqlalchemy.orm import object_session
-from app.modules.recruitment.models import Application
+from app.modules.recruitment.models import Application, EmploymentType
 from app.shared.exceptions import AppException
 
 if TYPE_CHECKING:
@@ -46,6 +47,14 @@ if TYPE_CHECKING:
 
 EMPLOYEE_ROLE_NAME = "employee"
 PRESIGNED_URL_EXPIRES_IN = 300
+
+
+def add_months(start: date, months: int) -> date:
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 class DepartmentService:
@@ -226,6 +235,12 @@ class EmployeeService:
             position_id=position_id,
             manager_id=payload.manager_id,
             hire_date=payload.hire_date,
+            employment_type=payload.employment_type or EmploymentType.FULL_TIME,
+            employment_end_date=(
+                payload.employment_end_date
+                if payload.employment_type == EmploymentType.INTERNSHIP
+                else None
+            ),
             employment_status=EmploymentStatus.ACTIVE,
         )
         return self.employees.add(employee)
@@ -255,6 +270,17 @@ class EmployeeService:
             )
             position_id = position.id
 
+        hire_date = datetime.now(UTC).date()
+        employment_type = job.employment_type or EmploymentType.FULL_TIME
+        employment_end_date = None
+        if employment_type == EmploymentType.INTERNSHIP:
+            if job.internship_duration_months is None:
+                raise AppException(
+                    "Job internship duration is required before hiring an intern",
+                    status_code=400,
+                )
+            employment_end_date = add_months(hire_date, job.internship_duration_months)
+
         employee = Employee(
             employee_number="PENDING",
             first_name=user.first_name.strip(),
@@ -264,7 +290,9 @@ class EmployeeService:
             department_id=job.department_id,
             position=title,
             position_id=position_id,
-            hire_date=datetime.now(UTC).date(),
+            hire_date=hire_date,
+            employment_type=employment_type,
+            employment_end_date=employment_end_date,
             employment_status=EmploymentStatus.ACTIVE,
             user_id=user.id,
         )
@@ -306,6 +334,24 @@ class EmployeeService:
             employee.department_id = data["department_id"]
         if "hire_date" in data and data["hire_date"] is not None:
             employee.hire_date = data["hire_date"]
+        if "employment_type" in data and data["employment_type"] is not None:
+            employee.employment_type = data["employment_type"]
+        if "employment_end_date" in data:
+            employee.employment_end_date = data["employment_end_date"]
+
+        if employee.employment_type == EmploymentType.INTERNSHIP:
+            if employee.employment_end_date is None:
+                raise AppException(
+                    "employment_end_date is required for internship employees",
+                    status_code=400,
+                )
+            if employee.employment_end_date < employee.hire_date:
+                raise AppException(
+                    "employment_end_date must be on or after hire_date",
+                    status_code=400,
+                )
+        else:
+            employee.employment_end_date = None
 
         touching_position = "position_id" in data or "position" in data
         if touching_position:
@@ -331,6 +377,22 @@ class EmployeeService:
             )
             employee.manager_id = data["manager_id"]
 
+        return self.employees.save(employee)
+
+    def convert_intern_to_employee(
+        self, employee_id: int, actor_user_id: int
+    ) -> Employee:
+        del actor_user_id  # reserved for future audit; auth is at API layer
+        employee = self.get_employee(employee_id)
+        if employee.employment_type == EmploymentType.FULL_TIME:
+            return employee
+        if employee.employment_type != EmploymentType.INTERNSHIP:
+            raise AppException(
+                "Only internship employees can be converted to full-time",
+                status_code=400,
+            )
+        employee.employment_type = EmploymentType.FULL_TIME
+        employee.employment_end_date = None
         return self.employees.save(employee)
 
     def deactivate_employee(self, employee_id: int) -> Employee:
@@ -525,6 +587,8 @@ def build_employee_response(employee: Employee) -> EmployeeResponse:
         position_id=employee.position_id,
         manager_id=employee.manager_id,
         hire_date=employee.hire_date,
+        employment_type=employee.employment_type,
+        employment_end_date=employee.employment_end_date,
         employment_status=employee.employment_status,
         current_work_status=(
             work.current_work_status if work is not None else CurrentWorkStatus.ACTIVE

@@ -2,7 +2,11 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.modules.documents.models import CompanyDocumentStatus, DocumentType
+from app.modules.documents.models import (
+    CompanyDocumentRagIndexStatus,
+    CompanyDocumentStatus,
+    DocumentType,
+)
 
 
 class DocumentResponse(BaseModel):
@@ -55,6 +59,9 @@ class CompanyDocumentResponse(BaseModel):
     uploaded_by_user_id: int
     uploaded_by_name: str
     status: CompanyDocumentStatus
+    rag_index_status: CompanyDocumentRagIndexStatus
+    rag_indexed_at: datetime | None = None
+    rag_indexing_error: str | None = None
     created_at: datetime
     updated_at: datetime
 

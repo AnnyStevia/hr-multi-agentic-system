@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.modules.identity.models import Candidate
@@ -42,6 +42,7 @@ class Job(Base):
         nullable=False,
         default=EmploymentType.FULL_TIME,
     )
+    internship_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[JobStatus] = mapped_column(
         SAEnum(

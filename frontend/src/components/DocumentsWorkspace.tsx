@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type {
   CompanyDocument,
   CompanyDocumentCategory,
+  CompanyDocumentRagIndexStatus,
   CompanyDocumentStatus,
   PrivateDocument,
 } from "@/types/libraryDocuments";
@@ -51,8 +52,8 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
     setCategories(await api.listCompanyDocumentCategories());
   }, []);
 
-  const loadCompany = useCallback(async () => {
-    setLoadingCompany(true);
+  const loadCompany = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoadingCompany(true);
     try {
       setCompanyDocs(
         await api.listCompanyDocuments({
@@ -64,7 +65,7 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
         }),
       );
     } finally {
-      setLoadingCompany(false);
+      if (!opts?.silent) setLoadingCompany(false);
     }
   }, [search, categoryId, statusFilter, canManageLibrary]);
 
@@ -96,6 +97,24 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
+
+  // Poll while any company doc is still indexing so badges reflect real status.
+  const indexingInFlight = useMemo(
+    () =>
+      companyDocs.some(
+        (doc) =>
+          doc.rag_index_status === "pending" || doc.rag_index_status === "processing",
+      ),
+    [companyDocs],
+  );
+
+  useEffect(() => {
+    if (!indexingInFlight) return;
+    const id = window.setInterval(() => {
+      void loadCompany({ silent: true });
+    }, 2500);
+    return () => window.clearInterval(id);
+  }, [indexingInFlight, loadCompany]);
 
   const categoryOptions = useMemo(
     () => [...categories].sort((a, b) => a.sort_order - b.sort_order),
@@ -138,6 +157,19 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
       await loadCompany();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update document");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const retryCompanyIndex = async (doc: CompanyDocument) => {
+    setBusyId(`c-${doc.id}`);
+    setError("");
+    try {
+      await api.reindexCompanyDocument(doc.id);
+      await loadCompany();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to retry AI indexing");
     } finally {
       setBusyId(null);
     }
@@ -280,6 +312,7 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
                             Archived
                           </span>
                         ) : null}
+                        <RagIndexBadge status={doc.rag_index_status} />
                       </div>
                       <p className="mt-0.5 text-xs text-brand-300">
                         {doc.original_filename} · {formatBytes(doc.size_bytes)} · v{doc.version}
@@ -287,6 +320,9 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
                         {formatDate(doc.updated_at)}
                         {doc.uploaded_by_name ? ` · ${doc.uploaded_by_name}` : ""}
                       </p>
+                      {doc.rag_index_status === "failed" && doc.rag_indexing_error ? (
+                        <p className="mt-1 text-xs text-red-700">{doc.rag_indexing_error}</p>
+                      ) : null}
                       {doc.description ? (
                         <p className="mt-1 text-sm text-brand-700 line-clamp-2">{doc.description}</p>
                       ) : null}
@@ -313,6 +349,14 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
                         >
                           Edit
                         </ActionButton>
+                        {doc.rag_index_status === "failed" ? (
+                          <ActionButton
+                            disabled={busyId === `c-${doc.id}`}
+                            onClick={() => retryCompanyIndex(doc)}
+                          >
+                            Retry AI index
+                          </ActionButton>
+                        ) : null}
                         <ActionButton
                           disabled={busyId === `c-${doc.id}`}
                           onClick={() => archiveCompany(doc)}
@@ -471,6 +515,102 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
         />
       ) : null}
     </div>
+  );
+}
+
+function RagIndexBadge({ status }: { status: CompanyDocumentRagIndexStatus }) {
+  const label =
+    status === "ready"
+      ? "Ready for AI"
+      : status === "processing"
+        ? "Indexing…"
+        : status === "failed"
+          ? "Indexing failed"
+          : "Queued for AI";
+  const progress =
+    status === "ready" ? 100 : status === "processing" ? 66 : status === "failed" ? 100 : 28;
+  const ringColor =
+    status === "ready"
+      ? "stroke-emerald-600"
+      : status === "failed"
+        ? "stroke-red-500"
+        : "stroke-brand-500";
+  const textClass =
+    status === "ready"
+      ? "text-emerald-800"
+      : status === "processing"
+        ? "text-sky-800"
+        : status === "failed"
+          ? "text-red-800"
+          : "text-brand-700";
+  const shellClass =
+    status === "ready"
+      ? "bg-emerald-50 border-emerald-200"
+      : status === "processing"
+        ? "bg-sky-50 border-sky-200"
+        : status === "failed"
+          ? "bg-red-50 border-red-200"
+          : "bg-brand-50 border-brand-200";
+
+  const size = 14;
+  const stroke = 2.5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - progress / 100);
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${shellClass} ${textClass}`}
+      title={label}
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className={status === "processing" || status === "pending" ? "animate-spin" : undefined}
+        style={
+          status === "pending"
+            ? { animationDuration: "2.4s" }
+            : status === "processing"
+              ? { animationDuration: "1.1s" }
+              : undefined
+        }
+        aria-hidden
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          className="opacity-20"
+        />
+        {status === "failed" ? (
+          <path
+            d={`M ${size * 0.32} ${size * 0.32} L ${size * 0.68} ${size * 0.68} M ${size * 0.68} ${size * 0.32} L ${size * 0.32} ${size * 0.68}`}
+            stroke="currentColor"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            className="text-red-600"
+          />
+        ) : (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            className={ringColor}
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        )}
+      </svg>
+      {label}
+    </span>
   );
 }
 

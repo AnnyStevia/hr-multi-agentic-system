@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { EmployeeStatusBadge } from "@/components/EmployeeStatusBadge";
 import { api } from "@/lib/api";
 import type { Department } from "@/types/departments";
-import type { Employee, EmploymentStatus } from "@/types/employees";
+import { EMPLOYMENT_TYPE_LABELS, type Employee, type EmploymentStatus } from "@/types/employees";
 
 export default function EmployeesPage() {
   const [items, setItems] = useState<Employee[]>([]);
@@ -115,6 +115,7 @@ export default function EmployeesPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hire date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               </tr>
@@ -129,6 +130,12 @@ export default function EmployeesPage() {
                   <td className="px-4 py-3 text-sm text-gray-600">{employee.email}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{employee.department}</td>
                   <td className="px-4 py-3 text-sm text-gray-600">{employee.position}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {EMPLOYMENT_TYPE_LABELS[employee.employment_type] || employee.employment_type}
+                    {employee.employment_type === "internship" && employee.employment_end_date
+                      ? ` · ends ${employee.employment_end_date}`
+                      : ""}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{employee.hire_date}</td>
                   <td className="px-4 py-3"><EmployeeStatusBadge status={employee.employment_status} /></td>
                 </tr>

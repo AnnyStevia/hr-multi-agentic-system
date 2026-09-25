@@ -3,7 +3,13 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.leave.models import LeavePolicy, LeaveRequest, LeaveRequestStatus, LeaveType
+from app.modules.leave.models import (
+    LeaveCancellationStatus,
+    LeavePolicy,
+    LeaveRequest,
+    LeaveRequestStatus,
+    LeaveType,
+)
 
 
 class LeaveRepository:
@@ -111,6 +117,7 @@ class LeaveRepository:
         employee_id: int | None = None,
         leave_type_id: int | None = None,
         status: LeaveRequestStatus | None = None,
+        cancellation_status: LeaveCancellationStatus | None = None,
     ) -> list[LeaveRequest]:
         query = (
             self.db.query(LeaveRequest)
@@ -125,6 +132,8 @@ class LeaveRepository:
             query = query.filter(LeaveRequest.leave_type_id == leave_type_id)
         if status is not None:
             query = query.filter(LeaveRequest.status == status)
+        if cancellation_status is not None:
+            query = query.filter(LeaveRequest.cancellation_status == cancellation_status)
         return query.order_by(LeaveRequest.created_at.desc(), LeaveRequest.id.desc()).all()
 
     def get_request(self, request_id: int) -> LeaveRequest | None:
@@ -292,6 +301,7 @@ class LeaveRepository:
         employee_ids: list[int],
         *,
         status: LeaveRequestStatus | None = None,
+        cancellation_status: LeaveCancellationStatus | None = None,
     ) -> list[LeaveRequest]:
         if not employee_ids:
             return []
@@ -305,4 +315,6 @@ class LeaveRepository:
         )
         if status is not None:
             query = query.filter(LeaveRequest.status == status)
+        if cancellation_status is not None:
+            query = query.filter(LeaveRequest.cancellation_status == cancellation_status)
         return query.order_by(LeaveRequest.created_at.desc(), LeaveRequest.id.desc()).all()

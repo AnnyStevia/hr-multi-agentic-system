@@ -5,7 +5,9 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LeaveApprovalStages } from "@/components/LeaveApprovalStages";
 import { api } from "@/lib/api";
 import {
+  LEAVE_CANCELLATION_STATUS_LABELS,
   LEAVE_REQUEST_STATUS_LABELS,
+  type LeaveCancellationStatus,
   type LeaveRequest,
   type LeaveRequestStatus,
   type LeaveType,
@@ -21,12 +23,19 @@ export default function HrLeaveRequestsPage() {
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [status, setStatus] = useState<LeaveRequestStatus | "">("pending");
+  const [cancellationFilter, setCancellationFilter] = useState<
+    LeaveCancellationStatus | ""
+  >("");
   const [leaveTypeId, setLeaveTypeId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actingId, setActingId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectingCancellationId, setRejectingCancellationId] = useState<number | null>(
+    null
+  );
+  const [cancellationRejectReason, setCancellationRejectReason] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -36,6 +45,7 @@ export default function HrLeaveRequestsPage() {
         api.listLeaveRequests({
           status: status || undefined,
           leave_type_id: leaveTypeId ? Number(leaveTypeId) : undefined,
+          cancellation_status: cancellationFilter || undefined,
         }),
         api.listLeaveTypes(),
       ]);
@@ -46,7 +56,7 @@ export default function HrLeaveRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status, leaveTypeId]);
+  }, [status, leaveTypeId, cancellationFilter]);
 
   useEffect(() => {
     void load();
@@ -99,6 +109,42 @@ export default function HrLeaveRequestsPage() {
     }
   };
 
+  const handleApproveCancellation = async (requestId: number) => {
+    setActingId(requestId);
+    setError("");
+    try {
+      await api.approveLeaveCancellation(requestId);
+      setRejectingCancellationId(null);
+      setCancellationRejectReason("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve cancellation");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleRejectCancellation = async (event: FormEvent, requestId: number) => {
+    event.preventDefault();
+    const reason = cancellationRejectReason.trim();
+    if (!reason) {
+      setError("A rejection reason is required.");
+      return;
+    }
+    setActingId(requestId);
+    setError("");
+    try {
+      await api.rejectLeaveCancellation(requestId, reason);
+      setRejectingCancellationId(null);
+      setCancellationRejectReason("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reject cancellation");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -141,6 +187,18 @@ export default function HrLeaveRequestsPage() {
           ))}
         </select>
         <select
+          value={cancellationFilter}
+          onChange={(e) =>
+            setCancellationFilter(e.target.value as LeaveCancellationStatus | "")
+          }
+          className="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900"
+        >
+          <option value="">All cancellations</option>
+          <option value="requested">Cancellation requested</option>
+          <option value="rejected">Cancellation rejected</option>
+          <option value="none">No cancellation</option>
+        </select>
+        <select
           value={leaveTypeId}
           onChange={(e) => setLeaveTypeId(e.target.value)}
           className="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900"
@@ -152,6 +210,16 @@ export default function HrLeaveRequestsPage() {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => {
+            setStatus("approved");
+            setCancellationFilter("requested");
+          }}
+          className="border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-sm hover:bg-amber-50"
+        >
+          Show cancellation requests
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-brand-200 overflow-hidden">
@@ -183,6 +251,22 @@ export default function HrLeaveRequestsPage() {
                         Rejected: {request.rejection_reason}
                       </p>
                     )}
+                    {request.cancellation_status === "requested" && (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        {LEAVE_CANCELLATION_STATUS_LABELS.requested}
+                        {request.cancellation_reason
+                          ? `: ${request.cancellation_reason}`
+                          : ""}
+                      </p>
+                    )}
+                    {request.cancellation_status === "rejected" && (
+                      <p className="mt-1 text-sm text-red-700">
+                        Cancellation rejected
+                        {request.cancellation_rejection_reason
+                          ? `: ${request.cancellation_rejection_reason}`
+                          : ""}
+                      </p>
+                    )}
                     <p className="mt-1 text-xs text-brand-300">
                       {LEAVE_REQUEST_STATUS_LABELS[request.status]}
                     </p>
@@ -208,6 +292,31 @@ export default function HrLeaveRequestsPage() {
                       </button>
                     </div>
                   )}
+                  {request.status === "approved" &&
+                    request.cancellation_status === "requested" &&
+                    rejectingCancellationId !== request.id && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={actingId === request.id}
+                          onClick={() => handleApproveCancellation(request.id)}
+                          className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                        >
+                          Approve cancellation
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actingId === request.id}
+                          onClick={() => {
+                            setRejectingCancellationId(request.id);
+                            setCancellationRejectReason("");
+                          }}
+                          className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Reject cancellation
+                        </button>
+                      </div>
+                    )}
                 </div>
                 {request.status === "pending" && rejectingId === request.id && (
                   <form
@@ -241,6 +350,45 @@ export default function HrLeaveRequestsPage() {
                       <button
                         type="button"
                         onClick={cancelReject}
+                        className="border border-brand-100 text-brand-900 px-3 py-1.5 rounded-lg text-sm hover:bg-white"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {rejectingCancellationId === request.id && (
+                  <form
+                    onSubmit={(e) => void handleRejectCancellation(e, request.id)}
+                    className="max-w-md space-y-2 rounded-lg border border-brand-200 bg-brand-100 p-3"
+                  >
+                    <label
+                      className="block text-xs font-medium text-brand-900"
+                      htmlFor={`cancel-reject-${request.id}`}
+                    >
+                      Cancellation rejection reason
+                    </label>
+                    <textarea
+                      id={`cancel-reject-${request.id}`}
+                      value={cancellationRejectReason}
+                      onChange={(e) => setCancellationRejectReason(e.target.value)}
+                      rows={2}
+                      required
+                      placeholder="Explain why cancellation is rejected"
+                      className="w-full border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={actingId === request.id}
+                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {actingId === request.id ? "Rejecting..." : "Confirm reject"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRejectingCancellationId(null)}
                         className="border border-brand-100 text-brand-900 px-3 py-1.5 rounded-lg text-sm hover:bg-white"
                       >
                         Cancel

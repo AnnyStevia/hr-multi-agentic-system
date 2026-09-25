@@ -1,6 +1,14 @@
 import type { CurrentLeaveSummary, CurrentWorkStatus } from "@/types/leave";
+import type { EmploymentType } from "@/types/jobs";
 
 export type EmploymentStatus = "active" | "inactive" | "on_leave";
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  full_time: "Full time",
+  part_time: "Part time",
+  contract: "Contract",
+  internship: "Internship",
+};
 
 export interface Employee {
   id: number;
@@ -16,6 +24,8 @@ export interface Employee {
   position_id: number | null;
   manager_id: number | null;
   hire_date: string;
+  employment_type: EmploymentType;
+  employment_end_date: string | null;
   employment_status: EmploymentStatus;
   current_work_status?: CurrentWorkStatus;
   current_leave?: CurrentLeaveSummary | null;
@@ -39,6 +49,8 @@ export interface EmployeePayload {
   position_id?: number | null;
   manager_id?: number | null;
   hire_date: string;
+  employment_type?: EmploymentType;
+  employment_end_date?: string | null;
 }
 
 export interface EmployeeUpdatePayload {
@@ -51,4 +63,6 @@ export interface EmployeeUpdatePayload {
   position_id?: number | null;
   manager_id?: number | null;
   hire_date?: string;
+  employment_type?: EmploymentType;
+  employment_end_date?: string | null;
 }

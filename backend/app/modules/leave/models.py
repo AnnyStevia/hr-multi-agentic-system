@@ -32,9 +32,21 @@ class LeaveApprovalStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class LeaveCancellationStatus(str, Enum):
+    NONE = "none"
+    REQUESTED = "requested"
+    REJECTED = "rejected"
+
+
 leave_approval_status_enum = SAEnum(
     LeaveApprovalStatus,
     name="leave_approval_status",
+    values_callable=lambda enum: [item.value for item in enum],
+)
+
+leave_cancellation_status_enum = SAEnum(
+    LeaveCancellationStatus,
+    name="leave_cancellation_status",
     values_callable=lambda enum: [item.value for item in enum],
 )
 
@@ -158,6 +170,26 @@ class LeaveRequest(Base):
     admin_approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    cancellation_status: Mapped[LeaveCancellationStatus] = mapped_column(
+        leave_cancellation_status_enum,
+        nullable=False,
+        default=LeaveCancellationStatus.NONE,
+        index=True,
+    )
+    cancellation_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancellation_requested_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancellation_processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancellation_processed_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancellation_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -797,7 +797,7 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
         == 200
     )
 
-    # Employee request: manager ON_LEAVE → HR alone sufficient
+    # Employee request: manager ON_LEAVE Ã¢â â HR alone sufficient
     emp_req = client.post(
         "/api/v1/me/leave/requests",
         json={
@@ -816,7 +816,7 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
     assert hr_alone.json()["status"] == "approved"
     assert hr_alone.json()["hr_approval"] == "approved"
 
-    # HR ON_LEAVE → manager alone sufficient
+    # HR ON_LEAVE Ã¢â â manager alone sufficient
     hr_own = client.post(
         "/api/v1/me/leave/requests",
         json={
@@ -826,7 +826,7 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
         },
         headers=hr_headers,
     )
-    # HR has no manager → admin must approve their leave first so they are ON_LEAVE
+    # HR has no manager Ã¢â â admin must approve their leave first so they are ON_LEAVE
     assert hr_own.status_code == 201, hr_own.text
     assert (
         client.patch(
@@ -913,7 +913,7 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
         == 400
     )
 
-    # Both manager and HR on leave → admin
+    # Both manager and HR on leave Ã¢â â admin
     # Put manager back on leave for today
     mgr_req_row.start_date = today - timedelta(days=1)
     mgr_req_row.end_date = today + timedelta(days=1)
@@ -951,7 +951,7 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
     assert both.status_code == 200, both.text
     assert both.json()["admin_override"] == "approved"
 
-    # HR manager ON_LEAVE → admin can approve HR specialist leave
+    # HR manager ON_LEAVE Ã¢â â admin can approve HR specialist leave
     _hr_boss_user, hr_boss = _create_linked_employee(
         db_session,
         email="leave.dual.hrboss@test.com",
@@ -1018,3 +1018,169 @@ def test_dual_approval_unavailable_approvers_and_security(client, db_session):
         ).status_code
         == 200
     )
+
+def test_approved_leave_cancellation_flow_and_balance(client, db_session):
+    headers = auth_header(client)
+    leave_type = _create_type(client, headers, name="Annual Leave Cancel")
+    _create_policy(client, headers, leave_type_id=leave_type["id"], days=15)
+
+    _a, _j, emp_headers, _h, _body = _hire(client, db_session, email="leave.cancel@test.com")
+    create_user_with_role(
+        db_session,
+        email="leave.cancel.other@test.com",
+        password="otherpass1",
+        role_name="employee",
+    )
+    other_headers = auth_header(client, "leave.cancel.other@test.com", "otherpass1")
+
+    start = (date.today() + timedelta(days=14)).isoformat()
+    end = (date.today() + timedelta(days=16)).isoformat()
+    created = client.post(
+        "/api/v1/me/leave/requests",
+        json={
+            "leave_type_id": leave_type["id"],
+            "start_date": start,
+            "end_date": end,
+            "reason": "Trip",
+        },
+        headers=emp_headers,
+    )
+    assert created.status_code == 201, created.text
+    request_id = created.json()["id"]
+
+    approved = client.patch(
+        f"/api/v1/leave/requests/{request_id}/approve",
+        headers=headers,
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert approved.json()["cancellation_status"] == "none"
+    approved_at_before = approved.json()["approved_at"]
+    mgr_before = approved.json()["manager_approval"]
+    hr_before = approved.json()["hr_approval"]
+
+    used = client.get("/api/v1/me/leave/balances", headers=emp_headers).json()[0]
+    assert used["days_used"] == 3
+
+    assert (
+        client.patch(
+            f"/api/v1/me/leave/requests/{request_id}/cancel",
+            headers=emp_headers,
+        ).status_code
+        == 400
+    )
+
+    ongoing_start = date.today().isoformat()
+    ongoing_end = (date.today() + timedelta(days=1)).isoformat()
+    ongoing = client.post(
+        "/api/v1/me/leave/requests",
+        json={
+            "leave_type_id": leave_type["id"],
+            "start_date": ongoing_start,
+            "end_date": ongoing_end,
+        },
+        headers=emp_headers,
+    )
+    assert ongoing.status_code == 201, ongoing.text
+    assert (
+        client.patch(
+            f"/api/v1/leave/requests/{ongoing.json()['id']}/approve",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/me/leave/requests/{ongoing.json()['id']}/cancellation",
+            json={"reason": "too late"},
+            headers=emp_headers,
+        ).status_code
+        == 400
+    )
+
+    assert (
+        client.post(
+            f"/api/v1/me/leave/requests/{request_id}/cancellation",
+            json={"reason": "not mine"},
+            headers=other_headers,
+        ).status_code
+        == 404
+    )
+
+    requested = client.post(
+        f"/api/v1/me/leave/requests/{request_id}/cancellation",
+        json={"reason": "Plans changed"},
+        headers=emp_headers,
+    )
+    assert requested.status_code == 200, requested.text
+    assert requested.json()["status"] == "approved"
+    assert requested.json()["cancellation_status"] == "requested"
+    assert requested.json()["cancellation_reason"] == "Plans changed"
+    still_used = client.get("/api/v1/me/leave/balances", headers=emp_headers).json()[0]
+    assert still_used["days_used"] == used["days_used"] + 2
+
+    days_before_final = still_used["days_used"]
+
+    rejected = client.post(
+        f"/api/v1/leave/requests/{request_id}/cancellation/reject",
+        json={"reason": "Coverage issues"},
+        headers=headers,
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "approved"
+    assert rejected.json()["cancellation_status"] == "rejected"
+    assert rejected.json()["cancellation_rejection_reason"] == "Coverage issues"
+    assert rejected.json()["approved_at"] == approved_at_before
+    after_reject = client.get("/api/v1/me/leave/balances", headers=emp_headers).json()[0]
+    assert after_reject["days_used"] == days_before_final
+
+    reject_cal_year = date.fromisoformat(start).year
+    reject_cal_month = date.fromisoformat(start).month
+    cal_after_reject = client.get(
+        f"/api/v1/me/leave/calendar?year={reject_cal_year}&month={reject_cal_month}",
+        headers=emp_headers,
+    )
+    assert cal_after_reject.status_code == 200, cal_after_reject.text
+    reject_periods = cal_after_reject.json()["periods"]
+    assert any(
+        p["request_id"] == request_id and p["status"] == "approved" for p in reject_periods
+    )
+
+    again = client.post(
+        f"/api/v1/me/leave/requests/{request_id}/cancellation",
+        json={"reason": "Still need to cancel"},
+        headers=emp_headers,
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["cancellation_status"] == "requested"
+
+    final = client.post(
+        f"/api/v1/leave/requests/{request_id}/cancellation/approve",
+        headers=headers,
+    )
+    assert final.status_code == 200, final.text
+    assert final.json()["status"] == "cancelled"
+    assert final.json()["approved_at"] == approved_at_before
+    assert final.json()["manager_approval"] == mgr_before
+    assert final.json()["hr_approval"] == hr_before
+
+    after_cancel = client.get("/api/v1/me/leave/balances", headers=emp_headers).json()[0]
+    assert after_cancel["days_used"] == days_before_final - 3
+
+    cal_after_approve = client.get(
+        f"/api/v1/me/leave/calendar?year={reject_cal_year}&month={reject_cal_month}",
+        headers=emp_headers,
+    )
+    assert cal_after_approve.status_code == 200, cal_after_approve.text
+    assert all(
+        p["request_id"] != request_id for p in cal_after_approve.json()["periods"]
+    )
+
+    again_approve = client.post(
+        f"/api/v1/leave/requests/{request_id}/cancellation/approve",
+        headers=headers,
+    )
+    assert again_approve.status_code == 200, again_approve.text
+    assert again_approve.json()["status"] == "cancelled"
+    after_idem = client.get("/api/v1/me/leave/balances", headers=emp_headers).json()[0]
+    assert after_idem["days_used"] == after_cancel["days_used"]

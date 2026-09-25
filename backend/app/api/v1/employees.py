@@ -88,3 +88,17 @@ def deactivate_employee(
         return build_employee_response(employee_service.deactivate_employee(employee_id))
     except AppException as exc:
         _handle(exc)
+
+
+@router.post("/{employee_id}/convert-to-employee", response_model=EmployeeResponse)
+def convert_intern_to_employee(
+    employee_id: int,
+    current_user: User = Depends(require_hr_staff("employees:write")),
+    employee_service: EmployeeService = Depends(get_employee_service),
+) -> EmployeeResponse:
+    try:
+        return build_employee_response(
+            employee_service.convert_intern_to_employee(employee_id, current_user.id)
+        )
+    except AppException as exc:
+        _handle(exc)

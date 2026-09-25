@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.modules.recruitment.models import (
     ApplicationStatus,
@@ -39,8 +39,18 @@ class JobCreateRequest(BaseModel):
     position: str | None = Field(default=None, max_length=120)
     location: str | None = Field(default=None, max_length=120)
     employment_type: EmploymentType = EmploymentType.FULL_TIME
+    internship_duration_months: int | None = Field(default=None, ge=1, le=24)
     requirements: str | None = None
     questions: list[JobQuestionInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_internship_duration(self) -> "JobCreateRequest":
+        if self.employment_type == EmploymentType.INTERNSHIP:
+            if self.internship_duration_months is None:
+                raise ValueError("internship_duration_months is required for internship jobs")
+        elif self.internship_duration_months is not None:
+            raise ValueError("internship_duration_months is only allowed for internship jobs")
+        return self
 
 
 class JobUpdateRequest(BaseModel):
@@ -52,6 +62,7 @@ class JobUpdateRequest(BaseModel):
     position: str | None = Field(default=None, max_length=120)
     location: str | None = Field(default=None, max_length=120)
     employment_type: EmploymentType | None = None
+    internship_duration_months: int | None = Field(default=None, ge=1, le=24)
     requirements: str | None = None
     questions: list[JobQuestionInput] | None = None
 
@@ -65,6 +76,7 @@ class JobResponse(BaseModel):
     position: str | None
     location: str | None
     employment_type: EmploymentType
+    internship_duration_months: int | None = None
     requirements: str | None
     status: JobStatus
     published_at: datetime | None

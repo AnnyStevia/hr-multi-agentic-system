@@ -12,6 +12,7 @@ from app.modules.leave.approval import (
 from app.modules.leave.days import calculate_requested_days
 from app.modules.leave.models import (
     LeaveApprovalStatus,
+    LeaveCancellationStatus,
     LeavePolicy,
     LeaveRequest,
     LeaveRequestStatus,
@@ -83,6 +84,13 @@ def build_leave_request_response(request: LeaveRequest) -> LeaveRequestResponse:
         admin_override=request.admin_override,
         admin_approved_by=request.admin_approved_by,
         admin_approved_at=request.admin_approved_at,
+        cancellation_status=request.cancellation_status,
+        cancellation_requested_at=request.cancellation_requested_at,
+        cancellation_requested_by=request.cancellation_requested_by,
+        cancellation_reason=request.cancellation_reason,
+        cancellation_processed_at=request.cancellation_processed_at,
+        cancellation_processed_by=request.cancellation_processed_by,
+        cancellation_rejection_reason=request.cancellation_rejection_reason,
         created_at=request.created_at,
         updated_at=request.updated_at,
     )
@@ -270,11 +278,13 @@ class LeaveService:
         employee_id: int | None = None,
         leave_type_id: int | None = None,
         status: LeaveRequestStatus | None = None,
+        cancellation_status: LeaveCancellationStatus | None = None,
     ) -> list[LeaveRequest]:
         return self.repository.list_requests(
             employee_id=employee_id,
             leave_type_id=leave_type_id,
             status=status,
+            cancellation_status=cancellation_status,
         )
 
     def get_request_for_hr(self, request_id: int) -> LeaveRequest:
@@ -307,6 +317,145 @@ class LeaveService:
         request.status = LeaveRequestStatus.CANCELLED
         saved = self.repository.save_request(request)
         self._notify_cancelled(saved)
+        return saved
+
+    def request_cancellation_for_user(
+        self, user_id: int, request_id: int, reason: str
+    ) -> LeaveRequest:
+        request = self.get_request_for_user(user_id, request_id)
+        if request.status != LeaveRequestStatus.APPROVED:
+            raise AppException(
+                "Only approved leave requests can request cancellation",
+                status_code=400,
+            )
+        if request.cancellation_status == LeaveCancellationStatus.REQUESTED:
+            raise AppException(
+                "Cancellation has already been requested for this leave",
+                status_code=400,
+            )
+        if request.cancellation_status not in (
+            LeaveCancellationStatus.NONE,
+            LeaveCancellationStatus.REJECTED,
+        ):
+            raise AppException("Cancellation cannot be requested for this leave", status_code=400)
+        today = date.today()
+        if request.start_date <= today:
+            raise AppException(
+                "Only future approved leave can be cancelled",
+                status_code=400,
+            )
+        cleaned = reason.strip()
+        if not cleaned:
+            raise AppException("A cancellation reason is required", status_code=400)
+
+        now = datetime.now(UTC)
+        request.cancellation_status = LeaveCancellationStatus.REQUESTED
+        request.cancellation_requested_at = now
+        request.cancellation_requested_by = user_id
+        request.cancellation_reason = cleaned
+        request.cancellation_processed_at = None
+        request.cancellation_processed_by = None
+        request.cancellation_rejection_reason = None
+        saved = self.repository.save_request(request)
+        self._notify_cancellation_requested(saved)
+        return saved
+
+    def approve_cancellation(self, request_id: int, reviewer_user_id: int) -> LeaveRequest:
+        request = self.get_request_for_hr(request_id)
+        if request.status == LeaveRequestStatus.CANCELLED:
+            return request
+
+        employee = self.employees.get_by_id(request.employee_id)
+        if employee is None:
+            raise AppException("Leave request not found", status_code=404)
+
+        if employee.user_id is not None and employee.user_id == reviewer_user_id:
+            raise AppException(
+                "You cannot approve cancellation of your own leave request",
+                status_code=403,
+            )
+
+        if request.status != LeaveRequestStatus.APPROVED:
+            raise AppException(
+                "Only approved leave with a pending cancellation can be cancelled",
+                status_code=400,
+            )
+        if request.cancellation_status != LeaveCancellationStatus.REQUESTED:
+            raise AppException(
+                "No cancellation request is pending for this leave",
+                status_code=400,
+            )
+
+        actor = classify_actor(self.repository.db, request, employee, reviewer_user_id)
+        if actor is None:
+            raise AppException("Not allowed to process this cancellation", status_code=403)
+
+        now = datetime.now(UTC)
+        # Preserve original approved_at / stage approval audit fields.
+        request.status = LeaveRequestStatus.CANCELLED
+        request.cancellation_processed_at = now
+        request.cancellation_processed_by = reviewer_user_id
+        request.cancellation_rejection_reason = None
+        saved = self.repository.save_request(request)
+        self._notify_employee(
+            saved,
+            NotificationType.LEAVE_CANCELLATION_APPROVED,
+            "Leave cancellation approved",
+            (
+                f"Your leave cancellation ({saved.start_date} to {saved.end_date}) "
+                "was approved. The leave has been cancelled."
+            ),
+        )
+        return saved
+
+    def reject_cancellation(
+        self, request_id: int, reviewer_user_id: int, reason: str
+    ) -> LeaveRequest:
+        request = self.get_request_for_hr(request_id)
+        employee = self.employees.get_by_id(request.employee_id)
+        if employee is None:
+            raise AppException("Leave request not found", status_code=404)
+
+        if employee.user_id is not None and employee.user_id == reviewer_user_id:
+            raise AppException(
+                "You cannot reject cancellation of your own leave request",
+                status_code=403,
+            )
+
+        if request.status != LeaveRequestStatus.APPROVED:
+            raise AppException(
+                "Only approved leave with a pending cancellation can be reviewed",
+                status_code=400,
+            )
+        if request.cancellation_status != LeaveCancellationStatus.REQUESTED:
+            raise AppException(
+                "No cancellation request is pending for this leave",
+                status_code=400,
+            )
+
+        actor = classify_actor(self.repository.db, request, employee, reviewer_user_id)
+        if actor is None:
+            raise AppException("Not allowed to process this cancellation", status_code=403)
+
+        cleaned = reason.strip()
+        if not cleaned:
+            raise AppException("A rejection reason is required", status_code=400)
+
+        now = datetime.now(UTC)
+        request.cancellation_status = LeaveCancellationStatus.REJECTED
+        request.cancellation_processed_at = now
+        request.cancellation_processed_by = reviewer_user_id
+        request.cancellation_rejection_reason = cleaned
+        saved = self.repository.save_request(request)
+        self._notify_employee(
+            saved,
+            NotificationType.LEAVE_CANCELLATION_REJECTED,
+            "Leave cancellation rejected",
+            (
+                f"Your leave cancellation ({saved.start_date} to {saved.end_date}) "
+                f"was rejected. Reason: {cleaned}"
+            ),
+        )
         return saved
 
     def approve_request(self, request_id: int, reviewer_user_id: int) -> LeaveRequest:
@@ -596,11 +745,19 @@ class LeaveService:
         )
 
     def list_team_requests_for_user(
-        self, user_id: int, *, status: LeaveRequestStatus | None = LeaveRequestStatus.PENDING
+        self,
+        user_id: int,
+        *,
+        status: LeaveRequestStatus | None = LeaveRequestStatus.PENDING,
+        cancellation_status: LeaveCancellationStatus | None = None,
     ) -> list[LeaveRequest]:
         manager = self._require_employee_for_user(user_id)
         report_ids = self.employees.list_direct_report_ids(manager.id)
-        return self.repository.list_requests_for_employees(report_ids, status=status)
+        return self.repository.list_requests_for_employees(
+            report_ids,
+            status=status,
+            cancellation_status=cancellation_status,
+        )
 
     def can_user_review_request(self, request: LeaveRequest, user_id: int) -> bool:
         if request.status != LeaveRequestStatus.PENDING:
@@ -803,6 +960,31 @@ class LeaveService:
                 recipient_user_id=recipient_id,
                 type=NotificationType.LEAVE_REQUEST_CANCELLED,
                 title="Leave request cancelled",
+                message=message,
+                related_entity_type="leave_request",
+                related_entity_id=request.id,
+            )
+
+    def _notify_cancellation_requested(self, request: LeaveRequest) -> None:
+        if self.notifications is None:
+            return
+        employee = self.employees.get_by_id(request.employee_id)
+        if employee is None:
+            return
+        employee_name = f"{employee.first_name} {employee.last_name}".strip()
+        message = (
+            f"{employee_name} requested cancellation of approved leave "
+            f"({request.start_date} to {request.end_date})."
+        )
+        if request.cancellation_reason:
+            message = f"{message} Reason: {request.cancellation_reason}"
+        for recipient_id in list_hr_staff_user_ids(self.repository.db):
+            if employee.user_id is not None and recipient_id == employee.user_id:
+                continue
+            self.notifications.create_notification(
+                recipient_user_id=recipient_id,
+                type=NotificationType.LEAVE_CANCELLATION_REQUESTED,
+                title="Leave cancellation requested",
                 message=message,
                 related_entity_type="leave_request",
                 related_entity_id=request.id,

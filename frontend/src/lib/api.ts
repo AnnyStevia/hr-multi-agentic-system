@@ -53,6 +53,7 @@ import type {
   LeaveRequest,
   LeaveRequestCreatePayload,
   LeaveRequestStatus,
+  LeaveCancellationStatus,
   LeaveType,
   LeaveTypePayload,
   LeaveTypeUpdatePayload,
@@ -351,6 +352,12 @@ class ApiClient {
 
   async deactivateEmployee(id: number): Promise<Employee> {
     return this.request<Employee>(`/api/v1/employees/${id}/deactivate`, { method: "PATCH" });
+  }
+
+  async convertInternToEmployee(id: number): Promise<Employee> {
+    return this.request<Employee>(`/api/v1/employees/${id}/convert-to-employee`, {
+      method: "POST",
+    });
   }
 
   async getJob(id: number): Promise<Job> {
@@ -704,6 +711,13 @@ class ApiClient {
     });
   }
 
+  async reindexCompanyDocument(documentId: number): Promise<CompanyDocument> {
+    return this.request<CompanyDocument>(
+      `/api/v1/company-documents/${documentId}/rag-index`,
+      { method: "POST" },
+    );
+  }
+
   async getCompanyDocumentUrl(
     documentId: number,
     download = false,
@@ -983,9 +997,16 @@ class ApiClient {
     );
   }
 
-  async listMyTeamLeaveRequests(status: LeaveRequestStatus | "" = "pending"): Promise<LeaveRequest[]> {
-    const query = status ? `?status=${status}` : "?status=";
-    return this.request<LeaveRequest[]>(`/api/v1/me/leave/team-requests${query}`);
+  async listMyTeamLeaveRequests(
+    status: LeaveRequestStatus | "" = "pending",
+    cancellationStatus?: LeaveCancellationStatus
+  ): Promise<LeaveRequest[]> {
+    const search = new URLSearchParams();
+    search.set("status", status);
+    if (cancellationStatus) search.set("cancellation_status", cancellationStatus);
+    return this.request<LeaveRequest[]>(
+      `/api/v1/me/leave/team-requests?${search.toString()}`
+    );
   }
 
   async listMyLeaveRequests(): Promise<LeaveRequest[]> {
@@ -1005,15 +1026,29 @@ class ApiClient {
     });
   }
 
+  async requestMyLeaveCancellation(requestId: number, reason: string): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(
+      `/api/v1/me/leave/requests/${requestId}/cancellation`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }
+    );
+  }
+
   async listLeaveRequests(params?: {
     employee_id?: number;
     leave_type_id?: number;
     status?: LeaveRequestStatus;
+    cancellation_status?: LeaveCancellationStatus;
   }): Promise<LeaveRequest[]> {
     const search = new URLSearchParams();
     if (params?.employee_id != null) search.set("employee_id", String(params.employee_id));
     if (params?.leave_type_id != null) search.set("leave_type_id", String(params.leave_type_id));
     if (params?.status) search.set("status", params.status);
+    if (params?.cancellation_status) {
+      search.set("cancellation_status", params.cancellation_status);
+    }
     const query = search.toString() ? `?${search.toString()}` : "";
     return this.request<LeaveRequest[]>(`/api/v1/leave/requests${query}`);
   }
@@ -1029,6 +1064,23 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify({ rejection_reason: rejectionReason }),
     });
+  }
+
+  async approveLeaveCancellation(requestId: number): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(
+      `/api/v1/leave/requests/${requestId}/cancellation/approve`,
+      { method: "POST" }
+    );
+  }
+
+  async rejectLeaveCancellation(requestId: number, reason: string): Promise<LeaveRequest> {
+    return this.request<LeaveRequest>(
+      `/api/v1/leave/requests/${requestId}/cancellation/reject`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      }
+    );
   }
 
   async askKnowledgeAgent(payload: KnowledgeAskPayload): Promise<KnowledgeAskResponse> {

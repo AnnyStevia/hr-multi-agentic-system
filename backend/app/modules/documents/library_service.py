@@ -13,6 +13,7 @@ from app.modules.documents.library_repository import (
 )
 from app.modules.documents.models import (
     CompanyDocument,
+    CompanyDocumentRagIndexStatus,
     CompanyDocumentStatus,
     PrivateDocument,
 )
@@ -91,6 +92,7 @@ class CompanyDocumentService:
             version=1,
             uploaded_by_user_id=user.id,
             status=CompanyDocumentStatus.ACTIVE,
+            rag_index_status=CompanyDocumentRagIndexStatus.PENDING,
         )
         self.repository.add(document, commit=False)
         storage_key = _company_storage_key(document.id, upload)
@@ -303,6 +305,9 @@ def build_company_document_response(document: CompanyDocument) -> CompanyDocumen
         uploaded_by_user_id=document.uploaded_by_user_id,
         uploaded_by_name=uploaded_by_name,
         status=document.status,
+        rag_index_status=document.rag_index_status,
+        rag_indexed_at=document.rag_indexed_at,
+        rag_indexing_error=document.rag_indexing_error,
         created_at=document.created_at,
         updated_at=document.updated_at,
     )

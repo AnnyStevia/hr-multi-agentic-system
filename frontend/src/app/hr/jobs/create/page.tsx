@@ -21,6 +21,7 @@ export default function CreateJobPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [position, setPosition] = useState("");
   const [employmentType, setEmploymentType] = useState<EmploymentType>("full_time");
+  const [internshipMonths, setInternshipMonths] = useState("6");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [requirements, setRequirements] = useState("");
@@ -46,6 +47,8 @@ export default function CreateJobPage() {
     position: position || undefined,
     location: location || undefined,
     employment_type: employmentType,
+    internship_duration_months:
+      employmentType === "internship" ? Number(internshipMonths) : null,
     requirements: requirements || undefined,
     questions: questions.filter((question) => question.prompt.trim()),
   });
@@ -141,6 +144,21 @@ export default function CreateJobPage() {
             />
           </Field>
         </div>
+
+        {employmentType === "internship" && (
+          <Field label="Internship duration (months)" id="internshipMonths">
+            <input
+              id="internshipMonths"
+              type="number"
+              min={1}
+              max={24}
+              required
+              value={internshipMonths}
+              onChange={(e) => setInternshipMonths(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+        )}
 
         <Field label="Description" id="description">
           <textarea

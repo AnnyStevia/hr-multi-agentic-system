@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import {
   eachDateInRange,
   estimateLeaveDays,
+  LEAVE_CANCELLATION_STATUS_LABELS,
   LEAVE_REQUEST_STATUS_LABELS,
   type LeaveBalance,
   type LeaveCalendarPeriod,
@@ -85,6 +86,18 @@ export function MyLeaveWorkspace({
   const [actingId, setActingId] = useState<number | null>(null);
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [rejectingCancellationId, setRejectingCancellationId] = useState<number | null>(null);
+  const [cancellationRejectReason, setCancellationRejectReason] = useState("");
+
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
 
   const estimatedDays = estimateLeaveDays(startDate, endDate);
   const { dayStates, disabled } = useMemo(() => buildDayStates(periods), [periods]);
@@ -96,20 +109,33 @@ export function MyLeaveWorkspace({
     setError("");
     setLoading(true);
     try {
-      const [balanceRows, requestRows, typeRows, calendar, team] = await Promise.all([
-        api.listMyLeaveBalances(),
-        api.listMyLeaveRequests(),
-        api.listMyLeaveTypes(),
-        api.getMyLeaveCalendar(viewYear, viewMonth),
-        showTeamRequests
-          ? api.listMyTeamLeaveRequests("pending").catch(() => [] as LeaveRequest[])
-          : Promise.resolve([] as LeaveRequest[]),
-      ]);
+      const [balanceRows, requestRows, typeRows, calendar, pendingTeam, cancelTeam] =
+        await Promise.all([
+          api.listMyLeaveBalances(),
+          api.listMyLeaveRequests(),
+          api.listMyLeaveTypes(),
+          api.getMyLeaveCalendar(viewYear, viewMonth),
+          showTeamRequests
+            ? api.listMyTeamLeaveRequests("pending").catch(() => [] as LeaveRequest[])
+            : Promise.resolve([] as LeaveRequest[]),
+          showTeamRequests
+            ? api
+                .listMyTeamLeaveRequests("approved", "requested")
+                .catch(() => [] as LeaveRequest[])
+            : Promise.resolve([] as LeaveRequest[]),
+        ]);
       setBalances(balanceRows);
       setRequests(requestRows);
       setTypes(typeRows);
       setPeriods(calendar.periods);
-      setTeamRequests(team);
+      const seen = new Set<number>();
+      const mergedTeam: LeaveRequest[] = [];
+      for (const row of [...pendingTeam, ...cancelTeam]) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        mergedTeam.push(row);
+      }
+      setTeamRequests(mergedTeam);
       setLeaveTypeId((current) => current || (typeRows[0] ? String(typeRows[0].id) : ""));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load leave data");
@@ -211,6 +237,27 @@ export function MyLeaveWorkspace({
     }
   };
 
+  const handleRequestCancellation = async (event: FormEvent, requestId: number) => {
+    event.preventDefault();
+    const reasonText = cancellationReason.trim();
+    if (!reasonText) {
+      setError("A cancellation reason is required.");
+      return;
+    }
+    setActingId(requestId);
+    setError("");
+    try {
+      await api.requestMyLeaveCancellation(requestId, reasonText);
+      setCancellingId(null);
+      setCancellationReason("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to request cancellation");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const handleApproveTeam = async (requestId: number) => {
     setActingId(requestId);
     setError("");
@@ -240,6 +287,40 @@ export function MyLeaveWorkspace({
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject request");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleApproveCancellation = async (requestId: number) => {
+    setActingId(requestId);
+    setError("");
+    try {
+      await api.approveLeaveCancellation(requestId);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve cancellation");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleRejectCancellation = async (event: FormEvent, requestId: number) => {
+    event.preventDefault();
+    const reasonText = cancellationRejectReason.trim();
+    if (!reasonText) {
+      setError("A rejection reason is required.");
+      return;
+    }
+    setActingId(requestId);
+    setError("");
+    try {
+      await api.rejectLeaveCancellation(requestId, reasonText);
+      setRejectingCancellationId(null);
+      setCancellationRejectReason("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reject cancellation");
     } finally {
       setActingId(null);
     }
@@ -430,7 +511,9 @@ export function MyLeaveWorkspace({
             Team leave requests
           </h2>
           <ul className="divide-y divide-brand-100">
-            {teamRequests.map((request) => (
+            {teamRequests.map((request) => {
+              const isCancellation = request.cancellation_status === "requested";
+              return (
               <li key={request.id} className="py-3 space-y-2">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -442,29 +525,64 @@ export function MyLeaveWorkspace({
                       {formatDate(request.end_date)} · {request.requested_days} day
                       {request.requested_days === 1 ? "" : "s"}
                     </p>
-                    <LeaveApprovalStages request={request} />
+                    {isCancellation && (
+                      <p className="mt-1 text-xs font-medium text-amber-700">
+                        Cancellation requested
+                        {request.cancellation_reason
+                          ? `: ${request.cancellation_reason}`
+                          : ""}
+                      </p>
+                    )}
+                    {!isCancellation && <LeaveApprovalStages request={request} />}
                   </div>
-                  {rejectingId !== request.id && (
+                  {rejectingId !== request.id &&
+                    rejectingCancellationId !== request.id && (
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={actingId === request.id}
-                        onClick={() => handleApproveTeam(request.id)}
-                        className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actingId === request.id}
-                        onClick={() => {
-                          setRejectingId(request.id);
-                          setRejectionReason("");
-                        }}
-                        className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
+                      {isCancellation ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={actingId === request.id}
+                            onClick={() => handleApproveCancellation(request.id)}
+                            className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                          >
+                            Approve cancellation
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actingId === request.id}
+                            onClick={() => {
+                              setRejectingCancellationId(request.id);
+                              setCancellationRejectReason("");
+                            }}
+                            className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject cancellation
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={actingId === request.id}
+                            onClick={() => handleApproveTeam(request.id)}
+                            className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actingId === request.id}
+                            onClick={() => {
+                              setRejectingId(request.id);
+                              setRejectionReason("");
+                            }}
+                            className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -499,8 +617,40 @@ export function MyLeaveWorkspace({
                     </div>
                   </form>
                 )}
+                {rejectingCancellationId === request.id && (
+                  <form
+                    onSubmit={(e) => void handleRejectCancellation(e, request.id)}
+                    className="max-w-md space-y-2 rounded-lg border border-brand-200 bg-brand-100 p-3"
+                  >
+                    <textarea
+                      value={cancellationRejectReason}
+                      onChange={(e) => setCancellationRejectReason(e.target.value)}
+                      rows={2}
+                      required
+                      placeholder="Why reject this cancellation?"
+                      className="w-full border border-brand-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={actingId === request.id}
+                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm"
+                      >
+                        Confirm reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRejectingCancellationId(null)}
+                        className="border border-brand-200 px-3 py-1.5 rounded-lg text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}
@@ -511,8 +661,14 @@ export function MyLeaveWorkspace({
           <p className="text-sm text-brand-300">No leave requests yet.</p>
         ) : (
           <ul className="divide-y divide-brand-100">
-            {requests.map((request) => (
-              <li key={request.id} className="py-3 flex flex-wrap items-start justify-between gap-3">
+            {requests.map((request) => {
+              const canRequestCancel =
+                request.status === "approved" &&
+                request.start_date > todayIso &&
+                request.cancellation_status !== "requested";
+              return (
+              <li key={request.id} className="py-3 space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-brand-900">{request.leave_type_name}</p>
                   <p className="mt-0.5 text-sm text-brand-300">
@@ -525,6 +681,19 @@ export function MyLeaveWorkspace({
                   {request.status === "rejected" && request.rejection_reason && (
                     <p className="mt-1 text-sm text-red-700">
                       Rejected: {request.rejection_reason}
+                    </p>
+                  )}
+                  {request.cancellation_status === "requested" && (
+                    <p className="mt-1 text-xs font-medium text-amber-700">
+                      {LEAVE_CANCELLATION_STATUS_LABELS.requested}
+                    </p>
+                  )}
+                  {request.cancellation_status === "rejected" && (
+                    <p className="mt-1 text-sm text-red-700">
+                      Cancellation rejected
+                      {request.cancellation_rejection_reason
+                        ? `: ${request.cancellation_rejection_reason}`
+                        : ""}
                     </p>
                   )}
                   <LeaveApprovalStages request={request} />
@@ -554,9 +723,55 @@ export function MyLeaveWorkspace({
                       {actingId === request.id ? "Cancelling..." : "Cancel"}
                     </button>
                   )}
+                  {canRequestCancel && cancellingId !== request.id && (
+                    <button
+                      type="button"
+                      disabled={actingId === request.id}
+                      onClick={() => {
+                        setCancellingId(request.id);
+                        setCancellationReason("");
+                      }}
+                      className="text-sm text-amber-700 hover:text-amber-800 disabled:opacity-50"
+                    >
+                      Request cancellation
+                    </button>
+                  )}
                 </div>
+                </div>
+                {cancellingId === request.id && (
+                  <form
+                    onSubmit={(e) => void handleRequestCancellation(e, request.id)}
+                    className="max-w-md space-y-2 rounded-lg border border-brand-200 bg-brand-100 p-3"
+                  >
+                    <textarea
+                      value={cancellationReason}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      rows={2}
+                      required
+                      placeholder="Why cancel this approved leave?"
+                      className="w-full border border-brand-200 rounded-lg px-3 py-2 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={actingId === request.id}
+                        className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm disabled:opacity-50"
+                      >
+                        Submit cancellation request
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCancellingId(null)}
+                        className="border border-brand-200 px-3 py-1.5 rounded-lg text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

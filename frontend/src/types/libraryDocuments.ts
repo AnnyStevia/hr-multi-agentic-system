@@ -1,5 +1,11 @@
 export type CompanyDocumentStatus = "active" | "archived";
 
+export type CompanyDocumentRagIndexStatus =
+  | "pending"
+  | "processing"
+  | "ready"
+  | "failed";
+
 export interface CompanyDocumentCategory {
   id: number;
   slug: string;
@@ -22,6 +28,9 @@ export interface CompanyDocument {
   uploaded_by_user_id: number;
   uploaded_by_name: string;
   status: CompanyDocumentStatus;
+  rag_index_status: CompanyDocumentRagIndexStatus;
+  rag_indexed_at: string | null;
+  rag_indexing_error: string | null;
   created_at: string;
   updated_at: string;
 }

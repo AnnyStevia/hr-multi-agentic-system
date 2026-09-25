@@ -115,6 +115,16 @@ export default function JobDetailPage() {
 
       <div className="bg-white rounded-xl border shadow-sm p-6 space-y-5">
         <Info label="Employment type" value={EMPLOYMENT_LABELS[job.employment_type] || job.employment_type} />
+        {job.employment_type === "internship" && (
+          <Info
+            label="Internship duration"
+            value={
+              job.internship_duration_months
+                ? `${job.internship_duration_months} month${job.internship_duration_months === 1 ? "" : "s"}`
+                : "—"
+            }
+          />
+        )}
         <Info label="Created" value={formatDate(job.created_at)} />
         <Info label="Published" value={formatDate(job.published_at)} />
         <Info label="Closed" value={formatDate(job.closed_at)} />

@@ -3,7 +3,11 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from app.modules.leave.models import LeaveApprovalStatus, LeaveRequestStatus
+from app.modules.leave.models import (
+    LeaveApprovalStatus,
+    LeaveCancellationStatus,
+    LeaveRequestStatus,
+)
 
 
 class LeaveTypeCreateRequest(BaseModel):
@@ -89,6 +93,18 @@ class LeaveRequestRejectRequest(BaseModel):
     rejection_reason: str = Field(min_length=1, max_length=2000)
 
 
+class LeaveCancellationRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class LeaveCancellationRejectRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class LeaveRequestResponse(BaseModel):
     id: int
     employee_id: int
@@ -113,6 +129,13 @@ class LeaveRequestResponse(BaseModel):
     admin_override: LeaveApprovalStatus
     admin_approved_by: int | None = None
     admin_approved_at: datetime | None = None
+    cancellation_status: LeaveCancellationStatus = LeaveCancellationStatus.NONE
+    cancellation_requested_at: datetime | None = None
+    cancellation_requested_by: int | None = None
+    cancellation_reason: str | None = None
+    cancellation_processed_at: datetime | None = None
+    cancellation_processed_by: int | None = None
+    cancellation_rejection_reason: str | None = None
     created_at: datetime
     updated_at: datetime
 

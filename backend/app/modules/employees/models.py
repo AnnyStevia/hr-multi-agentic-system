@@ -5,6 +5,7 @@ from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Integer, Stri
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.modules.recruitment.models import EmploymentType
 
 
 class DepartmentStatus(str, Enum):
@@ -85,6 +86,18 @@ class Employee(Base):
         ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
     )
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
+    employment_type: Mapped[EmploymentType] = mapped_column(
+        SAEnum(
+            EmploymentType,
+            name="employment_type",
+            values_callable=lambda enum: [item.value for item in enum],
+            create_constraint=False,
+        ),
+        nullable=False,
+        default=EmploymentType.FULL_TIME,
+        index=True,
+    )
+    employment_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     employment_status: Mapped[EmploymentStatus] = mapped_column(
         SAEnum(
             EmploymentStatus,

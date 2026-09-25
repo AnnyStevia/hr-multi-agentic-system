@@ -1,5 +1,15 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 
+from app.ai.rag.indexing import run_company_document_indexing
 from app.modules.documents.dependencies import (
     get_company_document_service,
     get_private_document_service,
@@ -78,6 +88,7 @@ def list_company_documents(
 
 @company_router.post("", response_model=CompanyDocumentResponse, status_code=201)
 async def upload_company_document(
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
     category_id: int = Form(...),
     description: str | None = Form(None),
@@ -100,6 +111,28 @@ async def upload_company_document(
         document = service._require_document(document.id)
     except AppException as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    # Automatic RAG indexing (company library only; fresh DB session in worker).
+    background_tasks.add_task(run_company_document_indexing, document.id)
+    return build_company_document_response(document)
+
+
+@company_router.post(
+    "/{document_id}/rag-index",
+    response_model=CompanyDocumentResponse,
+    status_code=202,
+)
+def reindex_company_document(
+    document_id: int,
+    background_tasks: BackgroundTasks,
+    _: User = Depends(require_hr_staff("company_documents:write")),
+    service: CompanyDocumentService = Depends(get_company_document_service),
+) -> CompanyDocumentResponse:
+    """Retry or re-run RAG indexing for a company document (async)."""
+    try:
+        document = service._require_document(document_id)
+    except AppException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    background_tasks.add_task(run_company_document_indexing, document.id)
     return build_company_document_response(document)
 
 

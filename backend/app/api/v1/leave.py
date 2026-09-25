@@ -4,10 +4,12 @@ from app.modules.identity.dependencies import get_current_user
 from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.leave.dependencies import get_leave_service
-from app.modules.leave.models import LeaveRequestStatus
+from app.modules.leave.models import LeaveCancellationStatus, LeaveRequestStatus
 from app.modules.leave.schemas import (
     LeaveBalanceResponse,
     LeaveCalendarResponse,
+    LeaveCancellationRejectRequest,
+    LeaveCancellationRequest,
     LeavePolicyCreateRequest,
     LeavePolicyResponse,
     LeavePolicyUpdateRequest,
@@ -162,6 +164,7 @@ def list_leave_requests(
     employee_id: int | None = Query(None),
     leave_type_id: int | None = Query(None),
     status_filter: LeaveRequestStatus | None = Query(None, alias="status"),
+    cancellation_status: LeaveCancellationStatus | None = Query(None),
     _: User = Depends(require_hr_staff("leaves:read")),
     service: LeaveService = Depends(get_leave_service),
 ) -> list[LeaveRequestResponse]:
@@ -171,6 +174,7 @@ def list_leave_requests(
             employee_id=employee_id,
             leave_type_id=leave_type_id,
             status=status_filter,
+            cancellation_status=cancellation_status,
         )
     ]
 
@@ -223,6 +227,41 @@ def reject_leave_request(
         _handle(exc)
 
 
+@requests_router.post(
+    "/{request_id}/cancellation/approve",
+    response_model=LeaveRequestResponse,
+)
+def approve_leave_cancellation(
+    request_id: int,
+    current_user: User = Depends(get_current_user),
+    service: LeaveService = Depends(get_leave_service),
+) -> LeaveRequestResponse:
+    try:
+        return build_leave_request_response(
+            service.approve_cancellation(request_id, current_user.id)
+        )
+    except AppException as exc:
+        _handle(exc)
+
+
+@requests_router.post(
+    "/{request_id}/cancellation/reject",
+    response_model=LeaveRequestResponse,
+)
+def reject_leave_cancellation(
+    request_id: int,
+    payload: LeaveCancellationRejectRequest,
+    current_user: User = Depends(get_current_user),
+    service: LeaveService = Depends(get_leave_service),
+) -> LeaveRequestResponse:
+    try:
+        return build_leave_request_response(
+            service.reject_cancellation(request_id, current_user.id, payload.reason)
+        )
+    except AppException as exc:
+        _handle(exc)
+
+
 # --- Me ---
 
 
@@ -254,6 +293,7 @@ def get_my_leave_calendar(
 @me_router.get("/team-requests", response_model=list[LeaveRequestResponse])
 def list_my_team_leave_requests(
     status: str | None = Query("pending"),
+    cancellation_status: LeaveCancellationStatus | None = Query(None),
     current_user: User = Depends(get_current_user),
     service: LeaveService = Depends(get_leave_service),
 ) -> list[LeaveRequestResponse]:
@@ -269,7 +309,9 @@ def list_my_team_leave_requests(
         return [
             build_leave_request_response(item)
             for item in service.list_team_requests_for_user(
-                current_user.id, status=status_filter
+                current_user.id,
+                status=status_filter,
+                cancellation_status=cancellation_status,
             )
         ]
     except AppException as exc:
@@ -327,6 +369,26 @@ def cancel_my_leave_request(
     try:
         return build_leave_request_response(
             service.cancel_request_for_user(current_user.id, request_id)
+        )
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.post(
+    "/requests/{request_id}/cancellation",
+    response_model=LeaveRequestResponse,
+)
+def request_my_leave_cancellation(
+    request_id: int,
+    payload: LeaveCancellationRequest,
+    current_user: User = Depends(get_current_user),
+    service: LeaveService = Depends(get_leave_service),
+) -> LeaveRequestResponse:
+    try:
+        return build_leave_request_response(
+            service.request_cancellation_for_user(
+                current_user.id, request_id, payload.reason
+            )
         )
     except AppException as exc:
         _handle(exc)

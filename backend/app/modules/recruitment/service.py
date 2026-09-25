@@ -33,13 +33,25 @@ class JobService:
 
     def create_job(self, payload: JobCreateRequest, created_by_user_id: int) -> Job:
         department_id = self._require_active_department(payload.department_id)
+        employment_type = payload.employment_type or EmploymentType.FULL_TIME
+        duration = (
+            payload.internship_duration_months
+            if employment_type == EmploymentType.INTERNSHIP
+            else None
+        )
+        if employment_type == EmploymentType.INTERNSHIP and duration is None:
+            raise AppException(
+                "internship_duration_months is required for internship jobs",
+                status_code=400,
+            )
         job = Job(
             title=payload.title.strip(),
             description=payload.description.strip(),
             department_id=department_id,
             position=_optional_text(payload.position),
             location=_optional_text(payload.location),
-            employment_type=payload.employment_type or EmploymentType.FULL_TIME,
+            employment_type=employment_type,
+            internship_duration_months=duration,
             requirements=_optional_text(payload.requirements),
             status=JobStatus.DRAFT,
             created_by_user_id=created_by_user_id,
@@ -60,6 +72,22 @@ class JobService:
             if isinstance(value, str):
                 value = value.strip() or None if field != "title" and field != "description" else value.strip()
             setattr(job, field, value)
+
+        effective_type = job.employment_type
+        if effective_type == EmploymentType.INTERNSHIP:
+            if job.internship_duration_months is None:
+                raise AppException(
+                    "internship_duration_months is required for internship jobs",
+                    status_code=400,
+                )
+            if not (1 <= job.internship_duration_months <= 24):
+                raise AppException(
+                    "internship_duration_months must be between 1 and 24",
+                    status_code=400,
+                )
+        else:
+            job.internship_duration_months = None
+
         if questions is not None:
             job.questions = _build_questions(payload.questions or [])
         return self.repository.save(job)
@@ -102,6 +130,7 @@ def build_job_response(job: Job) -> JobResponse:
         position=job.position,
         location=job.location,
         employment_type=job.employment_type,
+        internship_duration_months=job.internship_duration_months,
         requirements=job.requirements,
         status=job.status,
         published_at=job.published_at,
