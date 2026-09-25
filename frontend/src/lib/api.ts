@@ -1,4 +1,8 @@
 import type {
+  KnowledgeAskPayload,
+  KnowledgeAskResponse,
+} from "@/types/ai";
+import type {
   Account,
   ApiError,
   ApiErrorDetail,
@@ -1027,8 +1031,48 @@ class ApiClient {
     });
   }
 
+  async askKnowledgeAgent(payload: KnowledgeAskPayload): Promise<KnowledgeAskResponse> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1/ai/knowledge/ask`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new ApiClientError("Cannot reach the server. Is the backend running?", 0);
+    }
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        detail: "An unexpected error occurred",
+      }));
+      throw new ApiClientError(formatApiDetail(error.detail), response.status);
+    }
+
+    return response.json();
+  }
+
   logout(): void {
     this.clearToken();
+  }
+}
+
+export class ApiClientError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
   }
 }
 

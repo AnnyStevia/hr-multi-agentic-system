@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import {
+  AIAssistantMain,
+  AIAssistantProvider,
+  AIAwareTopBar,
+  FloatingAIButton,
+} from "@/components/ai-assistant";
 import { useAuth } from "@/hooks/useAuth";
-import { NotificationBell } from "@/components/NotificationBell";
-import { UserMenu } from "@/components/UserMenu";
 import { canAccessHrPortal } from "@/lib/roles";
 
 const CORE_NAV_ITEMS = [
@@ -59,38 +63,38 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex bg-brand-50">
-      <aside className="w-64 bg-white border-r border-brand-200 flex flex-col">
-        <div className="px-6 py-5 border-b border-brand-200">
-          <p className="text-lg font-bold text-brand-900">HR Portal</p>
-          <p className="text-xs text-brand-300 mt-1">Recruitment workspace</p>
-        </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          <p className="px-3 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
-            Core HR
-          </p>
-          {CORE_NAV_ITEMS.map((item) => (
-            <NavLink key={item.label} item={item} pathname={pathname} />
-          ))}
-          <p className="px-3 pt-5 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
-            Coming later
-          </p>
-          {LATER_NAV_ITEMS.map((item) => (
-            <NavLink key={item.label} item={item} pathname={pathname} />
-          ))}
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-brand-200">
-          <div className="px-6 h-14 flex items-center justify-end gap-3">
-            <NotificationBell variant="hr" />
-            <UserMenu editProfileHref="/hr/profile" />
+    <AIAssistantProvider>
+      <div className="h-screen overflow-hidden flex bg-brand-50">
+        <aside className="w-64 h-full shrink-0 overflow-y-auto bg-white border-r border-brand-200 flex flex-col">
+          <div className="px-6 py-5 border-b border-brand-200 shrink-0">
+            <p className="text-lg font-bold text-brand-900">HR Portal</p>
+            <p className="text-xs text-brand-300 mt-1">Recruitment workspace</p>
           </div>
-        </header>
-        <main className="flex-1 p-6">{children}</main>
+          <nav className="flex-1 px-3 py-4 space-y-1">
+            <p className="px-3 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
+              Core HR
+            </p>
+            {CORE_NAV_ITEMS.map((item) => (
+              <NavLink key={item.label} item={item} pathname={pathname} />
+            ))}
+            <p className="px-3 pt-5 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
+              Coming later
+            </p>
+            {LATER_NAV_ITEMS.map((item) => (
+              <NavLink key={item.label} item={item} pathname={pathname} />
+            ))}
+          </nav>
+        </aside>
+
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full">
+          <AIAwareTopBar notificationVariant="hr" editProfileHref="/hr/profile" />
+          <AIAssistantMain contentClassName="flex-1 min-h-0 overflow-y-auto p-6">
+            {children}
+          </AIAssistantMain>
+        </div>
       </div>
-    </div>
+      <FloatingAIButton />
+    </AIAssistantProvider>
   );
 }
 

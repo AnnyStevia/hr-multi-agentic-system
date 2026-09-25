@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { NotificationBell } from "@/components/NotificationBell";
-import { UserMenu } from "@/components/UserMenu";
+import {
+  AIAssistantMain,
+  AIAssistantProvider,
+  AIAwareTopBar,
+  FloatingAIButton,
+} from "@/components/ai-assistant";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessEmployeePortal, needsOnboarding } from "@/lib/roles";
 
@@ -56,37 +60,40 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
   }
 
   return (
-    <div className="min-h-screen flex bg-brand-50">
-      <aside className="w-56 bg-white border-r border-brand-200 flex flex-col shrink-0">
-        <div className="px-5 py-5 border-b border-brand-200">
-          <p className="text-sm font-semibold tracking-tight text-brand-900">Employee</p>
-          <p className="mt-0.5 text-xs text-brand-300">
-            {onboarding ? "Onboarding in progress" : "Workspace"}
-          </p>
-        </div>
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          {!onboarding && (
-            <>
-              <SideLink href="/employee/dashboard" pathname={pathname} label="Dashboard" />
-              <SideLink href="/employee/organization" pathname={pathname} label="Organization" />
-              <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
-              <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
-            </>
-          )}
-          <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-brand-200">
-          <div className="px-6 h-14 flex items-center justify-end gap-3">
-            <NotificationBell variant="employee" />
-            <UserMenu editProfileHref="/employee/profile" />
+    <AIAssistantProvider>
+      <div className="h-screen overflow-hidden flex bg-brand-50">
+        <aside className="w-56 h-full shrink-0 overflow-y-auto bg-white border-r border-brand-200 flex flex-col">
+          <div className="px-5 py-5 border-b border-brand-200 shrink-0">
+            <p className="text-sm font-semibold tracking-tight text-brand-900">Employee</p>
+            <p className="mt-0.5 text-xs text-brand-300">
+              {onboarding ? "Onboarding in progress" : "Workspace"}
+            </p>
           </div>
-        </header>
-        <main className="flex-1 px-6 py-8 max-w-5xl w-full mx-auto">{children}</main>
+          <nav className="flex-1 px-3 py-4 space-y-0.5">
+            {!onboarding && (
+              <>
+                <SideLink href="/employee/dashboard" pathname={pathname} label="Dashboard" />
+                <SideLink href="/employee/organization" pathname={pathname} label="Organization" />
+                <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
+                <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
+              </>
+            )}
+            <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />
+          </nav>
+        </aside>
+
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full">
+          <AIAwareTopBar
+            notificationVariant="employee"
+            editProfileHref="/employee/profile"
+          />
+          <AIAssistantMain contentClassName="flex-1 min-h-0 overflow-y-auto px-6 py-8">
+            <div className="max-w-5xl w-full mx-auto">{children}</div>
+          </AIAssistantMain>
+        </div>
       </div>
-    </div>
+      <FloatingAIButton />
+    </AIAssistantProvider>
   );
 }
 

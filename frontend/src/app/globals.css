@@ -57,6 +57,41 @@
     );
     background-size: 200% 100%;
   }
+
+  .ai-orb-float {
+    animation: ai-orb-float 4.5s ease-in-out infinite;
+  }
+
+  .ai-orb-glow {
+    box-shadow:
+      0 0 0 1px rgba(2, 152, 112, 0.12),
+      0 8px 28px -8px rgba(2, 152, 112, 0.45),
+      0 0 36px -6px rgba(16, 185, 129, 0.35);
+  }
+
+  .ai-orb-glow:hover,
+  .ai-orb-glow:focus-visible {
+    box-shadow:
+      0 0 0 2px rgba(2, 152, 112, 0.28),
+      0 12px 36px -8px rgba(2, 152, 112, 0.55),
+      0 0 48px -4px rgba(16, 185, 129, 0.5);
+  }
+
+  .ai-panel-surface {
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(2, 152, 112, 0.08), transparent 55%),
+      linear-gradient(180deg, #ffffff 0%, #f7fbf9 100%);
+  }
+
+  .ai-panel-glow-burst {
+    background: radial-gradient(
+      circle at 50% 35%,
+      rgba(2, 152, 112, 0.35),
+      rgba(16, 185, 129, 0.12) 40%,
+      transparent 70%
+    );
+    animation: ai-panel-glow-burst 0.55s ease-out both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -66,7 +101,13 @@
   .animate-dash-float,
   .animate-dash-shimmer,
   .animate-dash-pulse-soft,
-  .animate-dash-orbit {
+  .animate-dash-orbit,
+  .animate-ai-orb-float,
+  .animate-ai-orb-glow-pulse,
+  .animate-ai-panel-enter,
+  .animate-ai-dot-bounce,
+  .ai-orb-float,
+  .ai-panel-glow-burst {
     animation: none !important;
   }
 

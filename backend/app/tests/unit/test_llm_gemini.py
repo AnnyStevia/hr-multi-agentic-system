@@ -114,6 +114,9 @@ def test_generate_text_normalizes_response_and_usage():
     level = config.thinking_config.thinking_level
     assert str(level).lower().endswith("low") or getattr(level, "value", "").lower() == "low"
     assert config.max_output_tokens is None
+    assert config.tools is None
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
 
 
 def test_generate_text_forwards_temperature_and_max_tokens():
@@ -126,6 +129,32 @@ def test_generate_text_forwards_temperature_and_max_tokens():
         max_tokens=500,
     )
     config = client.models.generate_content.call_args.kwargs["config"]
+    assert config.temperature == 0.1
+    assert config.max_output_tokens == 500
+    assert config.tools is None
+    assert config.automatic_function_calling.disable is True
+
+
+def test_generate_structured_disables_afc_and_passes_no_tools():
+    client = MagicMock()
+    client.models.generate_content.return_value = _response(
+        text='{"answer": "ok"}',
+        usage=_usage_meta(),
+    )
+    provider = GeminiLLMProvider(api_key="key", model="gemini-3.8-flash", client=client)
+    result = provider.generate_structured(
+        [LLMMessage(role="user", content="Q")],
+        schema={"type": "object", "properties": {"answer": {"type": "string"}}},
+        temperature=0.1,
+        max_tokens=500,
+    )
+    assert result.data == {"answer": "ok"}
+    config = client.models.generate_content.call_args.kwargs["config"]
+    assert config.tools is None
+    assert config.tool_config is None
+    assert config.response_mime_type == "application/json"
+    assert config.automatic_function_calling is not None
+    assert config.automatic_function_calling.disable is True
     assert config.temperature == 0.1
     assert config.max_output_tokens == 500
 

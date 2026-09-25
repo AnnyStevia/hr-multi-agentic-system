@@ -142,7 +142,7 @@ class GeminiLLMProvider(LLMProvider):
         tool_config: types.ToolConfig | None = None,
         response_mime_type: str | None = None,
         response_json_schema: dict[str, Any] | None = None,
-        disable_automatic_function_calling: bool = False,
+        disable_automatic_function_calling: bool = True,
     ) -> Any:
         system_instruction, contents = _split_messages(messages)
         config_kwargs: dict[str, Any] = {
