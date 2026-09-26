@@ -54,6 +54,23 @@ def test_tool_to_definition_for_smoke_tool():
     assert "$defs" not in definition.parameters
 
 
+def test_tool_to_definition_inlines_enum_refs_for_gemini():
+    """Gemini rejects dangling #/$defs refs after $defs are stripped."""
+    from unittest.mock import MagicMock
+
+    from app.ai.tools.recruitment import ListJobApplicationsTool
+
+    definition = tool_to_definition(ListJobApplicationsTool(MagicMock()))
+    status = definition.parameters["properties"]["status"]
+    assert "$ref" not in status
+    assert "$defs" not in definition.parameters
+    blob = str(definition.parameters)
+    assert "#/$defs/" not in blob
+    # Optional enum becomes a plain string enum (null branch removed).
+    assert status.get("type") == "string"
+    assert "enum" in status
+
+
 def test_roundtrip_auth_success_with_mock_provider():
     tool = GetCurrentAiContextTool()
     # Spy: wrap execute to detect calls

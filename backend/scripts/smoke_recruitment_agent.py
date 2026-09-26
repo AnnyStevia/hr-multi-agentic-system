@@ -22,10 +22,12 @@ from app.core.database import SessionLocal
 from app.core.config import settings
 from app.modules.employees.repository import DepartmentRepository
 from app.modules.identity.models import Permission, Role, RolePermission, User, UserRole
+from app.modules.interviews.repository import InterviewRepository
+from app.modules.interviews.service import InterviewService
 from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.service import NotificationService
 from app.modules.recruitment.application_service import ApplicationService
-from app.modules.recruitment.repository import JobRepository
+from app.modules.recruitment.repository import ApplicationRepository, JobRepository
 from app.modules.recruitment.service import JobService
 from app.shared.storage import get_storage_service
 
@@ -77,6 +79,11 @@ def main() -> int:
             application_service=ApplicationService(
                 db,
                 get_storage_service(),
+                NotificationService(NotificationRepository(db)),
+            ),
+            interview_service=InterviewService(
+                InterviewRepository(db),
+                ApplicationRepository(db),
                 NotificationService(NotificationRepository(db)),
             ),
         )

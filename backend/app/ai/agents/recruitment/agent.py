@@ -1,4 +1,4 @@
-"""Recruitment Agent — HR Q&A via authorized recruitment tools (Phase 6.3)."""
+"""Recruitment Agent — HR Q&A via authorized recruitment + interview tools."""
 
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ from app.ai.tools.exceptions import (
     ToolExecutionError,
     ToolValidationError,
 )
+from app.ai.tools.interview_reads import (
+    GetCandidateInterviewsTool,
+    GetInterviewFeedbackTool,
+    GetInterviewTool,
+    GetUpcomingInterviewsTool,
+    ListInterviewsTool,
+)
 from app.ai.tools.recruitment import (
     GetApplicationFitTool,
     GetApplicationTool,
@@ -30,11 +37,12 @@ from app.ai.tools.recruitment import (
     ShortlistApplicationTool,
 )
 from app.ai.tools.registry import ToolRegistry
+from app.modules.interviews.service import InterviewService
 from app.modules.recruitment.application_service import ApplicationService
 from app.modules.recruitment.service import JobService
 
 DEFAULT_MAX_OUTPUT_TOKENS = 800
-DEFAULT_MAX_TOOL_CALLS = 4
+DEFAULT_MAX_TOOL_CALLS = 6
 
 
 class RecruitmentAgent:
@@ -46,6 +54,7 @@ class RecruitmentAgent:
         llm_provider: LLMProvider,
         job_service: JobService,
         application_service: ApplicationService,
+        interview_service: InterviewService,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
     ) -> None:
@@ -60,6 +69,11 @@ class RecruitmentAgent:
         self._registry.register(ListRecruitmentApplicationsTool(application_service))
         self._registry.register(ShortlistApplicationTool(application_service))
         self._registry.register(RejectApplicationTool(application_service))
+        self._registry.register(GetInterviewTool(interview_service))
+        self._registry.register(ListInterviewsTool(interview_service))
+        self._registry.register(GetInterviewFeedbackTool(interview_service))
+        self._registry.register(GetCandidateInterviewsTool(interview_service))
+        self._registry.register(GetUpcomingInterviewsTool(interview_service))
 
     @property
     def registry(self) -> ToolRegistry:

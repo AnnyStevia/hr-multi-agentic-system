@@ -16,6 +16,8 @@ from app.ai.core.context.models import AIExecutionContext
 from app.ai.core.llm import get_llm_provider
 from app.modules.identity.dependencies import require_permissions
 from app.modules.identity.models import User
+from app.modules.interviews.dependencies import get_interview_service
+from app.modules.interviews.service import InterviewService
 from app.modules.recruitment.dependencies import get_application_service, get_job_service
 from app.modules.recruitment.application_service import ApplicationService
 from app.modules.recruitment.service import JobService
@@ -50,12 +52,14 @@ class RecruitmentAskResponse(BaseModel):
 def get_recruitment_agent(
     job_service: JobService = Depends(get_job_service),
     application_service: ApplicationService = Depends(get_application_service),
+    interview_service: InterviewService = Depends(get_interview_service),
 ) -> RecruitmentAgent:
     """Build RecruitmentAgent from Core HR services + LLM (overridable in tests)."""
     return RecruitmentAgent(
         llm_provider=get_llm_provider(),
         job_service=job_service,
         application_service=application_service,
+        interview_service=interview_service,
     )
 
 

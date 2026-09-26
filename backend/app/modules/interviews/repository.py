@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from sqlalchemy import and_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.employees.models import Employee
@@ -35,6 +36,52 @@ class InterviewRepository:
             self._base_query()
             .filter(Interview.application_id == application_id)
             .order_by(Interview.created_at.desc())
+            .all()
+        )
+
+    def list_for_hr(
+        self,
+        *,
+        status: InterviewStatus | None = None,
+        application_id: int | None = None,
+        job_id: int | None = None,
+        primary_employee_id: int | None = None,
+        awaiting: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Interview]:
+        query = self._base_query()
+
+        if application_id is not None:
+            query = query.filter(Interview.application_id == application_id)
+        if status is not None:
+            query = query.filter(Interview.status == status)
+        if job_id is not None:
+            query = query.filter(Interview.application.has(Application.job_id == job_id))
+        if primary_employee_id is not None:
+            query = query.filter(
+                Interview.panel_assignments.any(
+                    and_(
+                        InterviewInterviewer.employee_id == primary_employee_id,
+                        InterviewInterviewer.is_primary.is_(True),
+                    )
+                )
+            )
+        if awaiting == "primary_slots":
+            query = query.filter(
+                Interview.status == InterviewStatus.PROPOSED,
+                ~Interview.slots.any(),
+            )
+        elif awaiting == "candidate_selection":
+            query = query.filter(
+                Interview.status == InterviewStatus.PROPOSED,
+                Interview.slots.any(),
+            )
+
+        return (
+            query.order_by(Interview.created_at.desc())
+            .offset(max(0, offset))
+            .limit(limit)
             .all()
         )
 

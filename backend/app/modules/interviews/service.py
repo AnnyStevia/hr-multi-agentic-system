@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.modules.employees.models import Employee, EmploymentStatus
 from app.modules.employees.service import EmployeeService
@@ -166,6 +166,68 @@ class InterviewService:
         if application is None:
             raise AppException("Application not found", status_code=404)
         interviews = self.repository.list_for_application(application_id)
+        return [self._normalize_interview_state(interview) for interview in interviews]
+
+    def list_for_hr(
+        self,
+        *,
+        status: InterviewStatus | str | None = None,
+        application_id: int | None = None,
+        job_id: int | None = None,
+        primary_employee_id: int | None = None,
+        awaiting: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Interview]:
+        limit = max(1, min(int(limit), 100))
+        offset = max(0, int(offset))
+        if awaiting is not None and awaiting not in (
+            "primary_slots",
+            "candidate_selection",
+        ):
+            raise AppException(
+                "awaiting must be 'primary_slots' or 'candidate_selection'",
+                status_code=400,
+            )
+        status_enum: InterviewStatus | None = None
+        if status is not None:
+            if isinstance(status, InterviewStatus):
+                status_enum = status
+            else:
+                try:
+                    status_enum = InterviewStatus(str(status).strip().lower())
+                except ValueError as exc:
+                    raise AppException("Invalid interview status", status_code=400) from exc
+
+        interviews = self.repository.list_for_hr(
+            status=status_enum,
+            application_id=application_id,
+            job_id=job_id,
+            primary_employee_id=primary_employee_id,
+            awaiting=awaiting,
+            limit=limit,
+            offset=offset,
+        )
+        return [self._normalize_interview_state(interview) for interview in interviews]
+
+    def list_upcoming_scheduled(
+        self,
+        *,
+        days_ahead: int = 7,
+        limit: int = 20,
+        now: datetime | None = None,
+    ) -> list[Interview]:
+        days_ahead = max(1, min(int(days_ahead), 14))
+        limit = max(1, min(int(limit), 50))
+        start = now if now is not None else datetime.now(UTC)
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        else:
+            start = start.astimezone(UTC)
+        until = start + timedelta(days=days_ahead)
+        interviews = self.repository.list_upcoming_scheduled(
+            now=start, until=until, limit=limit
+        )
         return [self._normalize_interview_state(interview) for interview in interviews]
 
     def list_for_employee_user(self, user: User) -> list[Interview]:

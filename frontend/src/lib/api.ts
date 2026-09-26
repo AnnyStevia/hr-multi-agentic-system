@@ -1,6 +1,8 @@
 import type {
   KnowledgeAskPayload,
   KnowledgeAskResponse,
+  RecruitmentAskPayload,
+  RecruitmentAskResponse,
 } from "@/types/ai";
 import type {
   Account,
@@ -1129,6 +1131,36 @@ class ApiClient {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/api/v1/ai/knowledge/ask`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new ApiClientError("Cannot reach the server. Is the backend running?", 0);
+    }
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        detail: "An unexpected error occurred",
+      }));
+      throw new ApiClientError(formatApiDetail(error.detail), response.status);
+    }
+
+    return response.json();
+  }
+
+  async askRecruitmentAgent(payload: RecruitmentAskPayload): Promise<RecruitmentAskResponse> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1/ai/recruitment/ask`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),

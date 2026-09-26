@@ -32,6 +32,7 @@ def _agent(provider: MagicMock) -> RecruitmentAgent:
         llm_provider=provider,
         job_service=MagicMock(),
         application_service=MagicMock(),
+        interview_service=MagicMock(),
     )
 
 
@@ -65,6 +66,7 @@ def test_agent_answers_using_get_application_tool():
         llm_provider=provider,
         job_service=job_service,
         application_service=application_service,
+        interview_service=MagicMock(),
     )
     tool = agent.registry.get("get_application")
     tool.execute = MagicMock(  # type: ignore[method-assign]
@@ -382,3 +384,73 @@ def test_unauthorized_tool_call_surfaces_as_agent_error():
     )
     with pytest.raises((RecruitmentAgentError, ToolAuthorizationError)):
         agent.ask(RecruitmentAgentRequest(question="Show job 1", context=unauthorized))
+
+
+def test_upcoming_interview_question_uses_get_upcoming_interviews():
+    provider = MagicMock()
+    provider.generate_with_tools.side_effect = [
+        LLMToolResponse(
+            content=None,
+            tool_calls=(
+                ToolCall(
+                    id="u1",
+                    name="get_upcoming_interviews",
+                    arguments={"days_ahead": 7},
+                ),
+            ),
+            model="mock",
+        ),
+        LLMToolResponse(
+            content="There is 1 scheduled interview this week.",
+            tool_calls=(),
+            model="mock",
+        ),
+    ]
+    agent = _agent(provider)
+    tool = agent.registry.get("get_upcoming_interviews")
+    tool.execute = MagicMock(  # type: ignore[method-assign]
+        return_value=tool.output_model.model_validate(
+            {
+                "days_ahead": 7,
+                "count": 1,
+                "interviews": [
+                    {
+                        "interview_id": 11,
+                        "application_id": 3,
+                        "status": "scheduled",
+                        "status_label": "Scheduled",
+                        "candidate_name": "Ada",
+                        "job_title": "Engineer",
+                        "primary_interviewer": {
+                            "employee_id": 2,
+                            "name": "Pat",
+                            "is_primary": True,
+                        },
+                        "panel_interviewers": [],
+                        "slot_count": 1,
+                        "selected_slot": None,
+                        "scheduled_start": "2026-09-28T10:00:00Z",
+                        "scheduled_end": "2026-09-28T10:30:00Z",
+                        "meeting_available": True,
+                        "meeting_url": "https://meet.google.com/abc",
+                        "has_evaluation": False,
+                        "outcome": None,
+                        "outcome_label": None,
+                        "completed_at": None,
+                    }
+                ],
+            }
+        )
+    )
+    answer = agent.ask(
+        RecruitmentAgentRequest(
+            question="What interviews are scheduled this week?",
+            context=_hr_context(),
+        )
+    )
+    assert answer.tool_names_called == ["get_upcoming_interviews"]
+    assert "1" in answer.answer
+    assert agent.registry.get("get_interview") is not None
+    assert agent.registry.get("get_interview_feedback") is not None
+    assert agent.registry.get("get_candidate_interviews") is not None
+    assert agent.registry.get("list_interviews") is not None

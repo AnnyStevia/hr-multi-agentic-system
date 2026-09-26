@@ -35,10 +35,13 @@ function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function mapError(err: unknown): string {
+function mapError(err: unknown, options: { recruitment: boolean }): string {
+  const recruitment = options.recruitment;
   if (err instanceof ApiClientError) {
     if (err.status === 403) {
-      return "You do not have access to company knowledge. Ask HR if you need document permissions.";
+      return recruitment
+        ? "You do not have recruitment access for the HR assistant."
+        : "You do not have access to company knowledge. Ask HR if you need document permissions.";
     }
     if (err.status === 422) {
       return err.message || "Please enter a valid question.";
@@ -46,7 +49,9 @@ function mapError(err: unknown): string {
     if (err.status === 0) {
       return "Cannot reach the server. Please try again in a moment.";
     }
-    return "Something went wrong while consulting company knowledge. Please try again.";
+    return recruitment
+      ? "Something went wrong while consulting recruitment data. Please try again."
+      : "Something went wrong while consulting company knowledge. Please try again.";
   }
   if (err instanceof Error && err.message) {
     return err.message;
@@ -62,6 +67,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const skipCloseOnMount = useRef(true);
+  const useRecruitment = pathname.startsWith("/hr");
 
   const openAssistant = useCallback(() => setOpen(true), []);
   const closeAssistant = useCallback(() => setOpen(false), []);
@@ -80,7 +86,11 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     async (question?: string) => {
       const text = (question ?? draft).trim();
       if (!text) {
-        setError("Please enter a question about company knowledge.");
+        setError(
+          useRecruitment
+            ? "Please enter a recruitment or interview question."
+            : "Please enter a question about company knowledge."
+        );
         return;
       }
       if (loading) return;
@@ -96,23 +106,33 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       try {
-        const result = await api.askKnowledgeAgent({ question: text });
-        const citations: KnowledgeCitation[] = result.citations ?? [];
-        const assistantMessage: AIChatMessage = {
-          id: newId(),
-          role: "assistant",
-          content: result.answer,
-          citations,
-          has_context: result.has_context,
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        if (useRecruitment) {
+          const result = await api.askRecruitmentAgent({ question: text });
+          const assistantMessage: AIChatMessage = {
+            id: newId(),
+            role: "assistant",
+            content: result.answer,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } else {
+          const result = await api.askKnowledgeAgent({ question: text });
+          const citations: KnowledgeCitation[] = result.citations ?? [];
+          const assistantMessage: AIChatMessage = {
+            id: newId(),
+            role: "assistant",
+            content: result.answer,
+            citations,
+            has_context: result.has_context,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        }
       } catch (err) {
-        setError(mapError(err));
+        setError(mapError(err, { recruitment: useRecruitment }));
       } finally {
         setLoading(false);
       }
     },
-    [draft, loading]
+    [draft, loading, useRecruitment]
   );
 
   const value = useMemo(
@@ -150,9 +170,9 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAIAssistant(): AIAssistantContextValue {
-  const ctx = useContext(AIAssistantContext);
-  if (!ctx) {
+  const context = useContext(AIAssistantContext);
+  if (!context) {
     throw new Error("useAIAssistant must be used within AIAssistantProvider");
   }
-  return ctx;
+  return context;
 }

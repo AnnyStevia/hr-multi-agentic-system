@@ -29,6 +29,24 @@ export interface KnowledgeAskPayload {
   top_k?: number | null;
 }
 
+export interface RecruitmentAskPayload {
+  question: string;
+}
+
+export interface RecruitmentUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  thinking_tokens: number | null;
+  total_tokens: number | null;
+}
+
+export interface RecruitmentAskResponse {
+  answer: string;
+  model: string;
+  tool_names_called: string[];
+  usage: RecruitmentUsage | null;
+}
+
 export type AIChatRole = "user" | "assistant";
 
 export interface AIChatMessage {
