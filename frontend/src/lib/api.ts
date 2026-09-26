@@ -519,6 +519,12 @@ class ApiClient {
     });
   }
 
+  async ensureInterviewMeeting(id: number): Promise<InterviewDetail> {
+    return this.request<InterviewDetail>(`/api/v1/interviews/${id}/meeting`, {
+      method: "POST",
+    });
+  }
+
   async listOnboardings(): Promise<OnboardingListItem[]> {
     return this.request<OnboardingListItem[]>("/api/v1/onboarding");
   }

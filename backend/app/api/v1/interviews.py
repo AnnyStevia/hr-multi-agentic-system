@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
-from app.modules.interviews.dependencies import get_interview_service
+from app.modules.interviews.dependencies import get_interview_meeting_service, get_interview_service
+from app.modules.interviews.meeting_service import InterviewMeetingService
 from app.modules.interviews.schemas import (
     InterviewCreateRequest,
     InterviewDetailResponse,
@@ -94,6 +95,21 @@ def complete_interview_disabled(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Only the primary interviewer can complete an interview",
     )
+
+
+@router.post("/{interview_id}/meeting", response_model=InterviewDetailResponse)
+def ensure_interview_meeting(
+    interview_id: int,
+    _user: User = Depends(require_hr_staff("recruitment:write")),
+    interview_service: InterviewService = Depends(get_interview_service),
+    meeting_service: InterviewMeetingService = Depends(get_interview_meeting_service),
+) -> InterviewDetailResponse:
+    """Idempotent Meet link provisioning/retry for a scheduled interview."""
+    try:
+        interview = meeting_service.ensure_meeting(interview_id)
+        return _detail(interview_service, interview)
+    except AppException as exc:
+        _handle(exc)
 
 
 @router.post("/{interview_id}/outcome", response_model=InterviewDetailResponse)

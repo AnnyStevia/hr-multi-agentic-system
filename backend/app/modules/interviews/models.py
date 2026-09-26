@@ -48,6 +48,7 @@ class Interview(Base):
     )
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     meeting_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    meeting_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[InterviewStatus] = mapped_column(
         SAEnum(
             InterviewStatus,

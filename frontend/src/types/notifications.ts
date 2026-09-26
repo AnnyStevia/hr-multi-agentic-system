@@ -4,6 +4,7 @@ export type NotificationType =
   | "interview_assignment"
   | "interview_invitation"
   | "interview_scheduled"
+  | "interview_meeting_ready"
   | "interview_reminder"
   | "onboarding_task_assigned"
   | "onboarding_started"

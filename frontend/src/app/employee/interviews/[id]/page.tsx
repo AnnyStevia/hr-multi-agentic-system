@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
 import { formatSlotRange, toIsoFromDateAndTime } from "@/lib/interviews";
 import type { InterviewDetail, InterviewerRecommendation } from "@/types/interviews";
 
@@ -191,6 +192,7 @@ export default function MyInterviewDetailPage() {
             Scheduled: {formatSlotRange(interview.selected_slot.starts_at, interview.selected_slot.ends_at)}
           </p>
         )}
+        <MeetingJoinBlock status={interview.status} meetingUrl={interview.meeting_url} />
         {!showProposeForm && (interview.slots?.length ?? 0) > 0 && interview.status === "proposed" && (
           <div>
             <p className="text-xs text-gray-500 mb-1">Proposed slots (awaiting candidate)</p>
@@ -200,13 +202,6 @@ export default function MyInterviewDetailPage() {
               ))}
             </ul>
           </div>
-        )}
-        {interview.meeting_url && (
-          <p>
-            <a href={interview.meeting_url} className="text-brand-700 hover:underline" target="_blank" rel="noreferrer">
-              Meeting link
-            </a>
-          </p>
         )}
       </div>
 

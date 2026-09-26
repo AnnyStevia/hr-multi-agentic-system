@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
 import { formatSlotRange, hasActiveInterviewInvitation } from "@/lib/interviews";
@@ -121,6 +122,7 @@ export default function ApplicationDetailPage() {
   const [interviews, setInterviews] = useState<InterviewSummary[]>([]);
   const [interviewsError, setInterviewsError] = useState("");
   const [outcomeActingId, setOutcomeActingId] = useState<number | null>(null);
+  const [meetingRetryId, setMeetingRetryId] = useState<number | null>(null);
   const [hireConfirmId, setHireConfirmId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -234,6 +236,21 @@ export default function ApplicationDetailPage() {
       setError(err instanceof Error ? err.message : "Failed to record outcome");
     } finally {
       setOutcomeActingId(null);
+    }
+  };
+
+  const retryMeetingLink = async (interviewId: number) => {
+    setMeetingRetryId(interviewId);
+    setError("");
+    setSuccessMessage("");
+    try {
+      await api.ensureInterviewMeeting(interviewId);
+      await loadInterviews();
+      setSuccessMessage("Meeting link refreshed.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to provision meeting link");
+    } finally {
+      setMeetingRetryId(null);
     }
   };
 
@@ -482,6 +499,14 @@ export default function ApplicationDetailPage() {
                 ) : (
                   <p className="text-sm text-gray-600">Waiting for candidate to choose a slot.</p>
                 )}
+
+                <MeetingJoinBlock
+                  status={interview.status}
+                  meetingUrl={interview.meeting_url}
+                  showRetry={interview.status === "scheduled" && !interview.meeting_url}
+                  retrying={meetingRetryId === interview.id}
+                  onRetry={() => void retryMeetingLink(interview.id)}
+                />
 
                 {interview.status === "completed" && (
                   <div className="space-y-3 border-t border-gray-100 pt-3">

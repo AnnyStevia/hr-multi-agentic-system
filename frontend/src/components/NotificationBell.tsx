@@ -144,7 +144,10 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       } else if (notification.related_entity_type === "leave_request") {
         router.push("/hr/leave");
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
-        if (notification.type === "interview_assignment") {
+        if (
+          notification.type === "interview_assignment" ||
+          notification.type === "interview_meeting_ready"
+        ) {
           router.push(`/employee/interviews/${notification.related_entity_id}`);
         } else {
           const interview = await api.getInterview(notification.related_entity_id);
@@ -175,7 +178,9 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
             ? "View leave"
             : expanded?.type === "interview_assignment"
               ? "Propose slots"
-              : "View application"
+              : expanded?.type === "interview_meeting_ready"
+                ? "Join interview"
+                : "View application"
         : expanded?.related_entity_type === "interview"
           ? "View interview"
           : "View application";

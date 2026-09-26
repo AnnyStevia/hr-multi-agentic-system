@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
 import { formatSlotDate, formatSlotTimeRange } from "@/lib/interviews";
 import type { InterviewDetail } from "@/types/interviews";
 
@@ -105,19 +106,7 @@ export default function CandidateInterviewPage() {
           </div>
         )}
 
-        {interview.meeting_url && (isScheduled || isCompleted) && (
-          <div>
-            <h2 className="text-sm font-medium text-gray-500">Meeting link</h2>
-            <a
-              href={interview.meeting_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-block text-sm text-brand-700 hover:underline"
-            >
-              Join meeting
-            </a>
-          </div>
-        )}
+        <MeetingJoinBlock status={interview.status} meetingUrl={interview.meeting_url} />
 
         {!isScheduled && !isCompleted && interview.message && (
           <div>

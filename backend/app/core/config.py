@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     aws_region: str = "eu-north-1"
     aws_s3_bucket_name: str = ""
 
+    # Meeting / Google Meet (backend only — never expose to frontend)
+    meeting_provider: str = "noop"
+    google_meet_client_id: str = ""
+    google_meet_client_secret: str = ""
+    google_meet_refresh_token: str = ""
+    google_meet_calendar_id: str = "primary"
+    google_meet_organizer_email: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
