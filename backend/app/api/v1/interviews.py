@@ -4,7 +4,6 @@ from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.interviews.dependencies import get_interview_service
 from app.modules.interviews.schemas import (
-    InterviewCompleteRequest,
     InterviewCreateRequest,
     InterviewDetailResponse,
     InterviewOutcomeRequest,
@@ -24,6 +23,7 @@ def _detail(service: InterviewService, interview) -> InterviewDetailResponse:
     return build_interview_detail(
         interview,
         hired_employee_id=service.resolve_hired_employee_id(interview),
+        include_evaluation=True,
     )
 
 
@@ -31,6 +31,7 @@ def _summary(service: InterviewService, interview) -> InterviewSummary:
     return build_interview_summary(
         interview,
         hired_employee_id=service.resolve_hired_employee_id(interview),
+        include_evaluation=True,
     )
 
 
@@ -84,17 +85,15 @@ def get_interview(
 
 
 @router.patch("/{interview_id}/complete", response_model=InterviewDetailResponse)
-def complete_interview(
+def complete_interview_disabled(
     interview_id: int,
-    payload: InterviewCompleteRequest,
     _user: User = Depends(require_hr_staff("recruitment:write")),
-    interview_service: InterviewService = Depends(get_interview_service),
+    _interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
-    try:
-        interview = interview_service.complete_interview(interview_id, payload.feedback)
-        return _detail(interview_service, interview)
-    except AppException as exc:
-        _handle(exc)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only the primary interviewer can complete an interview",
+    )
 
 
 @router.post("/{interview_id}/outcome", response_model=InterviewDetailResponse)

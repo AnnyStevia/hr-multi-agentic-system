@@ -23,6 +23,7 @@ import type {
   InterviewCreatePayload,
   InterviewDetail,
   InterviewOutcomePayload,
+  InterviewProposeSlotsPayload,
   InterviewSummary,
 } from "@/types/interviews";
 import type {
@@ -487,8 +488,26 @@ class ApiClient {
   }
 
   async completeInterview(id: number, payload: InterviewCompletePayload): Promise<InterviewDetail> {
-    return this.request<InterviewDetail>(`/api/v1/interviews/${id}/complete`, {
-      method: "PATCH",
+    return this.request<InterviewDetail>(`/api/v1/me/interviews/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listMyInterviews(): Promise<InterviewSummary[]> {
+    return this.request<InterviewSummary[]>("/api/v1/me/interviews");
+  }
+
+  async getMyInterview(id: number): Promise<InterviewDetail> {
+    return this.request<InterviewDetail>(`/api/v1/me/interviews/${id}`);
+  }
+
+  async proposeMyInterviewSlots(
+    id: number,
+    payload: InterviewProposeSlotsPayload,
+  ): Promise<InterviewDetail> {
+    return this.request<InterviewDetail>(`/api/v1/me/interviews/${id}/slots`, {
+      method: "POST",
       body: JSON.stringify(payload),
     });
   }

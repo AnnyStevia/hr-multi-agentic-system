@@ -120,9 +120,6 @@ export default function ApplicationDetailPage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [interviews, setInterviews] = useState<InterviewSummary[]>([]);
   const [interviewsError, setInterviewsError] = useState("");
-  const [completingId, setCompletingId] = useState<number | null>(null);
-  const [feedbackDraft, setFeedbackDraft] = useState("");
-  const [submittingComplete, setSubmittingComplete] = useState(false);
   const [outcomeActingId, setOutcomeActingId] = useState<number | null>(null);
   const [hireConfirmId, setHireConfirmId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
@@ -210,28 +207,6 @@ export default function ApplicationDetailPage() {
       setError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
       setUpdatingStatus(false);
-    }
-  };
-
-  const submitComplete = async (interviewId: number) => {
-    if (!feedbackDraft.trim()) {
-      setError("Interview feedback is required.");
-      return;
-    }
-    setSubmittingComplete(true);
-    setError("");
-    setSuccessMessage("");
-    try {
-      await api.completeInterview(interviewId, { feedback: feedbackDraft.trim() });
-      setCompletingId(null);
-      setFeedbackDraft("");
-      setSuccessMessage("Interview marked as completed.");
-      setApplication(await api.getApplication(applicationId));
-      await loadInterviews();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to complete interview");
-    } finally {
-      setSubmittingComplete(false);
     }
   };
 
@@ -370,9 +345,22 @@ export default function ApplicationDetailPage() {
           </div>
         )}
         {hasPendingInvitation && (
-          <p className="pt-4 border-t border-gray-100 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-4 py-3 rounded-lg">
-            Waiting for candidate&apos;s response to the invitation.
-          </p>
+          <div className="pt-4 border-t border-gray-100 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-4 py-3 rounded-lg space-y-2">
+            <p>
+              {interviews.some((interview) => interview.status === "proposed" && (interview.slot_count ?? 0) === 0)
+                ? "Waiting for the primary interviewer to propose available slots."
+                : "Waiting for the candidate to choose a slot."}
+            </p>
+            {interviews.some((interview) => interview.status === "proposed" && (interview.slot_count ?? 0) === 0) && (
+              <p>
+                If you are the primary interviewer, open{" "}
+                <Link href="/employee/interviews" className="font-medium underline underline-offset-2">
+                  My interviews
+                </Link>{" "}
+                (also in the HR sidebar) to submit availability.
+              </p>
+            )}
+          </div>
         )}
         {!hasPendingInvitation && hasActiveInvitation && !hasPendingOutcome && (
           <p className="pt-4 border-t border-gray-100 text-sm text-green-800 bg-green-50 border border-green-200 px-4 py-3 rounded-lg">
@@ -469,73 +457,30 @@ export default function ApplicationDetailPage() {
                     label="Interviewers"
                     value={
                       interview.interviewers && interview.interviewers.length > 0
-                        ? interview.interviewers.map((item) => item.full_name).join(", ")
+                        ? interview.interviewers
+                            .map((item) =>
+                              item.is_primary ? `${item.full_name} (primary)` : item.full_name,
+                            )
+                            .join(", ")
                         : interview.interviewer_name || "—"
                     }
                   />
                   <Detail label="Interview status" value={interview.status} />
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500">HR message</p>
-                  <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{interview.message}</p>
-                </div>
+                {interview.message ? (
+                  <div>
+                    <p className="text-xs text-gray-500">HR message</p>
+                    <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{interview.message}</p>
+                  </div>
+                ) : null}
                 {interview.selected_slot ? (
                   <p className="text-sm text-gray-700">
                     Scheduled: {formatSlotRange(interview.selected_slot.starts_at, interview.selected_slot.ends_at)}
                   </p>
+                ) : interview.status === "proposed" && (interview.slot_count ?? 0) === 0 ? (
+                  <p className="text-sm text-gray-600">Waiting for primary interviewer to propose slots.</p>
                 ) : (
                   <p className="text-sm text-gray-600">Waiting for candidate to choose a slot.</p>
-                )}
-
-                {interview.status === "scheduled" && completingId !== interview.id && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCompletingId(interview.id);
-                      setFeedbackDraft("");
-                      setError("");
-                    }}
-                    className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700"
-                  >
-                    Mark interview as completed
-                  </button>
-                )}
-
-                {interview.status === "scheduled" && completingId === interview.id && (
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-                    <label className="block text-sm font-medium text-gray-800" htmlFor={`feedback-${interview.id}`}>
-                      Interview feedback
-                    </label>
-                    <textarea
-                      id={`feedback-${interview.id}`}
-                      rows={4}
-                      value={feedbackDraft}
-                      onChange={(e) => setFeedbackDraft(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none"
-                      placeholder="Notes from the interview..."
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={submittingComplete}
-                        onClick={() => submitComplete(interview.id)}
-                        className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
-                      >
-                        {submittingComplete ? "Saving..." : "Complete interview"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={submittingComplete}
-                        onClick={() => {
-                          setCompletingId(null);
-                          setFeedbackDraft("");
-                        }}
-                        className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-white disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
                 )}
 
                 {interview.status === "completed" && (
@@ -543,7 +488,46 @@ export default function ApplicationDetailPage() {
                     {interview.completed_at && (
                       <Detail label="Completed" value={formatDate(interview.completed_at)} />
                     )}
-                    {interview.feedback && (
+                    {interview.evaluation && (
+                      <div className="space-y-2 text-sm">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Evaluation</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <Detail label="Technical knowledge" value={`${interview.evaluation.tech_knowledge ?? "—"}/5`} />
+                          <Detail label="Communication" value={`${interview.evaluation.communication ?? "—"}/5`} />
+                          <Detail label="Problem solving" value={`${interview.evaluation.problem_solving ?? "—"}/5`} />
+                          <Detail label="Relevant experience" value={`${interview.evaluation.relevant_experience ?? "—"}/5`} />
+                        </div>
+                        {interview.evaluation.strengths && (
+                          <div>
+                            <p className="text-xs text-gray-500">Strengths</p>
+                            <p className="mt-1 text-gray-800 whitespace-pre-wrap">{interview.evaluation.strengths}</p>
+                          </div>
+                        )}
+                        {interview.evaluation.weaknesses && (
+                          <div>
+                            <p className="text-xs text-gray-500">Areas for improvement</p>
+                            <p className="mt-1 text-gray-800 whitespace-pre-wrap">{interview.evaluation.weaknesses}</p>
+                          </div>
+                        )}
+                        {interview.evaluation.additional_comments && (
+                          <div>
+                            <p className="text-xs text-gray-500">Additional comments</p>
+                            <p className="mt-1 text-gray-800 whitespace-pre-wrap">
+                              {interview.evaluation.additional_comments}
+                            </p>
+                          </div>
+                        )}
+                        <Detail
+                          label="Recommendation"
+                          value={
+                            interview.evaluation.recommendation_label ||
+                            interview.evaluation.recommendation ||
+                            "—"
+                          }
+                        />
+                      </div>
+                    )}
+                    {!interview.evaluation && interview.feedback && (
                       <div>
                         <p className="text-xs text-gray-500">Feedback</p>
                         <p className="mt-1 text-sm text-gray-800 whitespace-pre-wrap">{interview.feedback}</p>

@@ -54,6 +54,15 @@ class InterviewRepository:
             .all()
         )
 
+    def list_for_employee(self, employee_id: int) -> list[Interview]:
+        return (
+            self._base_query()
+            .join(InterviewInterviewer, InterviewInterviewer.interview_id == Interview.id)
+            .filter(InterviewInterviewer.employee_id == employee_id)
+            .order_by(Interview.created_at.desc())
+            .all()
+        )
+
     def add(self, interview: Interview) -> Interview:
         self.db.add(interview)
         self.db.commit()

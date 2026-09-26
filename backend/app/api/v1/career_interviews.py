@@ -14,6 +14,10 @@ def _handle(exc: AppException) -> None:
     raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
+def _candidate_detail(interview) -> InterviewDetailResponse:
+    return build_interview_detail(interview, include_evaluation=False)
+
+
 @router.get("/{interview_id}", response_model=InterviewDetailResponse)
 def get_own_interview(
     interview_id: int,
@@ -21,7 +25,7 @@ def get_own_interview(
     interview_service: InterviewService = Depends(get_interview_service),
 ) -> InterviewDetailResponse:
     try:
-        return build_interview_detail(interview_service.get_own(current_user, interview_id))
+        return _candidate_detail(interview_service.get_own(current_user, interview_id))
     except AppException as exc:
         _handle(exc)
 
@@ -35,6 +39,6 @@ def confirm_interview_slot(
 ) -> InterviewDetailResponse:
     try:
         interview = interview_service.confirm_slot(current_user, interview_id, payload.slot_id)
-        return build_interview_detail(interview)
+        return _candidate_detail(interview)
     except AppException as exc:
         _handle(exc)

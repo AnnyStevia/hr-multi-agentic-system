@@ -127,6 +127,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
           router.push("/employee/onboarding");
         } else if (notification.related_entity_type === "leave_request") {
           router.push("/employee/leave");
+        } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
+          router.push(`/employee/interviews/${notification.related_entity_id}`);
         }
       } else if (variant === "candidate") {
         if (notification.related_entity_type === "application" && notification.related_entity_id) {
@@ -142,8 +144,12 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       } else if (notification.related_entity_type === "leave_request") {
         router.push("/hr/leave");
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
-        const interview = await api.getInterview(notification.related_entity_id);
-        router.push(`/hr/applications/${interview.application_id}`);
+        if (notification.type === "interview_assignment") {
+          router.push(`/employee/interviews/${notification.related_entity_id}`);
+        } else {
+          const interview = await api.getInterview(notification.related_entity_id);
+          router.push(`/hr/applications/${interview.application_id}`);
+        }
       }
     } catch {
       setOpen(false);
@@ -159,13 +165,17 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     variant === "employee"
       ? expanded?.related_entity_type === "leave_request"
         ? "View leave"
-        : "View onboarding"
+        : expanded?.related_entity_type === "interview"
+          ? "View interview"
+          : "View onboarding"
       : variant === "hr"
         ? expanded?.related_entity_type === "onboarding"
           ? "View onboarding"
           : expanded?.related_entity_type === "leave_request"
             ? "View leave"
-            : "View application"
+            : expanded?.type === "interview_assignment"
+              ? "Propose slots"
+              : "View application"
         : expanded?.related_entity_type === "interview"
           ? "View interview"
           : "View application";

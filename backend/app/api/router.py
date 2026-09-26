@@ -16,6 +16,7 @@ from app.api.v1 import (
     jobs,
     leave,
     library_documents,
+    me_interviews,
     notifications,
     onboarding,
     organization,
@@ -62,3 +63,4 @@ api_router.include_router(career_applications.applications_router)
 api_router.include_router(career_interviews.router)
 api_router.include_router(notifications.router)
 api_router.include_router(interviews.router)
+api_router.include_router(me_interviews.router)

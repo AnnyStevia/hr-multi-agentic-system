@@ -23,6 +23,21 @@ export function canAccessEmployeePortal(user: User | null): boolean {
   return user.onboarding_status === "in_progress" || user.onboarding_status === "completed";
 }
 
+/**
+ * Interview assignment workspace (propose slots / complete feedback).
+ * HR and managers are often panel members without the employee role.
+ */
+export function canAccessInterviewAssignments(user: User | null): boolean {
+  if (!user) return false;
+  if (canAccessEmployeePortal(user)) return true;
+  return hasRole(user, "hr") || hasRole(user, "manager") || hasRole(user, "admin");
+}
+
+/** Staff who may only use /employee/interviews (not the full employee portal). */
+export function isInterviewAssignmentsOnly(user: User | null): boolean {
+  return Boolean(user && !canAccessEmployeePortal(user) && canAccessInterviewAssignments(user));
+}
+
 const ROLE_HOME_PATHS: Array<{ role: string; path: string }> = [
   { role: "admin", path: "/admin/dashboard" },
   { role: "hr", path: "/hr/dashboard" },

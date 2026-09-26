@@ -72,6 +72,7 @@ export default function CandidateInterviewPage() {
 
   const isScheduled = interview.status === "scheduled";
   const isCompleted = interview.status === "completed";
+  const interviewers = interview.interviewers || [];
 
   return (
     <div className="space-y-6">
@@ -90,9 +91,37 @@ export default function CandidateInterviewPage() {
       )}
 
       <div className="bg-white rounded-xl border shadow-sm p-6 space-y-5">
-        {!isScheduled && !isCompleted && (
+        {interviewers.length > 0 && (
           <div>
-            <h2 className="text-sm font-medium text-gray-500">Message from HR</h2>
+            <h2 className="text-sm font-medium text-gray-500">Interviewers</h2>
+            <ul className="mt-2 space-y-1 text-sm text-gray-900">
+              {interviewers.map((member) => (
+                <li key={member.employee_id}>
+                  {member.full_name}
+                  {member.position ? ` — ${member.position}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {interview.meeting_url && (isScheduled || isCompleted) && (
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Meeting link</h2>
+            <a
+              href={interview.meeting_url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-sm text-brand-700 hover:underline"
+            >
+              Join meeting
+            </a>
+          </div>
+        )}
+
+        {!isScheduled && !isCompleted && interview.message && (
+          <div>
+            <h2 className="text-sm font-medium text-gray-500">Message</h2>
             <p className="mt-2 text-sm text-gray-800 whitespace-pre-wrap">{interview.message}</p>
           </div>
         )}
@@ -134,9 +163,7 @@ export default function CandidateInterviewPage() {
           <div className="space-y-4">
             <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
               <p className="text-sm font-medium text-green-900">Interview confirmed</p>
-              <p className="mt-1 text-sm text-green-800">
-                Your interview time has been saved. HR has been notified.
-              </p>
+              <p className="mt-1 text-sm text-green-800">Your interview time has been saved.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
               <div>
@@ -161,8 +188,8 @@ export default function CandidateInterviewPage() {
           </div>
         ) : (
           <form onSubmit={handleConfirm} className="space-y-4">
-            <h2 className="text-sm font-medium text-gray-900">Choose your interview time</h2>
-            <p className="text-xs text-gray-500">You can only select one of the three slots proposed by HR.</p>
+            <h2 className="text-sm font-medium text-gray-900">Available slots</h2>
+            <p className="text-xs text-gray-500">Select one time that works for you.</p>
             <div className="space-y-3">
               {interview.slots.filter((slot) => slot.is_available).map((slot) => (
                 <label

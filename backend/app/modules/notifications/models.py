@@ -10,6 +10,7 @@ from app.core.database import Base
 class NotificationType(str, Enum):
     APPLICATION_STATUS_CHANGED = "application_status_changed"
     APPLICATION_SUBMITTED = "application_submitted"
+    INTERVIEW_ASSIGNMENT = "interview_assignment"
     INTERVIEW_INVITATION = "interview_invitation"
     INTERVIEW_SCHEDULED = "interview_scheduled"
     INTERVIEW_REMINDER = "interview_reminder"

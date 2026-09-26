@@ -6,16 +6,34 @@ from app.modules.recruitment.models import Application, ApplicationStatus
 from app.tests.helpers import auth_header, create_user_with_role
 from app.tests.integration.test_application_review import _submit_application
 from app.tests.integration.test_interview_invitations import (
+    PRIMARY_HEADERS_BY_INTERVIEW,
     _create_invitation,
+    _create_linked_panelist,
     _invite_payload,
 )
+from uuid import uuid4
+
+
+def _complete_payload(**overrides):
+    payload = {
+        "tech_knowledge": 4,
+        "communication": 4,
+        "problem_solving": 4,
+        "relevant_experience": 4,
+        "strengths": "Strong technical foundation.",
+        "weaknesses": "Could improve system design depth.",
+        "additional_comments": "Strong communication skills.",
+        "recommendation": "proceed",
+    }
+    payload.update(overrides)
+    return payload
 
 
 def _schedule_interview(client, db_session, *, email: str):
     application, job, candidate_headers, _storage = _submit_application(
         client, db_session, email=email
     )
-    interview, headers = _create_invitation(client, db_session, application["id"])
+    interview, headers, primary_headers = _create_invitation(client, db_session, application["id"])
     slot_id = interview["slots"][0]["id"]
     confirmed = client.post(
         f"/api/v1/careers/interviews/{interview['id']}/confirm",
@@ -24,57 +42,76 @@ def _schedule_interview(client, db_session, *, email: str):
     )
     assert confirmed.status_code == 200, confirmed.text
     assert confirmed.json()["status"] == "scheduled"
-    return application, job, candidate_headers, headers, confirmed.json()
+    body = confirmed.json()
+    PRIMARY_HEADERS_BY_INTERVIEW[body["id"]] = primary_headers
+    return application, job, candidate_headers, headers, body
 
 
-def _complete(client, headers, interview_id: int, feedback: str = "Strong communication skills."):
-    response = client.patch(
-        f"/api/v1/interviews/{interview_id}/complete",
-        json={"feedback": feedback},
-        headers=headers,
+def _complete(client, _headers, interview_id: int, **overrides):
+    primary_headers = PRIMARY_HEADERS_BY_INTERVIEW.get(interview_id, _headers)
+    response = client.post(
+        f"/api/v1/me/interviews/{interview_id}/complete",
+        json=_complete_payload(**overrides),
+        headers=primary_headers,
     )
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def test_hr_can_complete_scheduled_interview(client, db_session):
+def test_primary_can_complete_scheduled_interview(client, db_session):
     _application, _job, _candidate_headers, headers, interview = _schedule_interview(
         client, db_session, email="outcome.complete@test.com"
     )
-    body = _complete(client, headers, interview["id"], feedback="Good technical answers.")
+    body = _complete(
+        client,
+        headers,
+        interview["id"],
+        additional_comments="Good technical answers.",
+    )
     assert body["status"] == "completed"
     assert body["feedback"] == "Good technical answers."
+    assert body["evaluation"]["additional_comments"] == "Good technical answers."
+    assert body["evaluation"]["recommendation"] == "proceed"
     assert body["completed_at"] is not None
     assert body["outcome"] is None
 
     row = db_session.query(Interview).filter(Interview.id == interview["id"]).one()
     assert row.status == InterviewStatus.COMPLETED
     assert row.feedback == "Good technical answers."
+    assert row.recommendation.value == "proceed"
+
+    hr_attempt = client.patch(
+        f"/api/v1/interviews/{interview['id']}/complete",
+        json={"feedback": "Nope"},
+        headers=headers,
+    )
+    assert hr_attempt.status_code == 403
 
 
-def test_hr_cannot_complete_proposed_interview(client, db_session):
+def test_primary_cannot_complete_proposed_interview(client, db_session):
     application, _job, _candidate_headers, _storage = _submit_application(
         client, db_session, email="outcome.proposed@test.com"
     )
-    interview, headers = _create_invitation(client, db_session, application["id"])
+    interview, _headers, primary_headers = _create_invitation(client, db_session, application["id"])
 
-    response = client.patch(
-        f"/api/v1/interviews/{interview['id']}/complete",
-        json={"feedback": "Too early"},
-        headers=headers,
+    response = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(),
+        headers=primary_headers,
     )
     assert response.status_code == 400
 
 
-def test_hr_cannot_complete_already_completed_interview(client, db_session):
+def test_primary_cannot_complete_already_completed_interview(client, db_session):
     _application, _job, _candidate_headers, headers, interview = _schedule_interview(
         client, db_session, email="outcome.twice@test.com"
     )
     _complete(client, headers, interview["id"])
-    second = client.patch(
-        f"/api/v1/interviews/{interview['id']}/complete",
-        json={"feedback": "Again"},
-        headers=headers,
+    primary_headers = PRIMARY_HEADERS_BY_INTERVIEW[interview["id"]]
+    second = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(additional_comments="Again"),
+        headers=primary_headers,
     )
     assert second.status_code == 400
 
@@ -83,9 +120,9 @@ def test_unauthorized_cannot_complete_interview(client, db_session):
     _application, _job, _candidate_headers, _headers, interview = _schedule_interview(
         client, db_session, email="outcome.unauth@test.com"
     )
-    response = client.patch(
-        f"/api/v1/interviews/{interview['id']}/complete",
-        json={"feedback": "Nope"},
+    response = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(),
     )
     assert response.status_code == 401
 
@@ -94,22 +131,32 @@ def test_candidate_cannot_complete_interview(client, db_session):
     _application, _job, candidate_headers, _headers, interview = _schedule_interview(
         client, db_session, email="outcome.cand.complete@test.com"
     )
-    response = client.patch(
-        f"/api/v1/interviews/{interview['id']}/complete",
-        json={"feedback": "Candidate attempt"},
+    response = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(),
         headers=candidate_headers,
     )
-    assert response.status_code == 403
+    assert response.status_code in (403, 404)
 
 
 def test_feedback_is_persisted(client, db_session):
     _application, _job, _candidate_headers, headers, interview = _schedule_interview(
         client, db_session, email="outcome.feedback@test.com"
     )
-    _complete(client, headers, interview["id"], feedback="Clear and concise answers.")
+    _complete(
+        client,
+        headers,
+        interview["id"],
+        additional_comments="Clear and concise answers.",
+        strengths="Clear answers.",
+    )
     detail = client.get(f"/api/v1/interviews/{interview['id']}", headers=headers)
     assert detail.status_code == 200
-    assert detail.json()["feedback"] == "Clear and concise answers."
+    body = detail.json()
+    assert body["feedback"] == "Clear and concise answers."
+    assert body["evaluation"]["additional_comments"] == "Clear and concise answers."
+    assert body["evaluation"]["tech_knowledge"] == 4
+    assert body["evaluation"]["recommendation"] == "proceed"
 
 
 def test_hr_can_record_rejected_outcome(client, db_session):
@@ -149,9 +196,12 @@ def test_hr_can_record_another_interview_without_creating_interview(client, db_s
     after_count = db_session.query(Interview).filter(Interview.application_id == application["id"]).count()
     assert after_count == before_count
 
+    primary_id, _ = _create_linked_panelist(
+        client, db_session, email=f"another.primary.{uuid4().hex[:8]}@test.com"
+    )
     invite_again = client.post(
         f"/api/v1/interviews/applications/{application['id']}",
-        json=_invite_payload(client),
+        json=_invite_payload(primary_employee_id=primary_id),
         headers=headers,
     )
     assert invite_again.status_code == 201, invite_again.text
@@ -292,18 +342,38 @@ def test_cannot_invite_while_completed_without_outcome(client, db_session):
         client, db_session, email="outcome.block.invite@test.com"
     )
     _complete(client, headers, interview["id"])
+    primary_id, _ = _create_linked_panelist(
+        client, db_session, email=f"block.primary.{uuid4().hex[:8]}@test.com"
+    )
     response = client.post(
         f"/api/v1/interviews/applications/{application['id']}",
-        json=_invite_payload(client),
+        json=_invite_payload(primary_employee_id=primary_id),
         headers=headers,
     )
     assert response.status_code == 409
 
 
-def test_employee_role_cannot_complete_interview(client, db_session):
+def test_non_primary_panel_cannot_complete_interview(client, db_session):
     _application, _job, _candidate_headers, headers, interview = _schedule_interview(
-        client, db_session, email="outcome.employee@test.com"
+        client, db_session, email="outcome.nonprimary@test.com"
     )
+    _panel_id, panel_headers = _create_linked_panelist(
+        client, db_session, email=f"panel.complete.{uuid4().hex[:8]}@test.com"
+    )
+    response = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(),
+        headers=panel_headers,
+    )
+    assert response.status_code in (403, 404)
+
+    hr_attempt = client.patch(
+        f"/api/v1/interviews/{interview['id']}/complete",
+        json={"feedback": "No"},
+        headers=headers,
+    )
+    assert hr_attempt.status_code == 403
+
     create_user_with_role(
         db_session,
         email="employee.outcome@test.com",
@@ -311,9 +381,9 @@ def test_employee_role_cannot_complete_interview(client, db_session):
         role_name="employee",
     )
     emp_headers = auth_header(client, "employee.outcome@test.com", "emppass123")
-    response = client.patch(
-        f"/api/v1/interviews/{interview['id']}/complete",
-        json={"feedback": "No"},
+    emp_attempt = client.post(
+        f"/api/v1/me/interviews/{interview['id']}/complete",
+        json=_complete_payload(),
         headers=emp_headers,
     )
-    assert response.status_code == 403
+    assert emp_attempt.status_code in (403, 404)

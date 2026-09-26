@@ -227,7 +227,7 @@ def test_invalid_onboarding_and_task_access_rejected(client, db_session):
     application2, _job2, other_headers, _storage = _submit_application(
         client, db_session, email="tasks.invalid.other@test.com"
     )
-    interview2, _ = _create_invitation(
+    interview2, _, primary_headers2 = _create_invitation(
         client, db_session, application2["id"], headers=headers
     )
     slot_id = interview2["slots"][0]["id"]
@@ -237,7 +237,7 @@ def test_invalid_onboarding_and_task_access_rejected(client, db_session):
         headers=other_headers,
     )
     assert confirmed.status_code == 200, confirmed.text
-    completed2 = _complete(client, headers, confirmed.json()["id"])
+    completed2 = _complete(client, primary_headers2, confirmed.json()["id"])
     hired2 = client.post(
         f"/api/v1/interviews/{completed2['id']}/outcome",
         json={"outcome": "hired"},

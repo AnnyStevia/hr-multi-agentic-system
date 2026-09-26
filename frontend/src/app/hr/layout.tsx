@@ -19,6 +19,7 @@ const CORE_NAV_ITEMS = [
   { href: "/hr/positions", label: "Positions", enabled: true },
   { href: "/hr/organization", label: "Organization", enabled: true },
   { href: "/hr/jobs", label: "Job Offers", enabled: true },
+  { href: "/employee/interviews", label: "My interviews", enabled: true },
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
   { href: "/hr/onboarding/templates", label: "Task catalogue", enabled: true },
   { href: "/hr/leave", label: "Leave", enabled: true },

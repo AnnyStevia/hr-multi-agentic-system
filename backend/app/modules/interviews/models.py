@@ -1,7 +1,17 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -20,6 +30,12 @@ class InterviewOutcome(str, Enum):
     HIRED = "hired"
 
 
+class InterviewerRecommendation(str, Enum):
+    PROCEED = "proceed"
+    ADDITIONAL_INTERVIEW = "additional_interview"
+    DO_NOT_PROCEED = "do_not_proceed"
+
+
 class Interview(Base):
     __tablename__ = "interviews"
 
@@ -30,7 +46,7 @@ class Interview(Base):
     interviewer_employee_id: Mapped[int | None] = mapped_column(
         ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
     )
-    message: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
     meeting_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[InterviewStatus] = mapped_column(
         SAEnum(
@@ -49,6 +65,24 @@ class Interview(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tech_knowledge: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    communication: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    problem_solving: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    relevant_experience: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    strengths: Mapped[str | None] = mapped_column(Text, nullable=True)
+    weaknesses: Mapped[str | None] = mapped_column(Text, nullable=True)
+    additional_comments: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommendation: Mapped[InterviewerRecommendation | None] = mapped_column(
+        SAEnum(
+            InterviewerRecommendation,
+            name="interviewer_recommendation",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=True,
+    )
+    completed_by_employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     outcome: Mapped[InterviewOutcome | None] = mapped_column(
         SAEnum(
@@ -67,6 +101,7 @@ class Interview(Base):
 
     application: Mapped["Application"] = relationship()  # noqa: F821
     interviewer: Mapped["Employee | None"] = relationship(foreign_keys=[interviewer_employee_id])  # noqa: F821
+    completed_by: Mapped["Employee | None"] = relationship(foreign_keys=[completed_by_employee_id])  # noqa: F821
     panel_assignments: Mapped[list["InterviewInterviewer"]] = relationship(
         back_populates="interview",
         cascade="all, delete-orphan",
@@ -96,6 +131,7 @@ class InterviewInterviewer(Base):
     employee_id: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

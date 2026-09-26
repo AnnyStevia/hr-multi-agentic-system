@@ -17,7 +17,7 @@ def test_hr_notification_uses_interviewer_when_created_by_missing(client, db_ses
         db_session,
         email="remind.fallback.cand@test.com",
     )
-    interview, headers = _create_invitation(client, db_session, application["id"])
+    interview, headers, _primary = _create_invitation(client, db_session, application["id"])
 
     hr_user = db_session.query(User).filter(User.email == "hr.review@test.com").one()
     department = create_department(client, name="Fallback Dept", headers=headers)
@@ -40,6 +40,9 @@ def test_hr_notification_uses_interviewer_when_created_by_missing(client, db_ses
     row = db_session.query(Interview).filter(Interview.id == interview["id"]).one()
     row.created_by_user_id = None
     row.interviewer_employee_id = employee.id
+    for assignment in row.panel_assignments:
+        assignment.employee_id = employee.id
+        assignment.is_primary = True
     db_session.commit()
 
     confirmed = client.post(
