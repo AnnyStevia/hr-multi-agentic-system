@@ -151,7 +151,7 @@ def test_hr_can_record_another_interview_without_creating_interview(client, db_s
 
     invite_again = client.post(
         f"/api/v1/interviews/applications/{application['id']}",
-        json=_invite_payload(),
+        json=_invite_payload(client),
         headers=headers,
     )
     assert invite_again.status_code == 201, invite_again.text
@@ -294,7 +294,7 @@ def test_cannot_invite_while_completed_without_outcome(client, db_session):
     _complete(client, headers, interview["id"])
     response = client.post(
         f"/api/v1/interviews/applications/{application['id']}",
-        json=_invite_payload(),
+        json=_invite_payload(client),
         headers=headers,
     )
     assert response.status_code == 409

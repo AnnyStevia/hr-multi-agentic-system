@@ -21,3 +21,11 @@ class RecruitmentFitError(AIException):
 
 class RecruitmentFitValidationError(RecruitmentFitError):
     """Raised when fit input or LLM structured output is invalid."""
+
+
+class RecruitmentAgentError(AIException):
+    """Base error for the Recruitment Agent chat path."""
+
+
+class RecruitmentAgentValidationError(RecruitmentAgentError):
+    """Raised when a recruitment agent request is invalid."""

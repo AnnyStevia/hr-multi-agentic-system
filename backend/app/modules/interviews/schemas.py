@@ -17,6 +17,7 @@ class InterviewCreateRequest(BaseModel):
 
     message: str = Field(min_length=1, max_length=5000)
     slots: list[InterviewSlotInput] = Field(min_length=2, max_length=5)
+    interviewer_employee_ids: list[int] = Field(min_length=1, max_length=20)
 
 
 class InterviewSlotResponse(BaseModel):
@@ -25,6 +26,12 @@ class InterviewSlotResponse(BaseModel):
     ends_at: datetime
     is_selected: bool
     is_available: bool
+
+
+class InterviewerSummary(BaseModel):
+    employee_id: int
+    full_name: str
+    position: str | None = None
 
 
 class InterviewSummary(BaseModel):
@@ -37,12 +44,14 @@ class InterviewSummary(BaseModel):
     job_title: str
     candidate_name: str
     interviewer_name: str | None
+    interviewers: list[InterviewerSummary] = Field(default_factory=list)
     selected_slot: InterviewSlotResponse | None = None
     feedback: str | None = None
     completed_at: datetime | None = None
     outcome: str | None = None
     outcome_label: str | None = None
     hired_employee_id: int | None = None
+    meeting_url: str | None = None
 
 
 class InterviewDetailResponse(BaseModel):
@@ -55,6 +64,7 @@ class InterviewDetailResponse(BaseModel):
     job_title: str
     candidate_name: str
     interviewer_name: str | None
+    interviewers: list[InterviewerSummary] = Field(default_factory=list)
     slots: list[InterviewSlotResponse]
     selected_slot: InterviewSlotResponse | None = None
     feedback: str | None = None
@@ -62,6 +72,7 @@ class InterviewDetailResponse(BaseModel):
     outcome: str | None = None
     outcome_label: str | None = None
     hired_employee_id: int | None = None
+    meeting_url: str | None = None
 
 
 class InterviewConfirmRequest(BaseModel):

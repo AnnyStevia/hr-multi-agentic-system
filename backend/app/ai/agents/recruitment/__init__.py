@@ -1,6 +1,9 @@
-"""Recruitment AI — CV extraction (6.1) and fit analysis (6.2)."""
+"""Recruitment AI — CV extraction (6.1), fit analysis (6.2), agent (6.3A)."""
 
+from app.ai.agents.recruitment.agent import RecruitmentAgent
 from app.ai.agents.recruitment.exceptions import (
+    RecruitmentAgentError,
+    RecruitmentAgentValidationError,
     RecruitmentExtractionError,
     RecruitmentExtractionUnsupportedError,
     RecruitmentExtractionValidationError,
@@ -16,6 +19,8 @@ from app.ai.agents.recruitment.schemas import (
     FitCandidateSnapshot,
     FitJobSnapshot,
     FitLlmEvidence,
+    RecruitmentAgentAnswer,
+    RecruitmentAgentRequest,
     map_fit_level,
 )
 from app.ai.agents.recruitment.service import CvExtractionService
@@ -30,6 +35,11 @@ __all__ = [
     "FitCandidateSnapshot",
     "FitJobSnapshot",
     "FitLlmEvidence",
+    "RecruitmentAgent",
+    "RecruitmentAgentAnswer",
+    "RecruitmentAgentError",
+    "RecruitmentAgentRequest",
+    "RecruitmentAgentValidationError",
     "RecruitmentExtractionError",
     "RecruitmentExtractionUnsupportedError",
     "RecruitmentExtractionValidationError",

@@ -1,10 +1,12 @@
-"""Pydantic schemas for CV extraction (6.1) and fit analysis (6.2)."""
+"""Pydantic schemas for CV extraction (6.1), fit analysis (6.2), and recruitment agent (6.3A)."""
 
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.ai.core.context.models import AIExecutionContext
 
 FitLevel = Literal["BAD", "MEDIUM", "GOOD"]
 
@@ -145,3 +147,31 @@ def map_fit_level(score: int) -> FitLevel:
     if score <= FIT_SCORE_MEDIUM_MAX:
         return "MEDIUM"
     return "GOOD"
+
+
+# --- Recruitment Agent (Phase 6.3A) ---
+
+
+class RecruitmentAgentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
+
+    question: str
+    context: AIExecutionContext
+
+
+class RecruitmentAgentUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    thinking_tokens: int | None = None
+    total_tokens: int | None = None
+
+
+class RecruitmentAgentAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: str
+    model: str
+    tool_names_called: list[str] = Field(default_factory=list)
+    usage: RecruitmentAgentUsage | None = None

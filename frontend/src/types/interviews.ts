@@ -10,6 +10,12 @@ export interface InterviewSlot {
   is_available: boolean;
 }
 
+export interface InterviewerSummary {
+  employee_id: number;
+  full_name: string;
+  position?: string | null;
+}
+
 export interface InterviewSummary {
   id: number;
   application_id: number;
@@ -20,12 +26,14 @@ export interface InterviewSummary {
   job_title: string;
   candidate_name: string;
   interviewer_name: string | null;
+  interviewers?: InterviewerSummary[];
   selected_slot: InterviewSlot | null;
   feedback?: string | null;
   completed_at?: string | null;
   outcome?: InterviewOutcome | null;
   outcome_label?: string | null;
   hired_employee_id?: number | null;
+  meeting_url?: string | null;
 }
 
 export interface InterviewDetail {
@@ -38,6 +46,7 @@ export interface InterviewDetail {
   job_title: string;
   candidate_name: string;
   interviewer_name: string | null;
+  interviewers?: InterviewerSummary[];
   slots: InterviewSlot[];
   selected_slot: InterviewSlot | null;
   feedback?: string | null;
@@ -45,6 +54,7 @@ export interface InterviewDetail {
   outcome?: InterviewOutcome | null;
   outcome_label?: string | null;
   hired_employee_id?: number | null;
+  meeting_url?: string | null;
 }
 
 export interface InterviewSlotInput {
@@ -55,6 +65,7 @@ export interface InterviewSlotInput {
 export interface InterviewCreatePayload {
   message: string;
   slots: InterviewSlotInput[];
+  interviewer_employee_ids: number[];
 }
 
 export interface InterviewConfirmPayload {

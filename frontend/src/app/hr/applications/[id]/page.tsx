@@ -465,7 +465,14 @@ export default function ApplicationDetailPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <Detail label="Candidate" value={interview.candidate_name} />
                   <Detail label="Job" value={interview.job_title} />
-                  <Detail label="Interviewer" value={interview.interviewer_name || "—"} />
+                  <Detail
+                    label="Interviewers"
+                    value={
+                      interview.interviewers && interview.interviewers.length > 0
+                        ? interview.interviewers.map((item) => item.full_name).join(", ")
+                        : interview.interviewer_name || "—"
+                    }
+                  />
                   <Detail label="Interview status" value={interview.status} />
                 </div>
                 <div>

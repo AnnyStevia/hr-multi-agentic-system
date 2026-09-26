@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.identity.models import Candidate
@@ -112,6 +113,78 @@ class ApplicationRepository:
             )
             .filter(Application.status.in_(pending))
             .order_by(Application.submitted_at.asc(), Application.id.asc())
+            .limit(limit)
+            .all()
+        )
+
+    def _filtered_query(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+    ):
+        query = self.db.query(Application)
+        if job_id is not None:
+            query = query.filter(Application.job_id == job_id)
+        if status is not None:
+            query = query.filter(Application.status == status)
+        return query
+
+    def count_applications(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+    ) -> int:
+        return self._filtered_query(job_id=job_id, status=status).count()
+
+    def count_unique_candidates(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+    ) -> int:
+        query = self.db.query(func.count(func.distinct(Application.candidate_id)))
+        if job_id is not None:
+            query = query.filter(Application.job_id == job_id)
+        if status is not None:
+            query = query.filter(Application.status == status)
+        return int(query.scalar() or 0)
+
+    def count_applications_by_job(
+        self,
+        *,
+        status: ApplicationStatus | None = None,
+        job_id: int | None = None,
+    ) -> list[tuple[int, str, int]]:
+        query = (
+            self.db.query(Job.id, Job.title, func.count(Application.id))
+            .join(Application, Application.job_id == Job.id)
+            .group_by(Job.id, Job.title)
+            .order_by(func.count(Application.id).desc(), Job.title.asc())
+        )
+        if status is not None:
+            query = query.filter(Application.status == status)
+        if job_id is not None:
+            query = query.filter(Job.id == job_id)
+        return [(int(row[0]), str(row[1]), int(row[2])) for row in query.all()]
+
+    def list_filtered(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Application]:
+        return (
+            self._filtered_query(job_id=job_id, status=status)
+            .options(
+                joinedload(Application.candidate).joinedload(Candidate.user),
+                joinedload(Application.job),
+            )
+            .order_by(Application.submitted_at.desc(), Application.id.desc())
+            .offset(offset)
             .limit(limit)
             .all()
         )

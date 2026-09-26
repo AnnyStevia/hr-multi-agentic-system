@@ -10,14 +10,30 @@ from app.ai.tools.exceptions import (
 from app.ai.tools.executor import ToolExecutor
 from app.ai.tools.leave import GetMyLeaveBalanceTool
 from app.ai.tools.llm_adapter import tool_to_definition
+from app.ai.tools.recruitment import (
+    GetApplicationFitTool,
+    GetApplicationTool,
+    GetJobTool,
+    ListJobApplicationsTool,
+    ListRecruitmentApplicationsTool,
+    RejectApplicationTool,
+    ShortlistApplicationTool,
+)
 from app.ai.tools.registry import ToolRegistry
 from app.ai.tools.schemas import ToolResult
 from app.ai.tools.smoke import GetCurrentAiContextTool
 
 __all__ = [
     "BaseTool",
+    "GetApplicationFitTool",
+    "GetApplicationTool",
     "GetCurrentAiContextTool",
+    "GetJobTool",
     "GetMyLeaveBalanceTool",
+    "ListJobApplicationsTool",
+    "ListRecruitmentApplicationsTool",
+    "RejectApplicationTool",
+    "ShortlistApplicationTool",
     "ToolAuthorizationError",
     "ToolExecutor",
     "ToolExecutionError",

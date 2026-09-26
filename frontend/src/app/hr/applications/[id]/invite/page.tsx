@@ -7,6 +7,7 @@ import { ApplicationSection } from "@/components/ApplicationSection";
 import { api } from "@/lib/api";
 import { hasActiveInterviewInvitation, toIsoFromDateAndTime } from "@/lib/interviews";
 import type { ApplicationDetail } from "@/types/applications";
+import type { Employee } from "@/types/employees";
 
 const inputClass =
   "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition";
@@ -27,6 +28,8 @@ export default function InviteToInterviewPage() {
   const router = useRouter();
   const applicationId = Number(params.id);
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedInterviewerIds, setSelectedInterviewerIds] = useState<number[]>([]);
   const [message, setMessage] = useState("");
   const [slots, setSlots] = useState<SlotForm[]>([emptySlot(), emptySlot()]);
   const [error, setError] = useState("");
@@ -39,7 +42,11 @@ export default function InviteToInterviewPage() {
       setLoading(true);
       setError("");
       try {
-        const data = await api.getApplication(applicationId);
+        const [data, employeeList] = await Promise.all([
+          api.getApplication(applicationId),
+          api.listEmployees({ status: "active" }),
+        ]);
+        setEmployees(employeeList.items);
         if (data.status !== "shortlisted") {
           setError("Interview invitations can only be created for shortlisted applications.");
         } else {
@@ -64,6 +71,14 @@ export default function InviteToInterviewPage() {
     }
   }, [applicationId]);
 
+  const toggleInterviewer = (employeeId: number) => {
+    setSelectedInterviewerIds((current) =>
+      current.includes(employeeId)
+        ? current.filter((id) => id !== employeeId)
+        : [...current, employeeId],
+    );
+  };
+
   const updateSlot = (index: number, field: keyof SlotForm, value: string) => {
     setSlots((current) => current.map((slot, i) => (i === index ? { ...slot, [field]: value } : slot)));
   };
@@ -84,6 +99,10 @@ export default function InviteToInterviewPage() {
       setError("Message is required.");
       return;
     }
+    if (selectedInterviewerIds.length < 1) {
+      setError("Select at least one interviewer.");
+      return;
+    }
     if (slots.length < MIN_SLOTS) {
       setError("At least two proposed slots are required.");
       return;
@@ -97,6 +116,7 @@ export default function InviteToInterviewPage() {
     try {
       await api.createInterviewInvitation(applicationId, {
         message: message.trim(),
+        interviewer_employee_ids: selectedInterviewerIds,
         slots: slots.map((slot) => ({
           starts_at: toIsoFromDateAndTime(slot.date, slot.startTime),
           ends_at: toIsoFromDateAndTime(slot.date, slot.endTime),
@@ -122,6 +142,8 @@ export default function InviteToInterviewPage() {
   if (!application) {
     return <p className="text-red-700">{error || "Application not found"}</p>;
   }
+
+  const selectedEmployees = employees.filter((employee) => selectedInterviewerIds.includes(employee.id));
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -166,6 +188,43 @@ export default function InviteToInterviewPage() {
             className={inputClass}
             placeholder="Tell the candidate what to expect..."
           />
+        </div>
+
+        <div>
+          <p className="block text-sm font-medium text-gray-700 mb-2">Interviewers</p>
+          {employees.length === 0 ? (
+            <p className="text-sm text-gray-500">No active employees available.</p>
+          ) : (
+            <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+              {employees.map((employee) => {
+                const checked = selectedInterviewerIds.includes(employee.id);
+                return (
+                  <label
+                    key={employee.id}
+                    className="flex items-start gap-3 px-3 py-2.5 text-sm hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={checked}
+                      onChange={() => toggleInterviewer(employee.id)}
+                    />
+                    <span>
+                      <span className="block text-gray-900">
+                        {employee.first_name} {employee.last_name}
+                      </span>
+                      <span className="block text-xs text-gray-500">{employee.position}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {selectedEmployees.length > 0 && (
+            <p className="mt-2 text-xs text-gray-600">
+              Selected: {selectedEmployees.map((e) => `${e.first_name} ${e.last_name}`).join(", ")}
+            </p>
+          )}
         </div>
 
         {slots.map((slot, index) => (

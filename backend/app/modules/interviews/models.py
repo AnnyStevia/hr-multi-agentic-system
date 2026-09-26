@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Text, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -31,6 +31,7 @@ class Interview(Base):
         ForeignKey("employees.id", ondelete="SET NULL"), nullable=True
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    meeting_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[InterviewStatus] = mapped_column(
         SAEnum(
             InterviewStatus,
@@ -66,6 +67,11 @@ class Interview(Base):
 
     application: Mapped["Application"] = relationship()  # noqa: F821
     interviewer: Mapped["Employee | None"] = relationship(foreign_keys=[interviewer_employee_id])  # noqa: F821
+    panel_assignments: Mapped[list["InterviewInterviewer"]] = relationship(
+        back_populates="interview",
+        cascade="all, delete-orphan",
+        order_by="InterviewInterviewer.id",
+    )
     slots: Mapped[list["InterviewSlot"]] = relationship(
         back_populates="interview",
         cascade="all, delete-orphan",
@@ -75,6 +81,27 @@ class Interview(Base):
         foreign_keys=[selected_slot_id],
         post_update=True,
     )
+
+
+class InterviewInterviewer(Base):
+    __tablename__ = "interview_interviewers"
+    __table_args__ = (
+        UniqueConstraint("interview_id", "employee_id", name="uq_interview_interviewers_interview_employee"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interview_id: Mapped[int] = mapped_column(
+        ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    interview: Mapped["Interview"] = relationship(back_populates="panel_assignments")
+    employee: Mapped["Employee"] = relationship()  # noqa: F821
 
 
 class InterviewSlot(Base):

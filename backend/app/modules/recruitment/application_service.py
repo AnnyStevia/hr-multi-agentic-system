@@ -24,12 +24,16 @@ from app.modules.recruitment.schemas import (
     ApplicationDetail,
     ApplicationListItem,
     ApplicationPayload,
+    ApplicationsByJobItem,
     CandidateSummary,
     DocumentResponse,
     FitAssessmentResponse,
     HrApplicationDetail,
     JobSummary,
     PresignedDocumentResponse,
+    RecruitmentApplicationListItem,
+    RecruitmentApplicationListResponse,
+    RecruitmentOverviewResponse,
 )
 from app.modules.identity.hr_access import list_hr_staff_user_ids
 from app.modules.notifications.models import NotificationType
@@ -182,6 +186,78 @@ class ApplicationService:
         if application is None:
             raise AppException("Application not found", status_code=404)
         return application
+
+    def get_recruitment_overview(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+    ) -> RecruitmentOverviewResponse:
+        if job_id is not None:
+            job = self.jobs.get_by_id(job_id)
+            if job is None:
+                raise AppException("Job not found", status_code=404)
+        by_job_rows = self.applications.count_applications_by_job(
+            status=status, job_id=job_id
+        )
+        return RecruitmentOverviewResponse(
+            total_unique_candidates=self.applications.count_unique_candidates(
+                job_id=job_id, status=status
+            ),
+            total_applications=self.applications.count_applications(
+                job_id=job_id, status=status
+            ),
+            total_jobs_with_applications=len(by_job_rows),
+            applications_by_job=[
+                ApplicationsByJobItem(
+                    job_id=row_job_id,
+                    job_title=title,
+                    application_count=count,
+                )
+                for row_job_id, title, count in by_job_rows
+            ],
+        )
+
+    def list_recruitment_applications(
+        self,
+        *,
+        job_id: int | None = None,
+        status: ApplicationStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> RecruitmentApplicationListResponse:
+        if job_id is not None:
+            job = self.jobs.get_by_id(job_id)
+            if job is None:
+                raise AppException("Job not found", status_code=404)
+        capped_limit = max(1, min(limit, 100))
+        capped_offset = max(0, offset)
+        total = self.applications.count_applications(job_id=job_id, status=status)
+        rows = self.applications.list_filtered(
+            job_id=job_id,
+            status=status,
+            limit=capped_limit,
+            offset=capped_offset,
+        )
+        items = [
+            RecruitmentApplicationListItem(
+                application_id=row.id,
+                candidate_id=row.candidate_id,
+                candidate_name=row.candidate.user.full_name,
+                job_id=row.job_id,
+                job_title=row.job.title,
+                status=row.status,
+                fit_score=row.fit_score,
+                fit_level=row.fit_level,
+            )
+            for row in rows
+        ]
+        return RecruitmentApplicationListResponse(
+            total=total,
+            limit=capped_limit,
+            offset=capped_offset,
+            items=items,
+        )
 
     def update_status(self, application_id: int, status: ApplicationStatus) -> Application:
         if status == ApplicationStatus.HIRED:

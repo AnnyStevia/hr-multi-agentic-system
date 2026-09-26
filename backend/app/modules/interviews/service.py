@@ -1,13 +1,20 @@
 from datetime import UTC, datetime
 
-from app.modules.employees.models import Employee
+from app.modules.employees.models import Employee, EmploymentStatus
 from app.modules.employees.service import EmployeeService
 from app.modules.identity.models import User
-from app.modules.interviews.models import Interview, InterviewOutcome, InterviewSlot, InterviewStatus
+from app.modules.interviews.models import (
+    Interview,
+    InterviewInterviewer,
+    InterviewOutcome,
+    InterviewSlot,
+    InterviewStatus,
+)
 from app.modules.interviews.repository import InterviewRepository
 from app.modules.interviews.schemas import (
     InterviewCreateRequest,
     InterviewDetailResponse,
+    InterviewerSummary,
     InterviewSlotResponse,
     InterviewSummary,
 )
@@ -65,17 +72,20 @@ class InterviewService:
             )
 
         slots = _validate_slots(payload.slots)
-        interviewer = self.repository.get_employee_for_user(created_by.id)
+        panel = self._resolve_interviewers(payload.interviewer_employee_ids)
 
         interview = Interview(
             application_id=application.id,
-            interviewer_employee_id=interviewer.id if interviewer else None,
+            interviewer_employee_id=panel[0].id,
             created_by_user_id=created_by.id,
             message=payload.message.strip(),
             status=InterviewStatus.PROPOSED,
             slots=[
                 InterviewSlot(starts_at=starts_at, ends_at=ends_at, is_selected=False, is_available=True)
                 for starts_at, ends_at in slots
+            ],
+            panel_assignments=[
+                InterviewInterviewer(employee_id=employee.id) for employee in panel
             ],
         )
         created = self.repository.add(interview)
@@ -333,6 +343,40 @@ class InterviewService:
             )
         return application
 
+    def _resolve_interviewers(self, employee_ids: list[int]) -> list[Employee]:
+        if not employee_ids:
+            raise AppException("At least one interviewer is required", status_code=400)
+
+        if len(employee_ids) != len(set(employee_ids)):
+            raise AppException("Duplicate interviewer is not allowed", status_code=400)
+
+        employees = self.repository.get_employees_by_ids(employee_ids)
+        by_id = {employee.id: employee for employee in employees}
+        missing = [employee_id for employee_id in employee_ids if employee_id not in by_id]
+        if missing:
+            raise AppException("Interviewer employee not found", status_code=404)
+
+        user_ids = [employee.user_id for employee in employees if employee.user_id is not None]
+        users_by_id = self.repository.get_users_by_ids(user_ids)
+
+        ordered: list[Employee] = []
+        for employee_id in employee_ids:
+            employee = by_id[employee_id]
+            if employee.employment_status != EmploymentStatus.ACTIVE:
+                raise AppException(
+                    "Only active employees can be selected as interviewers",
+                    status_code=400,
+                )
+            if employee.user_id is not None:
+                linked = users_by_id.get(employee.user_id)
+                if linked is None or not linked.is_active:
+                    raise AppException(
+                        "Interviewer linked user account is inactive",
+                        status_code=400,
+                    )
+            ordered.append(employee)
+        return ordered
+
 
 def _validate_slots(slots: list) -> list[tuple[datetime, datetime]]:
     if len(slots) < MIN_SLOT_COUNT or len(slots) > MAX_SLOT_COUNT:
@@ -402,6 +446,27 @@ def _outcome_label(outcome: InterviewOutcome | None) -> str | None:
     return OUTCOME_LABELS.get(outcome, outcome.value)
 
 
+def _panel_employees(interview: Interview) -> list[Employee]:
+    assignments = getattr(interview, "panel_assignments", None) or []
+    employees = [row.employee for row in assignments if row.employee is not None]
+    if employees:
+        return employees
+    if interview.interviewer is not None:
+        return [interview.interviewer]
+    return []
+
+
+def _interviewer_summaries(interview: Interview) -> list[InterviewerSummary]:
+    return [
+        InterviewerSummary(
+            employee_id=employee.id,
+            full_name=employee.full_name,
+            position=employee.position,
+        )
+        for employee in _panel_employees(interview)
+    ]
+
+
 def build_interview_summary(
     interview: Interview,
     *,
@@ -410,7 +475,8 @@ def build_interview_summary(
     application = interview.application
     candidate = application.candidate
     selected = interview.selected_slot
-    interviewer: Employee | None = interview.interviewer
+    panel = _panel_employees(interview)
+    primary = panel[0] if panel else interview.interviewer
     return InterviewSummary(
         id=interview.id,
         application_id=interview.application_id,
@@ -420,13 +486,15 @@ def build_interview_summary(
         created_at=interview.created_at,
         job_title=application.job.title,
         candidate_name=candidate.user.full_name,
-        interviewer_name=interviewer.full_name if interviewer else None,
+        interviewer_name=primary.full_name if primary else None,
+        interviewers=_interviewer_summaries(interview),
         selected_slot=_slot_response(selected) if selected else None,
         feedback=interview.feedback,
         completed_at=interview.completed_at,
         outcome=interview.outcome.value if interview.outcome else None,
         outcome_label=_outcome_label(interview.outcome),
         hired_employee_id=hired_employee_id,
+        meeting_url=interview.meeting_url,
     )
 
 
@@ -438,7 +506,8 @@ def build_interview_detail(
     application = interview.application
     candidate = application.candidate
     selected = interview.selected_slot
-    interviewer: Employee | None = interview.interviewer
+    panel = _panel_employees(interview)
+    primary = panel[0] if panel else interview.interviewer
     if interview.status == InterviewStatus.PROPOSED:
         visible_slots = [slot for slot in interview.slots if slot.is_available]
     elif selected is not None:
@@ -455,7 +524,8 @@ def build_interview_detail(
         updated_at=interview.updated_at,
         job_title=application.job.title,
         candidate_name=candidate.user.full_name,
-        interviewer_name=interviewer.full_name if interviewer else None,
+        interviewer_name=primary.full_name if primary else None,
+        interviewers=_interviewer_summaries(interview),
         slots=[_slot_response(slot) for slot in sorted(visible_slots, key=lambda s: s.starts_at)],
         selected_slot=_slot_response(selected) if selected else None,
         feedback=interview.feedback,
@@ -463,4 +533,5 @@ def build_interview_detail(
         outcome=interview.outcome.value if interview.outcome else None,
         outcome_label=_outcome_label(interview.outcome),
         hired_employee_id=hired_employee_id,
+        meeting_url=interview.meeting_url,
     )

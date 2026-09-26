@@ -194,6 +194,45 @@ class ApplicationListItem(BaseModel):
     fit_level: str | None = None
 
 
+class ApplicationsByJobItem(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    job_id: int
+    job_title: str
+    application_count: int
+
+
+class RecruitmentOverviewResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    total_unique_candidates: int
+    total_applications: int
+    total_jobs_with_applications: int
+    applications_by_job: list[ApplicationsByJobItem] = Field(default_factory=list)
+
+
+class RecruitmentApplicationListItem(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    application_id: int
+    candidate_id: int
+    candidate_name: str
+    job_id: int
+    job_title: str
+    status: ApplicationStatus
+    fit_score: int | None = None
+    fit_level: str | None = None
+
+
+class RecruitmentApplicationListResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    total: int
+    limit: int
+    offset: int
+    items: list[RecruitmentApplicationListItem] = Field(default_factory=list)
+
+
 class CandidateApplicationSummary(BaseModel):
     id: int
     job_id: int
