@@ -145,7 +145,18 @@ def run_controlled_leave_balance_smoke(
 
 
 def _tool_result_message(call: ToolCall, result: ToolResult) -> LLMMessage:
-    payload = result.data if result.data is not None else {"error": result.error}
+    if result.confirmation_token:
+        payload = {
+            "status": "pending_confirmation",
+            "summary": result.confirmation_summary,
+            "message": (
+                "Write action is waiting for explicit user confirmation in the UI. "
+                "Do not claim the mutation succeeded. Ask the user to confirm or cancel."
+            ),
+            "data": result.data,
+        }
+    else:
+        payload = result.data if result.data is not None else {"error": result.error}
     return LLMMessage(
         role="tool",
         name=call.name,

@@ -125,7 +125,7 @@ def _application_mock(*, status: ApplicationStatus):
     return app
 
 
-def test_shortlist_success_and_confirmation_flag():
+def test_shortlist_requires_confirmation_before_mutate():
     service = MagicMock()
     current = _application_mock(status=ApplicationStatus.SCREENING)
     updated = _application_mock(status=ApplicationStatus.SHORTLISTED)
@@ -133,10 +133,20 @@ def test_shortlist_success_and_confirmation_flag():
     service.update_status.return_value = updated
     registry = ToolRegistry()
     registry.register(ShortlistApplicationTool(service))
-    result = ToolExecutor(registry).execute(
+    pending = ToolExecutor(registry).execute(
         _hr_write(), "shortlist_application", {"application_id": 12}
     )
-    assert result.may_require_confirmation is True
+    assert pending.may_require_confirmation is True
+    assert pending.confirmation_token
+    assert pending.data["status"] == "pending_confirmation"
+    service.update_status.assert_not_called()
+
+    result = ToolExecutor(registry).execute(
+        _hr_write(),
+        "shortlist_application",
+        {"application_id": 12},
+        execute_writes=True,
+    )
     assert result.data["previous_status"] == "screening"
     assert result.data["new_status"] == "shortlisted"
     service.update_status.assert_called_once_with(12, ApplicationStatus.SHORTLISTED)
@@ -151,7 +161,12 @@ def test_shortlist_invalid_transition():
     registry = ToolRegistry()
     registry.register(ShortlistApplicationTool(service))
     with pytest.raises(ToolExecutionError, match="submitted to shortlisted"):
-        ToolExecutor(registry).execute(_hr_write(), "shortlist_application", {"application_id": 12})
+        ToolExecutor(registry).execute(
+            _hr_write(),
+            "shortlist_application",
+            {"application_id": 12},
+            execute_writes=True,
+        )
 
 
 def test_shortlist_unauthorized_without_write():
@@ -175,6 +190,7 @@ def test_reject_success_echoes_reason():
         _hr_write(),
         "reject_application",
         {"application_id": 12, "reason": "Missing experience"},
+        execute_writes=True,
     )
     assert result.may_require_confirmation is True
     assert result.data["new_status"] == "rejected"

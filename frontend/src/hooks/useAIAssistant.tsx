@@ -12,7 +12,11 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiClientError } from "@/lib/api";
-import type { AIChatMessage, KnowledgeCitation } from "@/types/ai";
+import type {
+  AIChatMessage,
+  KnowledgeCitation,
+  RecruitmentPendingConfirmation,
+} from "@/types/ai";
 
 type AIAssistantContextValue = {
   open: boolean;
@@ -26,6 +30,8 @@ type AIAssistantContextValue = {
   error: string | null;
   clearError: () => void;
   ask: (question?: string) => Promise<void>;
+  confirmPending: (messageId: string) => Promise<void>;
+  cancelPending: (messageId: string) => void;
   hasConversation: boolean;
 };
 
@@ -42,6 +48,9 @@ function mapError(err: unknown, options: { recruitment: boolean }): string {
       return recruitment
         ? "You do not have recruitment access for the HR assistant."
         : "You do not have access to company knowledge. Ask HR if you need document permissions.";
+    }
+    if (err.status === 409) {
+      return err.message || "This confirmation is no longer valid. Please try again.";
     }
     if (err.status === 422) {
       return err.message || "Please enter a valid question.";
@@ -108,10 +117,13 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       try {
         if (useRecruitment) {
           const result = await api.askRecruitmentAgent({ question: text });
+          const pending: RecruitmentPendingConfirmation | null =
+            result.pending_confirmation ?? null;
           const assistantMessage: AIChatMessage = {
             id: newId(),
             role: "assistant",
             content: result.answer,
+            pendingConfirmation: pending,
           };
           setMessages((prev) => [...prev, assistantMessage]);
         } else {
@@ -135,6 +147,64 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     [draft, loading, useRecruitment]
   );
 
+  const confirmPending = useCallback(
+    async (messageId: string) => {
+      if (loading) return;
+      const target = messages.find((m) => m.id === messageId);
+      const token = target?.pendingConfirmation?.token;
+      if (!token) return;
+
+      setError(null);
+      setLoading(true);
+      try {
+        const result = await api.confirmRecruitmentAction({
+          confirmation_token: token,
+        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  pendingConfirmation: null,
+                  confirmationResolved: "confirmed" as const,
+                }
+              : m
+          )
+        );
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: "assistant",
+            content: result.answer,
+          },
+        ]);
+      } catch (err) {
+        setError(mapError(err, { recruitment: true }));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading, messages]
+  );
+
+  const cancelPending = useCallback((messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              pendingConfirmation: null,
+              confirmationResolved: "cancelled" as const,
+              content:
+                m.content +
+                "\n\n(Cancelled — no changes were made.)",
+            }
+          : m
+      )
+    );
+  }, []);
+
   const value = useMemo(
     () => ({
       open,
@@ -148,6 +218,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       error,
       clearError,
       ask,
+      confirmPending,
+      cancelPending,
       hasConversation: messages.length > 0,
     }),
     [
@@ -161,6 +233,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       error,
       clearError,
       ask,
+      confirmPending,
+      cancelPending,
     ]
   );
 

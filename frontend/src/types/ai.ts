@@ -33,6 +33,10 @@ export interface RecruitmentAskPayload {
   question: string;
 }
 
+export interface RecruitmentConfirmPayload {
+  confirmation_token: string;
+}
+
 export interface RecruitmentUsage {
   input_tokens: number | null;
   output_tokens: number | null;
@@ -40,11 +44,19 @@ export interface RecruitmentUsage {
   total_tokens: number | null;
 }
 
+export interface RecruitmentPendingConfirmation {
+  token: string;
+  tool_name: string;
+  summary: string;
+  expires_at: number;
+}
+
 export interface RecruitmentAskResponse {
   answer: string;
   model: string;
   tool_names_called: string[];
   usage: RecruitmentUsage | null;
+  pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
 export type AIChatRole = "user" | "assistant";
@@ -55,4 +67,6 @@ export interface AIChatMessage {
   content: string;
   citations?: KnowledgeCitation[];
   has_context?: boolean;
+  pendingConfirmation?: RecruitmentPendingConfirmation | null;
+  confirmationResolved?: "confirmed" | "cancelled";
 }

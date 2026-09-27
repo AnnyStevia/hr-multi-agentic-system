@@ -15,6 +15,10 @@ class ToolResult(BaseModel):
     data: dict[str, Any] | None = None
     error: str | None = None
     may_require_confirmation: bool = False
+    # Present when a write was gated pending explicit confirmation (no mutation yet).
+    confirmation_token: str | None = None
+    confirmation_summary: str | None = None
+    confirmation_expires_at: int | None = None
 
 
 ToolOperation = Literal["read", "write"]

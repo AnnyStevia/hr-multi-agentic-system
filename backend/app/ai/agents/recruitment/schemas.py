@@ -149,7 +149,7 @@ def map_fit_level(score: int) -> FitLevel:
     return "GOOD"
 
 
-# --- Recruitment Agent (Phase 6.3A) ---
+# --- Recruitment Agent (Phase 6.3A / 6.4E / 6.4F) ---
 
 
 class RecruitmentAgentRequest(BaseModel):
@@ -168,6 +168,15 @@ class RecruitmentAgentUsage(BaseModel):
     total_tokens: int | None = None
 
 
+class PendingConfirmationInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    tool_name: str
+    summary: str
+    expires_at: int
+
+
 class RecruitmentAgentAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -175,3 +184,4 @@ class RecruitmentAgentAnswer(BaseModel):
     model: str
     tool_names_called: list[str] = Field(default_factory=list)
     usage: RecruitmentAgentUsage | None = None
+    pending_confirmation: PendingConfirmationInfo | None = None

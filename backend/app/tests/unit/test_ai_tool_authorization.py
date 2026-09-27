@@ -291,15 +291,22 @@ def test_llm_supplied_identity_cannot_override_authenticated_identity():
     assert CurrentUserTool.executed is False
 
 
-def test_may_require_confirmation_echoed_without_blocking():
+def test_may_require_confirmation_gates_until_execute_writes():
     tool = ConfirmMetaTool()
     ctx = _context(permission_names=frozenset({"leaves:write"}))
     registry = ToolRegistry()
     registry.register(tool)
 
-    result = ToolExecutor(registry).execute(ctx, "confirm_meta", {"message": "submit"})
-    assert result.success is True
-    assert result.may_require_confirmation is True
+    pending = ToolExecutor(registry).execute(ctx, "confirm_meta", {"message": "submit"})
+    assert pending.success is True
+    assert pending.may_require_confirmation is True
+    assert pending.confirmation_token
+    assert ConfirmMetaTool.executed is False
+
+    executed = ToolExecutor(registry).execute(
+        ctx, "confirm_meta", {"message": "submit"}, execute_writes=True
+    )
+    assert executed.success is True
     assert ConfirmMetaTool.executed is True
 
 

@@ -20,8 +20,10 @@ from app.ai.core.context.models import AIExecutionContext
 from app.ai.core.llm import get_llm_provider
 from app.core.database import SessionLocal
 from app.core.config import settings
+from app.modules.employees.dependencies import get_employee_service
 from app.modules.employees.repository import DepartmentRepository
 from app.modules.identity.models import Permission, Role, RolePermission, User, UserRole
+from app.modules.interviews.dependencies import get_interview_meeting_service
 from app.modules.interviews.repository import InterviewRepository
 from app.modules.interviews.service import InterviewService
 from app.modules.notifications.repository import NotificationRepository
@@ -73,19 +75,20 @@ def main() -> int:
     db = SessionLocal()
     try:
         context = _context_with_recruitment_read(db)
+        notif = NotificationService(NotificationRepository(db))
         agent = RecruitmentAgent(
             llm_provider=get_llm_provider(),
             job_service=JobService(JobRepository(db), DepartmentRepository(db)),
-            application_service=ApplicationService(
-                db,
-                get_storage_service(),
-                NotificationService(NotificationRepository(db)),
-            ),
+            application_service=ApplicationService(db, get_storage_service(), notif),
             interview_service=InterviewService(
                 InterviewRepository(db),
                 ApplicationRepository(db),
-                NotificationService(NotificationRepository(db)),
+                notif,
             ),
+            meeting_service=get_interview_meeting_service(db),
+            employee_service=get_employee_service(db),
+            get_user=lambda uid: db.query(User).filter(User.id == uid).first(),
+            db=db,
         )
         answer = agent.ask(RecruitmentAgentRequest(question=QUERY, context=context))
         print("model:", answer.model)

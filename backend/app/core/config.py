@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-to-a-random-secret-key-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+    # Optional override for AI write confirmation HMAC (defaults to secret_key)
+    ai_confirmation_secret: str = ""
 
     cors_origins: str = "http://localhost:3000"
 

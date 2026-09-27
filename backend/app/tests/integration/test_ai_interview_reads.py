@@ -146,6 +146,9 @@ def test_agent_ask_uses_get_interview_with_seeded_data(client, db_session):
         job_service=MagicMock(),
         application_service=MagicMock(),
         interview_service=service,
+        meeting_service=MagicMock(),
+        employee_service=MagicMock(),
+        get_user=lambda _uid: None,
     )
     hr_user = create_user_with_role(
         db_session,

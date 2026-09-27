@@ -1,6 +1,7 @@
 "use client";
 
 import type { AIChatMessage } from "@/types/ai";
+import { useAIAssistant } from "@/hooks/useAIAssistant";
 import { AICitationList } from "./AICitationList";
 
 function renderAnswer(content: string) {
@@ -23,6 +24,8 @@ function renderAnswer(content: string) {
 
 export function AIMessage({ message }: { message: AIChatMessage }) {
   const isUser = message.role === "user";
+  const { confirmPending, cancelPending, loading } = useAIAssistant();
+  const pending = message.pendingConfirmation;
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -36,6 +39,36 @@ export function AIMessage({ message }: { message: AIChatMessage }) {
         <div className="whitespace-pre-wrap">
           {isUser ? message.content : renderAnswer(message.content)}
         </div>
+        {!isUser && pending ? (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-brand-900">
+            <p className="font-medium text-amber-900">Confirmation required</p>
+            <p className="mt-1 whitespace-pre-wrap text-brand-800">{pending.summary}</p>
+            <p className="mt-1 text-xs text-brand-600">
+              Tool: {pending.tool_name}. No changes applied yet.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void confirmPending(message.id)}
+                className="rounded-lg bg-brand-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+              >
+                Confirm
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => cancelPending(message.id)}
+                className="rounded-lg border border-brand-300 bg-white px-3 py-1.5 text-sm font-medium text-brand-800 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {!isUser && message.confirmationResolved === "confirmed" ? (
+          <p className="mt-2 text-xs font-medium text-emerald-700">Action confirmed.</p>
+        ) : null}
         {!isUser && message.citations ? (
           <AICitationList citations={message.citations} />
         ) : null}

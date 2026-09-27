@@ -33,6 +33,9 @@ def _agent(provider: MagicMock) -> RecruitmentAgent:
         job_service=MagicMock(),
         application_service=MagicMock(),
         interview_service=MagicMock(),
+        meeting_service=MagicMock(),
+        employee_service=MagicMock(),
+        get_user=lambda _uid: MagicMock(),
     )
 
 
@@ -67,6 +70,9 @@ def test_agent_answers_using_get_application_tool():
         job_service=job_service,
         application_service=application_service,
         interview_service=MagicMock(),
+        meeting_service=MagicMock(),
+        employee_service=MagicMock(),
+        get_user=lambda _uid: MagicMock(),
     )
     tool = agent.registry.get("get_application")
     tool.execute = MagicMock(  # type: ignore[method-assign]
@@ -237,7 +243,7 @@ def test_explicit_shortlist_invokes_write_tool():
             model="mock",
         ),
         LLMToolResponse(
-            content="Application 12 was shortlisted.",
+            content="Please confirm shortlisting application 12 in the UI.",
             tool_calls=(),
             model="mock",
         ),
@@ -265,8 +271,10 @@ def test_explicit_shortlist_invokes_write_tool():
         )
     )
     assert answer.tool_names_called == ["shortlist_application"]
-    assert "shortlisted" in answer.answer.lower()
-    tool.execute.assert_called_once()
+    assert answer.pending_confirmation is not None
+    assert answer.pending_confirmation.tool_name == "shortlist_application"
+    assert "confirm" in answer.answer.lower()
+    tool.execute.assert_not_called()
 
 
 def test_informational_request_does_not_invoke_write_tool():
