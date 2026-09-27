@@ -47,7 +47,8 @@ class FindEmployeesOutput(BaseModel):
 class FindEmployeesTool(BaseTool):
     name = "find_employees"
     description = (
-        "Search active employees by name substring for interviewer assignment. "
+        "Search active employees by name substring for entity resolution "
+        "(leave balances, requests, interviewer assignment, etc.). "
         "If count is 0 or greater than 1, ask the user to clarify with employee_id. "
         "Do not guess. Read-only."
     )

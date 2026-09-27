@@ -118,6 +118,16 @@ class LeaveService:
             raise AppException("Leave type not found", status_code=404)
         return leave_type
 
+    def get_type_by_name(self, name: str) -> LeaveType:
+        """Resolve leave type by exact name (trimmed). Raises 404 if missing."""
+        cleaned = (name or "").strip()
+        if not cleaned:
+            raise AppException("Leave type not found", status_code=404)
+        leave_type = self.repository.get_type_by_name(cleaned)
+        if leave_type is None:
+            raise AppException("Leave type not found", status_code=404)
+        return leave_type
+
     def create_type(self, payload: LeaveTypeCreateRequest) -> LeaveType:
         name = payload.name.strip()
         if self.repository.get_type_by_name(name) is not None:
@@ -279,13 +289,29 @@ class LeaveService:
         leave_type_id: int | None = None,
         status: LeaveRequestStatus | None = None,
         cancellation_status: LeaveCancellationStatus | None = None,
+        overlaps_start: date | None = None,
+        overlaps_end: date | None = None,
     ) -> list[LeaveRequest]:
-        return self.repository.list_requests(
+        rows = self.repository.list_requests(
             employee_id=employee_id,
             leave_type_id=leave_type_id,
             status=status,
             cancellation_status=cancellation_status,
         )
+        if overlaps_start is None and overlaps_end is None:
+            return rows
+        window_start = overlaps_start or date.min
+        window_end = overlaps_end or date.max
+        if window_start > window_end:
+            raise AppException(
+                "overlaps_start must be on or before overlaps_end",
+                status_code=400,
+            )
+        return [
+            r
+            for r in rows
+            if r.start_date <= window_end and r.end_date >= window_start
+        ]
 
     def get_request_for_hr(self, request_id: int) -> LeaveRequest:
         request = self.repository.get_request(request_id)
@@ -743,6 +769,20 @@ class LeaveService:
                 end_date=covering.end_date,
             ),
         )
+
+    def list_currently_on_leave(self, *, as_of: date | None = None) -> list[LeaveRequest]:
+        """Approved leave covering as_of (default: current UTC date). Thin façade over repository."""
+        day = as_of or datetime.now(UTC).date()
+        return self.repository.list_approved_covering(day)
+
+    def get_policy_for_type_year(self, leave_type_id: int, year: int) -> LeavePolicy:
+        self.get_type(leave_type_id)
+        if year < 2000 or year > 2100:
+            raise AppException("Invalid year", status_code=400)
+        policy = self.repository.get_policy_for_type_year(leave_type_id, year)
+        if policy is None:
+            raise AppException("Leave policy not found", status_code=404)
+        return policy
 
     def list_team_requests_for_user(
         self,

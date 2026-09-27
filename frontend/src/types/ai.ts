@@ -59,6 +59,26 @@ export interface RecruitmentAskResponse {
   pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
+export interface LeaveAskPayload {
+  question: string;
+}
+
+export interface LeaveUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  thinking_tokens: number | null;
+  total_tokens: number | null;
+}
+
+export interface LeaveAskResponse {
+  answer: string;
+  model: string;
+  tool_names_called: string[];
+  usage: LeaveUsage | null;
+}
+
+export type AIAssistantAgentMode = "knowledge" | "recruitment" | "leave";
+
 export type AIChatRole = "user" | "assistant";
 
 export interface AIChatMessage {

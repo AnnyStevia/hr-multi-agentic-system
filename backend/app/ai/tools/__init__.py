@@ -22,6 +22,15 @@ from app.ai.tools.interview_writes import (
     RetryInterviewMeetingTool,
 )
 from app.ai.tools.leave import GetMyLeaveBalanceTool
+from app.ai.tools.leave_reads import (
+    GetLeaveBalanceTool,
+    GetLeavePolicyTool,
+    GetLeaveRequestTool,
+    ListCurrentlyOnLeaveTool,
+    ListLeaveRequestsTool,
+    ListLeaveTypesTool,
+    ListPendingLeaveRequestsTool,
+)
 from app.ai.tools.llm_adapter import tool_to_definition
 from app.ai.tools.recruitment import (
     GetApplicationFitTool,
@@ -47,10 +56,17 @@ __all__ = [
     "GetInterviewFeedbackTool",
     "GetInterviewTool",
     "GetJobTool",
+    "GetLeaveBalanceTool",
+    "GetLeavePolicyTool",
+    "GetLeaveRequestTool",
     "GetMyLeaveBalanceTool",
     "GetUpcomingInterviewsTool",
+    "ListCurrentlyOnLeaveTool",
     "ListInterviewsTool",
     "ListJobApplicationsTool",
+    "ListLeaveRequestsTool",
+    "ListLeaveTypesTool",
+    "ListPendingLeaveRequestsTool",
     "ListRecruitmentApplicationsTool",
     "RecordInterviewOutcomeTool",
     "RejectApplicationTool",

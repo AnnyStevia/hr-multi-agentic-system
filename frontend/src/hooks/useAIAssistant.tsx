@@ -13,6 +13,7 @@ import {
 import { usePathname } from "next/navigation";
 import { api, ApiClientError } from "@/lib/api";
 import type {
+  AIAssistantAgentMode,
   AIChatMessage,
   KnowledgeCitation,
   RecruitmentPendingConfirmation,
@@ -33,6 +34,7 @@ type AIAssistantContextValue = {
   confirmPending: (messageId: string) => Promise<void>;
   cancelPending: (messageId: string) => void;
   hasConversation: boolean;
+  agentMode: AIAssistantAgentMode;
 };
 
 const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
@@ -41,30 +43,41 @@ function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function mapError(err: unknown, options: { recruitment: boolean }): string {
-  const recruitment = options.recruitment;
+function resolveAgentMode(pathname: string): AIAssistantAgentMode {
+  if (pathname.startsWith("/hr/leave")) return "leave";
+  if (pathname.startsWith("/hr")) return "recruitment";
+  return "knowledge";
+}
+
+function mapError(err: unknown, mode: AIAssistantAgentMode): string {
   if (err instanceof ApiClientError) {
     if (err.status === 403) {
-      return recruitment
-        ? "You do not have recruitment access for the HR assistant."
-        : "You do not have access to company knowledge. Ask HR if you need document permissions.";
+      if (mode === "leave") {
+        return "You do not have leave access for the HR assistant.";
+      }
+      if (mode === "recruitment") {
+        return "You do not have recruitment access for the HR assistant.";
+      }
+      return "You do not have access to company knowledge. Ask HR if you need document permissions.";
     }
     if (err.status === 409) {
-      return recruitment
+      return mode === "recruitment"
         ? "This confirmation is no longer valid or the action cannot be applied in the current state."
         : err.message || "This request conflicts with the current state.";
     }
     if (err.status === 422) {
-      return recruitment
-        ? "Please enter a valid question."
-        : err.message || "Please enter a valid question.";
+      return "Please enter a valid question.";
     }
     if (err.status === 0) {
       return "Cannot reach the server. Please try again in a moment.";
     }
-    return recruitment
-      ? "Something went wrong while consulting recruitment data. Please try again."
-      : "Something went wrong while consulting company knowledge. Please try again.";
+    if (mode === "leave") {
+      return "Something went wrong while consulting leave data. Please try again.";
+    }
+    if (mode === "recruitment") {
+      return "Something went wrong while consulting recruitment data. Please try again.";
+    }
+    return "Something went wrong while consulting company knowledge. Please try again.";
   }
   if (err instanceof Error && err.message) {
     return err.message;
@@ -72,15 +85,22 @@ function mapError(err: unknown, options: { recruitment: boolean }): string {
   return "Something went wrong. Please try again.";
 }
 
+function emptyPromptMessage(mode: AIAssistantAgentMode): string {
+  if (mode === "leave") return "Please enter a leave question.";
+  if (mode === "recruitment") return "Please enter a recruitment or interview question.";
+  return "Please enter a question about company knowledge.";
+}
+
 export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const agentMode = resolveAgentMode(pathname);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const skipCloseOnMount = useRef(true);
-  const useRecruitment = pathname.startsWith("/hr");
+  const previousMode = useRef(agentMode);
 
   const openAssistant = useCallback(() => setOpen(true), []);
   const closeAssistant = useCallback(() => setOpen(false), []);
@@ -95,15 +115,19 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     setOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (previousMode.current === agentMode) return;
+    previousMode.current = agentMode;
+    setMessages([]);
+    setDraft("");
+    setError(null);
+  }, [agentMode]);
+
   const ask = useCallback(
     async (question?: string) => {
       const text = (question ?? draft).trim();
       if (!text) {
-        setError(
-          useRecruitment
-            ? "Please enter a recruitment or interview question."
-            : "Please enter a question about company knowledge."
-        );
+        setError(emptyPromptMessage(agentMode));
         return;
       }
       if (loading) return;
@@ -119,7 +143,15 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       try {
-        if (useRecruitment) {
+        if (agentMode === "leave") {
+          const result = await api.askLeaveAgent({ question: text });
+          const assistantMessage: AIChatMessage = {
+            id: newId(),
+            role: "assistant",
+            content: result.answer,
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+        } else if (agentMode === "recruitment") {
           const result = await api.askRecruitmentAgent({ question: text });
           const pending: RecruitmentPendingConfirmation | null =
             result.pending_confirmation ?? null;
@@ -143,12 +175,12 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           setMessages((prev) => [...prev, assistantMessage]);
         }
       } catch (err) {
-        setError(mapError(err, { recruitment: useRecruitment }));
+        setError(mapError(err, agentMode));
       } finally {
         setLoading(false);
       }
     },
-    [draft, loading, useRecruitment]
+    [draft, loading, agentMode]
   );
 
   const confirmPending = useCallback(
@@ -184,7 +216,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           },
         ]);
       } catch (err) {
-        setError(mapError(err, { recruitment: true }));
+        setError(mapError(err, "recruitment"));
       } finally {
         setLoading(false);
       }
@@ -200,9 +232,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
               ...m,
               pendingConfirmation: null,
               confirmationResolved: "cancelled" as const,
-              content:
-                m.content +
-                "\n\n(Cancelled — no changes were made.)",
+              content: m.content + "\n\n(Cancelled — no changes were made.)",
             }
           : m
       )
@@ -225,6 +255,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       confirmPending,
       cancelPending,
       hasConversation: messages.length > 0,
+      agentMode,
     }),
     [
       open,
@@ -239,6 +270,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       ask,
       confirmPending,
       cancelPending,
+      agentMode,
     ]
   );
 

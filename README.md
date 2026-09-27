@@ -2,7 +2,7 @@
 
 A web-based HR management platform with a layered AI foundation — a 5th-year Software Engineering final-year project (PFE).
 
-The product is a **real HR system first**: identity, recruitment, organization, onboarding, leave, documents, and dashboards. The AI layer sits beside Core HR — it never invents authorization, never touches the database directly, and answers company-knowledge questions only from retrieved, ACL-filtered documents.
+The product is a **real HR system first**: identity, recruitment, organization, onboarding, leave, documents, and dashboards. The AI layer sits beside Core HR — it never invents authorization, never touches the database directly, and answers only from authorized tools or retrieved, ACL-filtered documents.
 
 ---
 
@@ -55,7 +55,7 @@ flowchart TB
 
 ```
 backend/app/
-├── api/                 # Versioned HTTP routes (incl. /ai/recruitment, /ai/knowledge)
+├── api/                 # Versioned HTTP routes (incl. /ai/recruitment, /ai/leave, /ai/knowledge)
 ├── core/                # Config, security, database
 ├── modules/             # Core HR domains
 │   ├── identity/        # Auth, RBAC, seed admin
@@ -71,8 +71,8 @@ backend/app/
 │   └── profile/         # Self-service profile
 ├── ai/                  # AI foundation (in-tree)
 │   ├── core/            # LLM providers, AIExecutionContext
-│   ├── agents/          # KnowledgeAgent, RecruitmentAgent
-│   ├── tools/           # Registry, auth, recruitment + interview tools
+│   ├── agents/          # KnowledgeAgent, RecruitmentAgent, LeaveAgent
+│   ├── tools/           # Registry, auth, recruitment / interview / leave tools
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
 │   ├── orchestration/   # Tool roundtrips
@@ -82,14 +82,15 @@ backend/app/
 
 ### Floating assistant (frontend)
 
-On authenticated portals, the floating assistant routes by path:
+On authenticated portals, the floating assistant is **one UI** that routes to a backend agent by path (interim until a multi-agent orchestrator):
 
 | Path | Backend |
 |------|---------|
-| `/hr/*` | **Recruitment Agent** (`POST /api/v1/ai/recruitment/ask` + `/confirm`) |
+| `/hr/leave*` | **Leave Agent** (`POST /api/v1/ai/leave/ask`) — read-only |
+| Other `/hr/*` | **Recruitment Agent** (`POST /api/v1/ai/recruitment/ask` + `/confirm`) |
 | Elsewhere (e.g. employee) | **Knowledge Agent** (RAG over company documents) |
 
-HR write proposals show a **Confirm / Cancel** card. The confirmation token stays in client state (not rendered as text). Cancel drops the token locally; Confirm calls the dedicated confirm endpoint.
+Switching paths clears the in-session conversation so answers are not mixed across agents. HR recruitment write proposals show a **Confirm / Cancel** card. The confirmation token stays in client state (not rendered as text). Cancel drops the token locally; Confirm calls the dedicated confirm endpoint.
 
 ---
 
@@ -186,6 +187,40 @@ Hardening report: [`backend/docs/phase_6_4g_recruitment_hardening_report.md`](ba
 
 ---
 
+### Leave AI (Phases 7.1–7.2) — read-only HR agent
+
+```mermaid
+flowchart TD
+  HR[HR on /hr/leave]
+  Ask[POST /ai/leave/ask]
+  Agent[LeaveAgent + tools]
+  Svc[LeaveService / EmployeeService]
+  DB[(PostgreSQL)]
+
+  HR --> Ask --> Agent
+  Agent -->|read tools only| Svc --> DB
+```
+
+**What it covers**
+
+| Phase | Capability |
+|-------|------------|
+| 7.1 | Leave Agent + six leave read tools + `POST /ai/leave/ask` (HR staff, `leaves:read`) |
+| 7.2 | Hardening: HR-role tool auth, `find_employees` identity resolution, leave types/policy-by-name, UTC dates, status semantics, expanded tests |
+| FE | Path route `/hr/leave*` → Leave Agent for in-app testing |
+
+**Read tools** — `find_employees`, `list_leave_types`, `get_leave_balance`, `get_leave_request`, `list_leave_requests`, `list_pending_leave_requests`, `list_currently_on_leave`, `get_leave_policy`.
+
+**Rules (summary)**
+
+- Agent → Tool → `LeaveService` / `EmployeeService` only (no direct DB).
+- Tools require **HR or admin** roles plus `leaves:read` (endpoint also uses `require_hr_staff`).
+- Balances report service integers as-is (`days_available` does not subtract pending).
+- No leave writes yet (create / approve / cancel remain Core HR UI only).
+- Name → employee via `find_employees`; ambiguous matches must be clarified, never guessed.
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -240,13 +275,14 @@ Hardening report: [`backend/docs/phase_6_4g_recruitment_hardening_report.md`](ba
 - Dual manager / HR approval workflow and calendar views
 - Derived on-leave work status for dashboards
 - Cancellation request / approve / reject flows
+- **Leave Agent** (HR, read-only): balances, requests, pending queue, currently on leave, policies — via `/hr/leave*` assistant or `POST /api/v1/ai/leave/ask`
 
 ### HR dashboard & portals
 
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating AI assistant (Knowledge on general portals; Recruitment on `/hr/*`)
+- Floating AI assistant (Knowledge elsewhere; Recruitment on most `/hr/*`; Leave on `/hr/leave*`)
 
 ### AI foundation (shipped)
 
@@ -254,13 +290,15 @@ Hardening report: [`backend/docs/phase_6_4g_recruitment_hardening_report.md`](ba
 - Tool registry with authorization
 - **Knowledge Agent** — RAG Q&A with citations over company documents
 - **Recruitment Agent** — authorized read/write tools over recruitment & interviews (writes confirmation-gated)
+- **Leave Agent** — authorized read tools over leave data (no writes yet)
 - Full RAG path through **grounded generation + citations** (see pipeline above)
 - Smoke scripts under `backend/scripts/` (RAG + recruitment agent helpers)
 
 ### Not yet
 
-- Leave / Onboarding / Training / Document specialized agents
-- Multi-agent orchestrator
+- Leave **write** tools (approve / cancel via agent) and confirmation UX for leave
+- Onboarding / Training / Document specialized agents
+- Multi-agent orchestrator (intent-based routing across agents in one chat)
 - Persistent chat history / rich Markdown renderer for the assistant
 - LLM rerank / query reformulation for RAG
 
@@ -359,9 +397,16 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
+### Leave Agent (HR)
+
+1. Log in as HR → open **Leave** (`/hr/leave*`) → floating assistant (Leave mode).
+2. Ask read questions (balances by employee name, pending requests, who is on leave, policies).
+3. Ambiguous names prompt for `employee_id` — the agent must not guess.
+4. Other `/hr/*` pages still use the Recruitment Agent until orchestration lands.
+
 ### Recruitment Agent (HR)
 
-1. Log in as HR → open any `/hr/*` page → floating assistant.
+1. Log in as HR → open any non-leave `/hr/*` page → floating assistant.
 2. Ask read questions (applications, fit, interviews).
 3. For writes (e.g. “Shortlist application 12”), expect a confirmation card → **Confirm** mutates; **Cancel** does nothing.
 4. Writes never claim success until the confirm path and tool result succeed.
@@ -410,7 +455,8 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] RAG through grounded generation + citations (Phases 5.1–5.8)
 - [x] Knowledge Agent + in-app floating assistant
 - [x] Recruitment AI (CV extraction, fit, agent reads/writes, Meet, confirmation, audit) — Phases 6.1–6.4G
-- [ ] Additional domain agents (Leave / Onboarding / …) & multi-agent orchestrator
+- [x] Leave Agent (read-only tools + `/hr/leave*` assistant routing) — Phases 7.1–7.2
+- [ ] Leave write tools + confirmation; other domain agents; multi-agent orchestrator
 - [ ] Assistant chat history & richer answer rendering
 
 ---
