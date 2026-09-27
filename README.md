@@ -18,7 +18,7 @@ flowchart TB
     API[API routers]
     Modules[Core HR modules]
     AI[AI layer]
-    Shared[Shared storage / auth]
+    Shared[Shared storage / auth / meetings]
     API --> Modules
     API --> AI
     Modules --> Shared
@@ -28,12 +28,15 @@ flowchart TB
   subgraph data [Data plane]
     PG[(PostgreSQL + pgvector)]
     S3[(AWS S3)]
+    Meet[Google Calendar Meet]
   end
 
   Web -->|JWT REST| API
   Modules --> PG
   Shared --> S3
+  Shared --> Meet
   AI -->|embeddings / FTS / vectors| PG
+  AI -->|tools via services only| Modules
   AI -->|read company PDFs| Shared
 ```
 
@@ -44,20 +47,21 @@ flowchart TB
 | Modular monolith | Domain modules under `backend/app/modules/` — one deployable API |
 | User ≠ Employee | Identity accounts are separate from employment records ([ADR 002](docs/decisions/002-user-vs-employee.md)) |
 | Agents never hit the DB | `Agent → Tool → Service → DB` ([ADR 003](docs/decisions/003-agent-database-isolation.md)) |
-| Auth before generation | `AIExecutionContext` + permission filters run in retrieval; the LLM only sees authorized context |
+| Auth before generation | `AIExecutionContext` + permission filters run before tools / retrieval; the LLM only sees authorized context |
+| Writes need confirmation | Recruitment write tools return an HMAC-signed pending action; HR must Confirm in the UI before mutation |
 | Embed ≠ generate | `gemini-embedding-2` for vectors; conversational `GEMINI_MODEL` for grounded answers |
 
 ### Backend layout
 
 ```
 backend/app/
-├── api/                 # Versioned HTTP routes
+├── api/                 # Versioned HTTP routes (incl. /ai/recruitment, /ai/knowledge)
 ├── core/                # Config, security, database
 ├── modules/             # Core HR domains
 │   ├── identity/        # Auth, RBAC, seed admin
 │   ├── employees/       # Workforce records
-│   ├── recruitment/     # Jobs & applications
-│   ├── interviews/      # Slots, outcomes, hire
+│   ├── recruitment/     # Jobs, applications, fit fields, rejection_reason
+│   ├── interviews/      # Invites, slots, feedback, outcomes, Meet
 │   ├── onboarding/      # Tasks & verification
 │   ├── documents/       # Employee docs + company library
 │   ├── training/        # Assignments
@@ -67,11 +71,27 @@ backend/app/
 │   └── profile/         # Self-service profile
 ├── ai/                  # AI foundation (in-tree)
 │   ├── core/            # LLM providers, AIExecutionContext
-│   ├── tools/           # Registry, auth, leave-balance tool
-│   ├── orchestration/   # Tool roundtrips (no multi-agent yet)
+│   ├── agents/          # KnowledgeAgent, RecruitmentAgent
+│   ├── tools/           # Registry, auth, recruitment + interview tools
+│   ├── confirmation/    # HMAC confirmation tokens for AI writes
+│   ├── audit/           # ai_tool_action_audits (minimal write audit)
+│   ├── orchestration/   # Tool roundtrips
 │   └── rag/             # Ingest → embed → retrieve → answer
-└── shared/              # StorageService (S3), cross-cutting helpers
+└── shared/              # StorageService (S3), MeetingProvider, helpers
 ```
+
+### Floating assistant (frontend)
+
+On authenticated portals, the floating assistant routes by path:
+
+| Path | Backend |
+|------|---------|
+| `/hr/*` | **Recruitment Agent** (`POST /api/v1/ai/recruitment/ask` + `/confirm`) |
+| Elsewhere (e.g. employee) | **Knowledge Agent** (RAG over company documents) |
+
+HR write proposals show a **Confirm / Cancel** card. The confirmation token stays in client state (not rendered as text). Cancel drops the token locally; Confirm calls the dedicated confirm endpoint.
+
+---
 
 ### AI / RAG pipeline (Phases 5.1–5.8)
 
@@ -102,6 +122,70 @@ Authorization is decided **before** generation. Document text is treated as untr
 
 ---
 
+### Recruitment AI (Phases 6.1–6.4G) — functionally complete
+
+```mermaid
+flowchart TD
+  HR[HR natural language]
+  Ask[POST /ai/recruitment/ask]
+  Agent[RecruitmentAgent + tools]
+  Gate[Confirmation gate]
+  Pending[pending_confirmation + HMAC token]
+  UI[Confirm or Cancel]
+  Conf[POST /ai/recruitment/confirm]
+  Svc[ApplicationService / InterviewService / MeetingService]
+  DB[(PostgreSQL)]
+  Audit[ai_tool_action_audits]
+
+  HR --> Ask --> Agent
+  Agent -->|read tools| Svc
+  Agent -->|write tool| Gate
+  Gate -->|no execute yet| Pending --> UI
+  UI -->|Confirm| Conf --> Agent
+  Agent -->|verify HMAC + re-auth + execute_writes| Svc --> DB
+  Agent --> Audit
+```
+
+**What it covers**
+
+| Phase | Capability |
+|-------|------------|
+| 6.1 | CV extraction (careers apply pre-fill) |
+| 6.2 | Candidate ↔ job fit analysis (HR-only scores) |
+| 6.3 | Recruitment Agent reads + overview + shortlist/reject |
+| 6.4A–C | Multi-interviewer invites, notifications, slots, structured feedback |
+| 6.4D | Real Google Meet via Calendar `conferenceData` (`MeetingProvider`) |
+| 6.4E | Interview **read** tools on the agent |
+| 6.4F | Interview **write** tools behind confirmation |
+| 6.4G | Hardening: rejection reason, audits, confirm UX, regression |
+
+**Read tools (examples)** — `get_job`, `get_application`, `get_application_fit`, `list_recruitment_applications`, `find_employees`, `get_interview`, `list_interviews`, `get_interview_feedback`, `get_candidate_interviews`, `get_upcoming_interviews`.
+
+**Write tools (all confirmation-gated, `recruitment:write`)**
+
+1. `shortlist_application`
+2. `reject_application` (optional reason **persisted** as `rejection_reason`; blocked while an active interview exists)
+3. `create_interview_invitation` (primary + optional panel — only at invite time)
+4. `retry_interview_meeting` (idempotent Meet provisioning; never calls Google from the agent)
+5. `record_interview_outcome` (`rejected` \| `another_interview` \| `hired` — explicit HR only)
+
+**Confirmation security**
+
+- Opaque HMAC token binds `user_id`, `tool_name`, exact `arguments`, and expiry (~10 minutes).
+- Confirm re-checks permission and current business state; a valid HMAC alone is not enough.
+- Replay after a successful mutate is blocked by domain transitions (Meet retry stays intentionally idempotent).
+- Minimal append-only audit: `ai_tool_action_audits` (`proposed` → `confirmed` → `executed` / `failed`).
+
+**Interview workflow (domain)**
+
+- HR creates invitation (shortlisted application) → primary proposes slots → candidate selects → Meet ensured → primary completes with recommendation → HR records outcome (hire may create employee + onboarding).
+- Agent does **not** propose/select slots, submit feedback, cancel/reschedule, or change panel after invite (known domain limits).
+- Interviewer recommendation ≠ automatic hire/reject.
+
+Hardening report: [`backend/docs/phase_6_4g_recruitment_hardening_report.md`](backend/docs/phase_6_4g_recruitment_hardening_report.md).
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -110,6 +194,7 @@ Authorization is decided **before** generation. Document text is treated as untr
 | Backend | FastAPI, SQLAlchemy 2, Alembic |
 | Database | PostgreSQL 16 + **pgvector** |
 | Object storage | AWS S3 (`StorageService`) |
+| Meetings | Google Calendar API + Meet (`MeetingProvider`: noop / fake / google) |
 | Embeddings | Gemini Embedding 2 (`gemini-embedding-2`) |
 | Generation / tools | Gemini Flash (`GEMINI_MODEL`), provider-agnostic `LLMProvider` (Mistral adapter also present) |
 | Auth | JWT + RBAC permissions |
@@ -128,8 +213,13 @@ Authorization is decided **before** generation. Document text is treated as untr
 ### Recruitment & interviews
 
 - Job posting, application questions, CV / cover letter upload to S3
-- Status workflow: submitted → screening → shortlisted / rejected
-- Interview invitations (2–5 slots), outcomes, shortlist notifications
+- CV extraction pre-fill on careers apply
+- Status workflow: submitted → screening → shortlisted / rejected / hired (hire only via interview outcome)
+- Optional **rejection reason** (HR-visible); candidates get status notifications on shortlist and reject
+- Fit analysis for HR review (score, skills, explanation)
+- Multi-interviewer invitations (one primary + panel), primary-led slots, candidate slot confirm
+- Structured interviewer feedback + recommendation; HR final outcome
+- Google Meet link provisioning (idempotent; credentials never exposed to the frontend or AI tool output)
 - Hire → employee creation and onboarding kickoff
 
 ### Organization & employees
@@ -149,26 +239,30 @@ Authorization is decided **before** generation. Document text is treated as untr
 - Leave types, policies, and balances
 - Dual manager / HR approval workflow and calendar views
 - Derived on-leave work status for dashboards
+- Cancellation request / approve / reject flows
 
 ### HR dashboard & portals
 
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
+- Floating AI assistant (Knowledge on general portals; Recruitment on `/hr/*`)
 
 ### AI foundation (shipped)
 
 - Provider-agnostic LLM layer + `AIExecutionContext`
-- Tool registry with authorization (e.g. leave-balance tool)
+- Tool registry with authorization
+- **Knowledge Agent** — RAG Q&A with citations over company documents
+- **Recruitment Agent** — authorized read/write tools over recruitment & interviews (writes confirmation-gated)
 - Full RAG path through **grounded generation + citations** (see pipeline above)
-- Smoke scripts under `backend/scripts/` for ingest → answer
+- Smoke scripts under `backend/scripts/` (RAG + recruitment agent helpers)
 
 ### Not yet
 
-- Knowledge Agent / multi-agent orchestration UI
-- Conversational HTTP chat API for end users
-- Recruitment AI (CV scoring, ranking)
-- LLM rerank / query reformulation
+- Leave / Onboarding / Training / Document specialized agents
+- Multi-agent orchestrator
+- Persistent chat history / rich Markdown renderer for the assistant
+- LLM rerank / query reformulation for RAG
 
 ---
 
@@ -179,8 +273,9 @@ Authorization is decided **before** generation. Document text is treated as untr
 - Docker & Docker Compose
 - Node.js 20+ (local frontend)
 - Python 3.12+ (local backend)
-- Gemini API key for AI / RAG smoke tests
+- Gemini API key for AI / RAG / Recruitment Agent
 - AWS credentials for S3 document flows
+- Optional: Google OAuth client + refresh token for live Meet (`MEETING_PROVIDER=google`)
 
 ### Run with Docker
 
@@ -209,6 +304,16 @@ Copy `backend/.env.example` → `backend/.env` and set at least:
 - `GEMINI_API_KEY` / `GEMINI_MODEL`
 - `AWS_*` for S3
 - `DATABASE_URL` (Compose vs host — see comments in `.env.example`)
+- `SECRET_KEY` (also used for AI write confirmation HMAC unless `AI_CONFIRMATION_SECRET` is set)
+- Optional Meet: `MEETING_PROVIDER`, `GOOGLE_MEET_*`
+
+After pulling, apply migrations:
+
+```bash
+cd backend
+alembic upgrade head
+# Current head includes 045_application_rejection_reason
+```
 
 ---
 
@@ -254,22 +359,30 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
+### Recruitment Agent (HR)
+
+1. Log in as HR → open any `/hr/*` page → floating assistant.
+2. Ask read questions (applications, fit, interviews).
+3. For writes (e.g. “Shortlist application 12”), expect a confirmation card → **Confirm** mutates; **Cancel** does nothing.
+4. Writes never claim success until the confirm path and tool result succeed.
+
 ---
 
 ## Project structure
 
 ```
 HR-Multi-Agentic-System/
-├── backend/                 # FastAPI app, Alembic, RAG smoke scripts
+├── backend/                 # FastAPI app, Alembic, smoke scripts
 │   ├── app/
 │   │   ├── api/
-│   │   ├── ai/              # LLM, tools, RAG
+│   │   ├── ai/              # LLM, agents, tools, confirmation, audit, RAG
 │   │   ├── modules/         # Core HR domains
-│   │   └── shared/          # S3 storage, etc.
+│   │   └── shared/          # S3, MeetingProvider, etc.
 │   ├── alembic/
-│   ├── scripts/             # RAG / ingest smoke tests
+│   ├── docs/                # Phase reports (e.g. 6.4G hardening)
+│   ├── scripts/             # RAG / recruitment smoke helpers
 │   └── tests/
-├── frontend/                # Next.js role portals
+├── frontend/                # Next.js role portals + AI assistant
 ├── docs/
 │   ├── architecture/        # Architecture index
 │   └── decisions/           # ADRs
@@ -295,8 +408,10 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Core HR security hardening (RBAC / IDOR, inactive-manager validation)
 - [x] AI foundation (LLM providers, execution context, authorized tools)
 - [x] RAG through grounded generation + citations (Phases 5.1–5.8)
-- [ ] Knowledge Agent / multi-agent orchestration & chat UX
-- [ ] Recruitment AI (scoring, ranking, CV extraction)
+- [x] Knowledge Agent + in-app floating assistant
+- [x] Recruitment AI (CV extraction, fit, agent reads/writes, Meet, confirmation, audit) — Phases 6.1–6.4G
+- [ ] Additional domain agents (Leave / Onboarding / …) & multi-agent orchestrator
+- [ ] Assistant chat history & richer answer rendering
 
 ---
 

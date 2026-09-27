@@ -42,7 +42,11 @@ def update_application_status(
 ) -> HrApplicationDetail:
     try:
         return build_hr_application_detail(
-            application_service.update_status(application_id, payload.status)
+            application_service.update_status(
+                application_id,
+                payload.status,
+                rejection_reason=payload.rejection_reason,
+            )
         )
     except AppException as exc:
         _handle(exc)

@@ -2,7 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.ai.agents.recruitment import RecruitmentAgent, RecruitmentAgentRequest
+from app.ai.agents.recruitment.exceptions import RecruitmentAgentError
+from app.ai.audit.models import AiToolActionAudit
 from app.ai.core.context import AIExecutionContext
 from app.ai.core.llm.base import LLMToolResponse, ToolCall
 from app.modules.employees.dependencies import get_employee_service
@@ -11,6 +15,7 @@ from app.modules.identity.models import User
 from app.modules.interviews.meeting_service import InterviewMeetingService
 from app.modules.interviews.repository import InterviewRepository
 from app.modules.interviews.service import InterviewService
+from app.modules.notifications.models import Notification, NotificationType
 from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.service import NotificationService
 from app.modules.recruitment.application_service import ApplicationService
@@ -109,6 +114,118 @@ def test_shortlist_ask_returns_pending_and_confirm_mutates(client, db_session):
     assert "shortlist_application" in confirmed.tool_names_called
     db_session.refresh(row)
     assert row.status == ApplicationStatus.SHORTLISTED
+
+
+def test_reject_persists_reason_and_notifies(client, db_session):
+    application, _job, _cand_headers, _storage = _submit_application(
+        client, db_session, email="write.reject@test.com"
+    )
+    row = db_session.query(Application).filter(Application.id == application["id"]).one()
+    row.status = ApplicationStatus.SCREENING
+    db_session.commit()
+
+    create_user_with_role(
+        db_session,
+        email="hr.write.reject@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    hr_user = db_session.query(User).filter(User.email == "hr.write.reject@test.com").one()
+
+    provider = MagicMock()
+    provider.generate_with_tools.side_effect = [
+        LLMToolResponse(
+            content=None,
+            tool_calls=(
+                ToolCall(
+                    id="r1",
+                    name="reject_application",
+                    arguments={
+                        "application_id": application["id"],
+                        "reason": "Insufficient experience",
+                    },
+                ),
+            ),
+            model="mock",
+        ),
+        LLMToolResponse(
+            content="Please confirm rejection.",
+            tool_calls=(),
+            model="mock",
+        ),
+    ]
+    agent = _build_agent(db_session, provider)
+    answer = agent.ask(
+        RecruitmentAgentRequest(
+            question=f"Reject application {application['id']} for insufficient experience",
+            context=_hr_write_context(hr_user.id),
+        )
+    )
+    assert answer.pending_confirmation is not None
+    confirmed = agent.confirm(
+        token=answer.pending_confirmation.token,
+        context=_hr_write_context(hr_user.id),
+    )
+    assert "reject_application" in confirmed.tool_names_called
+    db_session.refresh(row)
+    assert row.status == ApplicationStatus.REJECTED
+    assert row.rejection_reason == "Insufficient experience"
+    notifs = (
+        db_session.query(Notification)
+        .filter(Notification.type == NotificationType.APPLICATION_STATUS_CHANGED)
+        .all()
+    )
+    assert any("not successful" in (n.message or "").lower() for n in notifs)
+    audits = (
+        db_session.query(AiToolActionAudit)
+        .filter(AiToolActionAudit.tool_name == "reject_application")
+        .all()
+    )
+    assert {a.phase for a in audits} >= {"proposed", "confirmed", "executed"}
+
+
+def test_shortlist_replay_confirm_fails_after_success(client, db_session):
+    application, _job, _cand_headers, _storage = _submit_application(
+        client, db_session, email="write.replay@test.com"
+    )
+    row = db_session.query(Application).filter(Application.id == application["id"]).one()
+    row.status = ApplicationStatus.SCREENING
+    db_session.commit()
+
+    create_user_with_role(
+        db_session,
+        email="hr.write.replay@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    hr_user = db_session.query(User).filter(User.email == "hr.write.replay@test.com").one()
+
+    provider = MagicMock()
+    provider.generate_with_tools.side_effect = [
+        LLMToolResponse(
+            content=None,
+            tool_calls=(
+                ToolCall(
+                    id="c1",
+                    name="shortlist_application",
+                    arguments={"application_id": application["id"]},
+                ),
+            ),
+            model="mock",
+        ),
+        LLMToolResponse(content="Confirm please.", tool_calls=(), model="mock"),
+    ]
+    agent = _build_agent(db_session, provider)
+    answer = agent.ask(
+        RecruitmentAgentRequest(
+            question=f"Shortlist application {application['id']}",
+            context=_hr_write_context(hr_user.id),
+        )
+    )
+    token = answer.pending_confirmation.token
+    agent.confirm(token=token, context=_hr_write_context(hr_user.id))
+    with pytest.raises(RecruitmentAgentError):
+        agent.confirm(token=token, context=_hr_write_context(hr_user.id))
 
 
 def test_candidate_cannot_call_confirm_endpoint(client, db_session):

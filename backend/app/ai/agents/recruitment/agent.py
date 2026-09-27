@@ -263,11 +263,7 @@ class RecruitmentAgent:
 
         summary = payload.summary
         data = result.data or {}
-        answer = (
-            f"Confirmed and completed: {payload.tool_name}.\n\n"
-            f"{summary}\n\n"
-            f"Result: {data}"
-        )
+        answer = _format_confirm_answer(payload.tool_name, summary, data)
         return RecruitmentAgentAnswer(
             answer=answer,
             model="confirmed-action",
@@ -309,3 +305,35 @@ class RecruitmentAgent:
         except Exception:
             # Audit must not break the agent path.
             pass
+
+
+def _format_confirm_answer(tool_name: str, summary: str, data: dict) -> str:
+    """Human-readable confirm result without dumping raw tool JSON."""
+    lines = [
+        f"Confirmed and completed: {tool_name}.",
+        "",
+        summary.strip() or "Action completed.",
+    ]
+    facts: list[str] = []
+    for key in (
+        "application_id",
+        "interview_id",
+        "previous_status",
+        "new_status",
+        "status",
+        "outcome",
+        "candidate_name",
+        "job_title",
+        "meeting_available",
+        "meeting_url",
+        "hired_employee_id",
+        "reason",
+        "message",
+    ):
+        if key in data and data[key] is not None and data[key] != "":
+            facts.append(f"- {key}: {data[key]}")
+    if facts:
+        lines.append("")
+        lines.append("Result:")
+        lines.extend(facts)
+    return "\n".join(lines)

@@ -50,10 +50,14 @@ function mapError(err: unknown, options: { recruitment: boolean }): string {
         : "You do not have access to company knowledge. Ask HR if you need document permissions.";
     }
     if (err.status === 409) {
-      return err.message || "This confirmation is no longer valid. Please try again.";
+      return recruitment
+        ? "This confirmation is no longer valid or the action cannot be applied in the current state."
+        : err.message || "This request conflicts with the current state.";
     }
     if (err.status === 422) {
-      return err.message || "Please enter a valid question.";
+      return recruitment
+        ? "Please enter a valid question."
+        : err.message || "Please enter a valid question.";
     }
     if (err.status === 0) {
       return "Cannot reach the server. Please try again in a moment.";

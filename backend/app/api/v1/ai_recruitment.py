@@ -167,6 +167,6 @@ def confirm_recruitment(
     except RecruitmentAgentError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=exc.message if getattr(exc, "message", None) else str(exc),
+            detail="Unable to complete the confirmed recruitment action right now.",
         ) from exc
     return _to_response(result)

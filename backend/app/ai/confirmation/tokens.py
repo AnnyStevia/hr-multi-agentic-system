@@ -47,7 +47,7 @@ class ConfirmationError(Exception):
 def _secret() -> bytes:
     raw = (getattr(settings, "ai_confirmation_secret", None) or settings.secret_key or "").strip()
     if not raw:
-        raw = "dev-ai-confirmation-secret"
+        raise ConfirmationError("AI confirmation signing secret is not configured")
     return raw.encode("utf-8")
 
 

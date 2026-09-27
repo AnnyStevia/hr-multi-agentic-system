@@ -401,7 +401,8 @@ class RejectApplicationTool(BaseTool):
     name = "reject_application"
     description = (
         "Reject an application by application_id (sets status to rejected). "
-        "Optional reason is for the reply only and is not stored. "
+        "Optional reason is persisted for HR audit. "
+        "Cannot reject while an active interview exists. "
         "Use only on an explicit reject request. Write action."
     )
     metadata = _WRITE_META
@@ -422,13 +423,15 @@ class RejectApplicationTool(BaseTool):
         candidate_name = current.candidate.user.full_name
         job_id = current.job_id
         job_title = current.job.title
+        reason = (args.reason or "").strip() or None
         updated = _call_service(
             lambda: self._applications.update_status(
-                args.application_id, ApplicationStatus.REJECTED
+                args.application_id,
+                ApplicationStatus.REJECTED,
+                rejection_reason=reason,
             ),
             error_message="Failed to reject application",
         )
-        reason = (args.reason or "").strip() or None
         return ApplicationStatusChangeOutput(
             application_id=updated.id,
             previous_status=previous,
@@ -439,5 +442,5 @@ class RejectApplicationTool(BaseTool):
             candidate_name=candidate_name,
             job_id=job_id,
             job_title=job_title,
-            reason=reason,
+            reason=updated.rejection_reason or reason,
         )

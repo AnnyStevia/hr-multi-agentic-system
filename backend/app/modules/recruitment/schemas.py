@@ -245,6 +245,7 @@ class ApplicationStatusUpdateRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     status: ApplicationStatus
+    rejection_reason: str | None = Field(default=None, max_length=2000)
 
 
 class FitAssessmentResponse(BaseModel):
@@ -279,6 +280,7 @@ class HrApplicationDetail(ApplicationDetail):
     """Application detail for HR/admin, including optional fit assessment."""
 
     fit_assessment: FitAssessmentResponse | None = None
+    rejection_reason: str | None = None
 
 
 class PresignedDocumentResponse(BaseModel):

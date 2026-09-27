@@ -182,6 +182,7 @@ def test_reject_success_echoes_reason():
     service = MagicMock()
     current = _application_mock(status=ApplicationStatus.SUBMITTED)
     updated = _application_mock(status=ApplicationStatus.REJECTED)
+    updated.rejection_reason = "Missing experience"
     service.get_for_hr.return_value = current
     service.update_status.return_value = updated
     registry = ToolRegistry()
@@ -195,7 +196,9 @@ def test_reject_success_echoes_reason():
     assert result.may_require_confirmation is True
     assert result.data["new_status"] == "rejected"
     assert result.data["reason"] == "Missing experience"
-    service.update_status.assert_called_once_with(12, ApplicationStatus.REJECTED)
+    service.update_status.assert_called_once_with(
+        12, ApplicationStatus.REJECTED, rejection_reason="Missing experience"
+    )
 
 
 def test_reject_unauthorized():

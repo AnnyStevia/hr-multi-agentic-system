@@ -152,6 +152,7 @@ class Application(Base):
     education_match: Mapped[str | None] = mapped_column(Text, nullable=True)
     fit_analysis_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     fit_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     candidate: Mapped["Candidate"] = relationship()
     job: Mapped["Job"] = relationship(back_populates="applications")

@@ -259,7 +259,13 @@ class ApplicationService:
             items=items,
         )
 
-    def update_status(self, application_id: int, status: ApplicationStatus) -> Application:
+    def update_status(
+        self,
+        application_id: int,
+        status: ApplicationStatus,
+        *,
+        rejection_reason: str | None = None,
+    ) -> Application:
         if status == ApplicationStatus.HIRED:
             raise AppException(
                 "Hiring must be done through the interview outcome workflow",
@@ -268,27 +274,84 @@ class ApplicationService:
         application = self.get_for_hr(application_id)
         previous_status = application.status
         validate_application_status_transition(application.status, status)
+
+        if status == ApplicationStatus.REJECTED and self._has_blocking_interview(
+            application_id
+        ):
+            raise AppException(
+                "Cannot reject an application while an active interview exists. "
+                "Record an interview outcome first.",
+                status_code=409,
+            )
+
         application.status = status
+        if status == ApplicationStatus.REJECTED:
+            cleaned = (rejection_reason or "").strip() or None
+            application.rejection_reason = cleaned
+        else:
+            application.rejection_reason = None
+
         self.db.commit()
         loaded = self.applications.get_by_id(application.id)
         if loaded is None:
             raise AppException("Failed to load updated application", status_code=500)
 
-        if (
-            self.notifications is not None
-            and previous_status != ApplicationStatus.SHORTLISTED
-            and status == ApplicationStatus.SHORTLISTED
-        ):
-            self.notifications.create_notification(
-                recipient_user_id=loaded.candidate.user_id,
-                type=NotificationType.APPLICATION_STATUS_CHANGED,
-                title="You've been shortlisted!",
-                message=f"You have been shortlisted for {loaded.job.title}.",
-                related_entity_type="application",
-                related_entity_id=loaded.id,
-            )
+        if self.notifications is not None:
+            if (
+                previous_status != ApplicationStatus.SHORTLISTED
+                and status == ApplicationStatus.SHORTLISTED
+            ):
+                self.notifications.create_notification(
+                    recipient_user_id=loaded.candidate.user_id,
+                    type=NotificationType.APPLICATION_STATUS_CHANGED,
+                    title="You've been shortlisted!",
+                    message=f"You have been shortlisted for {loaded.job.title}.",
+                    related_entity_type="application",
+                    related_entity_id=loaded.id,
+                )
+            elif (
+                previous_status != ApplicationStatus.REJECTED
+                and status == ApplicationStatus.REJECTED
+            ):
+                self.notifications.create_notification(
+                    recipient_user_id=loaded.candidate.user_id,
+                    type=NotificationType.APPLICATION_STATUS_CHANGED,
+                    title="Application update",
+                    message=(
+                        f"Your application for {loaded.job.title} was not successful."
+                    ),
+                    related_entity_type="application",
+                    related_entity_id=loaded.id,
+                )
 
         return loaded
+
+    def _has_blocking_interview(self, application_id: int) -> bool:
+        """True when an interview would block a new invite (or a direct reject)."""
+        from app.modules.interviews.models import Interview, InterviewStatus
+
+        blocking = (
+            self.db.query(Interview)
+            .filter(
+                Interview.application_id == application_id,
+                Interview.status.in_(
+                    [InterviewStatus.PROPOSED, InterviewStatus.SCHEDULED]
+                ),
+            )
+            .count()
+        )
+        if blocking > 0:
+            return True
+        pending_outcome = (
+            self.db.query(Interview)
+            .filter(
+                Interview.application_id == application_id,
+                Interview.status == InterviewStatus.COMPLETED,
+                Interview.outcome.is_(None),
+            )
+            .count()
+        )
+        return pending_outcome > 0
 
     def apply_interview_driven_status(
         self,
@@ -509,4 +572,5 @@ def build_hr_application_detail(application: Application) -> HrApplicationDetail
     return HrApplicationDetail(
         **base.model_dump(),
         fit_assessment=build_fit_assessment(application),
+        rejection_reason=application.rejection_reason,
     )
