@@ -27,6 +27,8 @@ def _infer_target(tool_name: str, arguments: dict[str, Any]) -> tuple[str | None
         return "interview", int(arguments["interview_id"])
     if "application_id" in arguments and arguments["application_id"] is not None:
         return "application", int(arguments["application_id"])
+    if "request_id" in arguments and arguments["request_id"] is not None:
+        return "leave_request", int(arguments["request_id"])
     if "employee_id" in arguments and arguments["employee_id"] is not None:
         return "employee", int(arguments["employee_id"])
     return None, None

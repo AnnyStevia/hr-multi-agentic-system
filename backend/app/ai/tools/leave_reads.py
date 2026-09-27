@@ -24,6 +24,13 @@ _READ_META = ToolMetadata(
     operates_on_current_user=False,
 )
 
+# Leave type catalog is available to any leave reader (matches GET /me/leave/types).
+_LEAVE_TYPES_META = ToolMetadata(
+    operation="read",
+    required_permissions=frozenset({"leaves:read"}),
+    operates_on_current_user=False,
+)
+
 
 def _call_service(fn, *, error_message: str):
     try:
@@ -469,11 +476,11 @@ class ListLeaveTypesOutput(BaseModel):
 class ListLeaveTypesTool(BaseTool):
     name = "list_leave_types"
     description = (
-        "List leave types (id, name, is_paid) for policy and balance questions. "
-        "Use before get_leave_policy when the user names a leave type. "
-        "Do not invent type names or IDs. Read-only. Requires HR/admin + leaves:read."
+        "List leave types (id, name, is_paid) so create_leave_request and policy tools "
+        "can use the correct leave_type_id. Prefer this or get_my_leave_balance before creating "
+        "leave. Do not invent type names or IDs. Read-only. Requires leaves:read."
     )
-    metadata = _READ_META
+    metadata = _LEAVE_TYPES_META
     input_model = ListLeaveTypesInput
     output_model = ListLeaveTypesOutput
 

@@ -9,7 +9,6 @@ from app.ai.core.llm.base import LLMToolResponse, ToolCall
 from app.ai.orchestration import run_tool_roundtrip
 from app.ai.tools import (
     GetCurrentAiContextTool,
-    ToolAuthorizationError,
     ToolRegistry,
     tool_to_definition,
 )
@@ -130,7 +129,7 @@ def test_roundtrip_auth_success_with_mock_provider():
     assert '"user_id": 42' in (tool_msgs[0].content or "")
 
 
-def test_roundtrip_auth_reject_before_execution():
+def test_roundtrip_auth_soft_fails_and_continues():
     tool = GetCurrentAiContextTool()
     original_execute = tool.execute
     executed = {"count": 0}
@@ -145,27 +144,37 @@ def test_roundtrip_auth_reject_before_execution():
     registry.register(tool)
 
     provider = MagicMock()
-    provider.generate_with_tools.return_value = LLMToolResponse(
-        content=None,
-        tool_calls=(
-            ToolCall(id="call_deny", name="get_current_ai_context", arguments={}),
+    provider.generate_with_tools.side_effect = [
+        LLMToolResponse(
+            content=None,
+            tool_calls=(
+                ToolCall(id="call_deny", name="get_current_ai_context", arguments={}),
+            ),
+            model="mock-model",
         ),
-        model="mock-model",
-    )
+        LLMToolResponse(
+            content="I could not access that tool.",
+            tool_calls=(),
+            model="mock-model",
+        ),
+    ]
 
     unauthorized = _context(
         permission_names=frozenset(),  # missing leaves:read
         role_names=frozenset({"candidate"}),
     )
 
-    with pytest.raises(ToolAuthorizationError, match="Not authorized"):
-        run_tool_roundtrip(
-            provider=provider,
-            context=unauthorized,
-            registry=registry,
-            user_prompt="Show my context",
-        )
+    result = run_tool_roundtrip(
+        provider=provider,
+        context=unauthorized,
+        registry=registry,
+        user_prompt="Show my context",
+    )
 
     assert executed["count"] == 0
-    # First LLM call only — no tool result round-trip
-    assert provider.generate_with_tools.call_count == 1
+    assert result.tool_names_called == ("get_current_ai_context",)
+    assert result.tool_results[0].success is False
+    assert "Not authorized" in (result.tool_results[0].error or "")
+    # First LLM call + final answer after soft-failed tool result
+    assert provider.generate_with_tools.call_count == 2
+    assert "could not access" in result.final_content.lower()

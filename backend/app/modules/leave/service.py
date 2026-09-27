@@ -799,6 +799,66 @@ class LeaveService:
             cancellation_status=cancellation_status,
         )
 
+    def _require_direct_report(self, manager_user_id: int, employee_id: int) -> Employee:
+        """Ensure employee_id is a direct report of the authenticated manager user."""
+        manager = self._require_employee_for_user(manager_user_id)
+        report_ids = self.employees.list_direct_report_ids(manager.id)
+        if employee_id not in report_ids:
+            raise AppException("Employee not found", status_code=404)
+        employee = self.employees.get_by_id(employee_id)
+        if employee is None:
+            raise AppException("Employee not found", status_code=404)
+        return employee
+
+    def get_balances_for_direct_report(
+        self,
+        manager_user_id: int,
+        employee_id: int,
+        year: int | None = None,
+    ) -> list[LeaveBalanceResponse]:
+        self._require_direct_report(manager_user_id, employee_id)
+        return self.get_balances(employee_id, year=year)
+
+    def get_request_for_team_member(
+        self, viewer_user_id: int, request_id: int
+    ) -> LeaveRequest:
+        viewer = self._require_employee_for_user(viewer_user_id)
+        report_ids = set(self.employees.list_direct_report_ids(viewer.id))
+        request = self.repository.get_request(request_id)
+        if request is None or request.employee_id not in report_ids:
+            raise AppException("Leave request not found", status_code=404)
+        return request
+
+    def list_currently_on_leave_for_team(
+        self, viewer_user_id: int, *, as_of: date | None = None
+    ) -> list[LeaveRequest]:
+        viewer = self._require_employee_for_user(viewer_user_id)
+        report_ids = set(self.employees.list_direct_report_ids(viewer.id))
+        if not report_ids:
+            return []
+        covering = self.list_currently_on_leave(as_of=as_of)
+        return [r for r in covering if r.employee_id in report_ids]
+
+    def list_direct_reports_for_user(
+        self, manager_user_id: int, *, q: str | None = None
+    ) -> list[Employee]:
+        """Active org-chart direct reports of the authenticated user (optional name filter)."""
+        manager = self._require_employee_for_user(manager_user_id)
+        report_ids = self.employees.list_direct_report_ids(manager.id)
+        reports: list[Employee] = []
+        needle = (q or "").strip().lower()
+        for rid in report_ids:
+            emp = self.employees.get_by_id(rid)
+            if emp is None:
+                continue
+            if needle:
+                full = f"{emp.first_name} {emp.last_name}".lower()
+                email = (emp.email or "").lower()
+                if needle not in full and needle not in email:
+                    continue
+            reports.append(emp)
+        return reports
+
     def can_user_review_request(self, request: LeaveRequest, user_id: int) -> bool:
         if request.status != LeaveRequestStatus.PENDING:
             return False

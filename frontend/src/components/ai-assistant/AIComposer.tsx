@@ -19,7 +19,7 @@ const PLACEHOLDER: Record<AIAssistantAgentMode, string> = {
 const FOOTER: Record<AIAssistantAgentMode, string> = {
   knowledge: "Answers use your company document library",
   recruitment: "Answers use live recruitment and interview data",
-  leave: "Answers use live leave data (read-only)",
+  leave: "Answers use live leave data; writes require confirmation",
 };
 
 export function AIComposer() {

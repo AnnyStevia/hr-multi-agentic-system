@@ -75,6 +75,7 @@ export interface LeaveAskResponse {
   model: string;
   tool_names_called: string[];
   usage: LeaveUsage | null;
+  pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
 export type AIAssistantAgentMode = "knowledge" | "recruitment" | "leave";

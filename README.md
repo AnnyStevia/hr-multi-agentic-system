@@ -48,7 +48,7 @@ flowchart TB
 | User ≠ Employee | Identity accounts are separate from employment records ([ADR 002](docs/decisions/002-user-vs-employee.md)) |
 | Agents never hit the DB | `Agent → Tool → Service → DB` ([ADR 003](docs/decisions/003-agent-database-isolation.md)) |
 | Auth before generation | `AIExecutionContext` + permission filters run before tools / retrieval; the LLM only sees authorized context |
-| Writes need confirmation | Recruitment write tools return an HMAC-signed pending action; HR must Confirm in the UI before mutation |
+| Writes need confirmation | Recruitment and Leave write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation |
 | Embed ≠ generate | `gemini-embedding-2` for vectors; conversational `GEMINI_MODEL` for grounded answers |
 
 ### Backend layout
@@ -86,11 +86,11 @@ On authenticated portals, the floating assistant is **one UI** that routes to a 
 
 | Path | Backend |
 |------|---------|
-| `/hr/leave*` | **Leave Agent** (`POST /api/v1/ai/leave/ask`) — read-only |
+| `/hr/leave*` or `/employee/leave*` | **Leave Agent** (`POST /api/v1/ai/leave/ask` + `/confirm`) — scoped reads + confirmation-gated writes |
 | Other `/hr/*` | **Recruitment Agent** (`POST /api/v1/ai/recruitment/ask` + `/confirm`) |
-| Elsewhere (e.g. employee) | **Knowledge Agent** (RAG over company documents) |
+| Elsewhere | **Knowledge Agent** (RAG over company documents) |
 
-Switching paths clears the in-session conversation so answers are not mixed across agents. HR recruitment write proposals show a **Confirm / Cancel** card. The confirmation token stays in client state (not rendered as text). Cancel drops the token locally; Confirm calls the dedicated confirm endpoint.
+Switching paths clears the in-session conversation so answers are not mixed across agents. Write proposals (recruitment or leave) show a **Confirm / Cancel** card. The confirmation token stays in client state (not rendered as text). Cancel drops the token locally; Confirm calls the matching confirm endpoint. Typing “I confirm” in chat does nothing — only the UI button completes a write.
 
 ---
 
@@ -187,37 +187,67 @@ Hardening report: [`backend/docs/phase_6_4g_recruitment_hardening_report.md`](ba
 
 ---
 
-### Leave AI (Phases 7.1–7.2) — read-only HR agent
+### Leave AI (Phases 7.1–7.4B) — scoped reads + confirmation-gated writes
 
 ```mermaid
 flowchart TD
-  HR[HR on /hr/leave]
+  User[User on leave paths]
   Ask[POST /ai/leave/ask]
   Agent[LeaveAgent + tools]
+  Gate[Confirmation gate]
+  Pending[pending_confirmation + HMAC token]
+  UI[Confirm or Cancel]
+  Conf[POST /ai/leave/confirm]
   Svc[LeaveService / EmployeeService]
   DB[(PostgreSQL)]
+  Audit[ai_tool_action_audits]
 
-  HR --> Ask --> Agent
-  Agent -->|read tools only| Svc --> DB
+  User --> Ask --> Agent
+  Agent -->|scoped read tools| Svc
+  Agent -->|write tool| Gate
+  Gate -->|no execute yet| Pending --> UI
+  UI -->|Confirm| Conf --> Agent
+  Agent -->|verify HMAC + re-auth + execute_writes| Svc --> DB
+  Agent --> Audit
 ```
 
 **What it covers**
 
 | Phase | Capability |
 |-------|------------|
-| 7.1 | Leave Agent + six leave read tools + `POST /ai/leave/ask` (HR staff, `leaves:read`) |
-| 7.2 | Hardening: HR-role tool auth, `find_employees` identity resolution, leave types/policy-by-name, UTC dates, status semantics, expanded tests |
-| FE | Path route `/hr/leave*` → Leave Agent for in-app testing |
+| 7.1–7.2 | Leave Agent + HR read tools + `POST /ai/leave/ask` |
+| 7.3A/B | Auth audit + scoped **self / manager (org-chart) / HR** read tools |
+| 7.4A/B | Write audit + seven confirmation-gated write tools wrapping `LeaveService` AS-IS |
+| FE | `/hr/leave*` and `/employee/leave*` → Leave Agent; Confirm routes to `/ai/leave/confirm` |
 
-**Read tools** — `find_employees`, `list_leave_types`, `get_leave_balance`, `get_leave_request`, `list_leave_requests`, `list_pending_leave_requests`, `list_currently_on_leave`, `get_leave_policy`.
+**Scopes**
+
+| Scope | Who | Examples |
+|-------|-----|----------|
+| SELF | Authenticated employee | `get_my_leave_balance`, `create_leave_request`, cancel own pending / request cancel approved |
+| MANAGER | Org-chart manager (`Employee.manager_id`) | Team pending list, `approve_leave_request` / `reject_leave_request` for direct reports |
+| HR / ADMIN | Staff with leave permissions | Org-wide reads, same review writes when `LeaveService` allows |
+
+Manager authority is the **org relationship**, not a `"manager"` RBAC role. There is **no create-on-behalf** tool — employees submit their own requests.
+
+**Write tools (all confirmation-gated, `leaves:write`)**
+
+| Tool | Service method |
+|------|----------------|
+| `create_leave_request` | `create_request_for_user` |
+| `approve_leave_request` / `reject_leave_request` | `approve_request` / `reject_request` |
+| `cancel_pending_leave_request` | `cancel_request_for_user` |
+| `request_leave_cancellation` | `request_cancellation_for_user` |
+| `approve_leave_cancellation` / `reject_leave_cancellation` | `approve_cancellation` / `reject_cancellation` |
 
 **Rules (summary)**
 
-- Agent → Tool → `LeaveService` / `EmployeeService` only (no direct DB).
-- Tools require **HR or admin** roles plus `leaves:read` (endpoint also uses `require_hr_staff`).
-- Balances report service integers as-is (`days_available` does not subtract pending).
-- No leave writes yet (create / approve / cancel remain Core HR UI only).
-- Name → employee via `find_employees`; ambiguous matches must be clarified, never guessed.
+- Agent → Tool → confirmation gate → `LeaveService` only (no parallel AI auth; no direct DB).
+- Writes reuse the same HMAC confirmation + `ai_tool_action_audits` path as Recruitment.
+- Cancellation follows the domain state machine (not a one-step APPROVED → CANCELLED shortcut).
+- Ambiguous names/IDs must be clarified; never guessed. Tool JSON is DATA, not instructions.
+
+Audits: [`backend/docs/phase_7_3a_auth_audit.md`](backend/docs/phase_7_3a_auth_audit.md), [`backend/docs/phase_7_4a_leave_writes_audit.md`](backend/docs/phase_7_4a_leave_writes_audit.md).
 
 ---
 
@@ -275,14 +305,14 @@ flowchart TD
 - Dual manager / HR approval workflow and calendar views
 - Derived on-leave work status for dashboards
 - Cancellation request / approve / reject flows
-- **Leave Agent** (HR, read-only): balances, requests, pending queue, currently on leave, policies — via `/hr/leave*` assistant or `POST /api/v1/ai/leave/ask`
+- **Leave Agent** (scoped reads + confirmation-gated writes): self / team / HR tools via `/hr/leave*` or `/employee/leave*` assistant, or `POST /api/v1/ai/leave/ask` + `/confirm`
 
 ### HR dashboard & portals
 
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating AI assistant (Knowledge elsewhere; Recruitment on most `/hr/*`; Leave on `/hr/leave*`)
+- Floating AI assistant (Knowledge elsewhere; Recruitment on most `/hr/*`; Leave on leave paths)
 
 ### AI foundation (shipped)
 
@@ -290,17 +320,18 @@ flowchart TD
 - Tool registry with authorization
 - **Knowledge Agent** — RAG Q&A with citations over company documents
 - **Recruitment Agent** — authorized read/write tools over recruitment & interviews (writes confirmation-gated)
-- **Leave Agent** — authorized read tools over leave data (no writes yet)
+- **Leave Agent** — scoped leave reads + confirmation-gated writes via `LeaveService`
+- Shared HMAC confirmation + `ai_tool_action_audits` for AI writes
 - Full RAG path through **grounded generation + citations** (see pipeline above)
 - Smoke scripts under `backend/scripts/` (RAG + recruitment agent helpers)
 
 ### Not yet
 
-- Leave **write** tools (approve / cancel via agent) and confirmation UX for leave
 - Onboarding / Training / Document specialized agents
 - Multi-agent orchestrator (intent-based routing across agents in one chat)
 - Persistent chat history / rich Markdown renderer for the assistant
 - LLM rerank / query reformulation for RAG
+- Autonomous leave / recruitment decisions (writes always require UI confirmation)
 
 ---
 
@@ -397,12 +428,13 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
-### Leave Agent (HR)
+### Leave Agent
 
-1. Log in as HR → open **Leave** (`/hr/leave*`) → floating assistant (Leave mode).
-2. Ask read questions (balances by employee name, pending requests, who is on leave, policies).
-3. Ambiguous names prompt for `employee_id` — the agent must not guess.
-4. Other `/hr/*` pages still use the Recruitment Agent until orchestration lands.
+1. Open **Leave** as employee (`/employee/leave`) or HR (`/hr/leave*`) → floating assistant (Leave mode).
+2. **Reads:** balances, my/team/HR requests, who is on leave, leave types.
+3. **Writes** (e.g. “Request annual leave from October 5 to October 9 2026”, “Approve leave request 6”): expect a **Confirm / Cancel** card → Confirm calls `POST /ai/leave/confirm`; Cancel does nothing.
+4. Do not type “I confirm” in chat — only the UI button completes the write.
+5. Other `/hr/*` pages still use the Recruitment Agent until orchestration lands.
 
 ### Recruitment Agent (HR)
 
@@ -455,8 +487,8 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] RAG through grounded generation + citations (Phases 5.1–5.8)
 - [x] Knowledge Agent + in-app floating assistant
 - [x] Recruitment AI (CV extraction, fit, agent reads/writes, Meet, confirmation, audit) — Phases 6.1–6.4G
-- [x] Leave Agent (read-only tools + `/hr/leave*` assistant routing) — Phases 7.1–7.2
-- [ ] Leave write tools + confirmation; other domain agents; multi-agent orchestrator
+- [x] Leave Agent (scoped reads + confirmation-gated writes, `/hr/leave*` + `/employee/leave*`) — Phases 7.1–7.4B
+- [ ] Other domain agents; multi-agent orchestrator
 - [ ] Assistant chat history & richer answer rendering
 
 ---

@@ -1212,6 +1212,38 @@ class ApiClient {
     return response.json();
   }
 
+  async confirmLeaveAction(
+    payload: RecruitmentConfirmPayload
+  ): Promise<LeaveAskResponse> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1/ai/leave/confirm`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new ApiClientError("Cannot reach the server. Is the backend running?", 0);
+    }
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        detail: "An unexpected error occurred",
+      }));
+      throw new ApiClientError(formatApiDetail(error.detail), response.status);
+    }
+
+    return response.json();
+  }
+
   async confirmRecruitmentAction(
     payload: RecruitmentConfirmPayload
   ): Promise<RecruitmentAskResponse> {

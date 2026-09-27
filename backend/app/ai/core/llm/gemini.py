@@ -270,15 +270,19 @@ def _model_content(response: Any) -> Any | None:
 
 
 def _extract_text(response: Any) -> str:
-    text = getattr(response, "text", None)
-    if isinstance(text, str) and text:
-        return text
+    # Prefer parts iteration — accessing response.text warns (and can obscure)
+    # when the candidate only contains function_call parts.
     parts: list[str] = []
     for part in _iter_parts(response):
         value = getattr(part, "text", None)
         if value:
             parts.append(str(value))
-    return "".join(parts)
+    if parts:
+        return "".join(parts)
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text:
+        return text
+    return ""
 
 
 def _parse_tool_calls(response: Any) -> list[ToolCall]:

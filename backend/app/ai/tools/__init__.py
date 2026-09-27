@@ -21,7 +21,12 @@ from app.ai.tools.interview_writes import (
     RecordInterviewOutcomeTool,
     RetryInterviewMeetingTool,
 )
-from app.ai.tools.leave import GetMyLeaveBalanceTool
+from app.ai.tools.leave import (
+    GetMyLeaveBalanceTool,
+    GetMyLeaveRequestTool,
+    GetMyWorkStatusTool,
+    ListMyLeaveRequestsTool,
+)
 from app.ai.tools.leave_reads import (
     GetLeaveBalanceTool,
     GetLeavePolicyTool,
@@ -30,6 +35,23 @@ from app.ai.tools.leave_reads import (
     ListLeaveRequestsTool,
     ListLeaveTypesTool,
     ListPendingLeaveRequestsTool,
+)
+from app.ai.tools.leave_team_reads import (
+    FindDirectReportsTool,
+    GetDirectReportLeaveBalanceTool,
+    GetTeamLeaveRequestTool,
+    ListTeamCurrentlyOnLeaveTool,
+    ListTeamLeaveRequestsTool,
+    ListTeamPendingLeaveRequestsTool,
+)
+from app.ai.tools.leave_writes import (
+    ApproveLeaveCancellationTool,
+    ApproveLeaveRequestTool,
+    CancelPendingLeaveRequestTool,
+    CreateLeaveRequestTool,
+    RejectLeaveCancellationTool,
+    RejectLeaveRequestTool,
+    RequestLeaveCancellationTool,
 )
 from app.ai.tools.llm_adapter import tool_to_definition
 from app.ai.tools.recruitment import (
@@ -46,13 +68,19 @@ from app.ai.tools.schemas import ToolResult
 from app.ai.tools.smoke import GetCurrentAiContextTool
 
 __all__ = [
+    "ApproveLeaveCancellationTool",
+    "ApproveLeaveRequestTool",
     "BaseTool",
+    "CancelPendingLeaveRequestTool",
     "CreateInterviewInvitationTool",
+    "CreateLeaveRequestTool",
+    "FindDirectReportsTool",
     "FindEmployeesTool",
     "GetApplicationFitTool",
     "GetApplicationTool",
     "GetCandidateInterviewsTool",
     "GetCurrentAiContextTool",
+    "GetDirectReportLeaveBalanceTool",
     "GetInterviewFeedbackTool",
     "GetInterviewTool",
     "GetJobTool",
@@ -60,16 +88,26 @@ __all__ = [
     "GetLeavePolicyTool",
     "GetLeaveRequestTool",
     "GetMyLeaveBalanceTool",
+    "GetMyLeaveRequestTool",
+    "GetMyWorkStatusTool",
+    "GetTeamLeaveRequestTool",
     "GetUpcomingInterviewsTool",
     "ListCurrentlyOnLeaveTool",
     "ListInterviewsTool",
     "ListJobApplicationsTool",
     "ListLeaveRequestsTool",
     "ListLeaveTypesTool",
+    "ListMyLeaveRequestsTool",
     "ListPendingLeaveRequestsTool",
     "ListRecruitmentApplicationsTool",
+    "ListTeamCurrentlyOnLeaveTool",
+    "ListTeamLeaveRequestsTool",
+    "ListTeamPendingLeaveRequestsTool",
     "RecordInterviewOutcomeTool",
     "RejectApplicationTool",
+    "RejectLeaveCancellationTool",
+    "RejectLeaveRequestTool",
+    "RequestLeaveCancellationTool",
     "RetryInterviewMeetingTool",
     "ShortlistApplicationTool",
     "ToolAuthorizationError",

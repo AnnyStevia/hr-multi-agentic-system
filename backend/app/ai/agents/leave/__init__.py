@@ -1,8 +1,13 @@
-"""Leave Agent package (Phase 7.1 read-only)."""
+"""Leave Agent package (Phase 7 — reads + confirmation-gated writes)."""
 
 from app.ai.agents.leave.agent import LeaveAgent
 from app.ai.agents.leave.exceptions import LeaveAgentError, LeaveAgentValidationError
-from app.ai.agents.leave.schemas import LeaveAgentAnswer, LeaveAgentRequest, LeaveAgentUsage
+from app.ai.agents.leave.schemas import (
+    LeaveAgentAnswer,
+    LeaveAgentRequest,
+    LeaveAgentUsage,
+    PendingConfirmationInfo,
+)
 
 __all__ = [
     "LeaveAgent",
@@ -11,4 +16,5 @@ __all__ = [
     "LeaveAgentRequest",
     "LeaveAgentUsage",
     "LeaveAgentValidationError",
+    "PendingConfirmationInfo",
 ]

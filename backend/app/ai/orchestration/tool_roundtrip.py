@@ -7,6 +7,11 @@ from dataclasses import dataclass
 
 from app.ai.core.context import AIExecutionContext
 from app.ai.core.llm.base import LLMMessage, LLMProvider, LLMUsage, ToolCall
+from app.ai.tools.exceptions import (
+    ToolAuthorizationError,
+    ToolExecutionError,
+    ToolValidationError,
+)
 from app.ai.tools.executor import ToolExecutor
 from app.ai.tools.llm_adapter import tool_to_definition
 from app.ai.tools.registry import ToolRegistry
@@ -41,11 +46,14 @@ def run_tool_roundtrip(
     tool_choice: str = "any",
     max_tokens: int | None = None,
     max_tool_calls: int = 8,
+    max_tool_rounds: int = 2,
 ) -> ToolRoundtripResult:
-    """One tool-calling round: LLM → ToolExecutor (auth) → LLM final answer.
+    """LLM ↔ tools loop, then a final natural-language turn.
 
-    Authorization failures from ToolExecutor propagate (tool is not re-invoked
-    and results are not sent back to the LLM).
+    Per-tool authorization/validation/execution failures are returned as tool
+    results (success=False) so multi-tool batches can partially succeed.
+
+    Stops tool rounds early when a write returns pending_confirmation.
     """
     tools = [tool_to_definition(tool) for tool in registry.list_tools()]
     messages: list[LLMMessage] = []
@@ -53,54 +61,72 @@ def run_tool_roundtrip(
         messages.append(LLMMessage(role="system", content=system_prompt))
     messages.append(LLMMessage(role="user", content=user_prompt))
 
-    first = provider.generate_with_tools(
-        messages,
-        tools,
-        tool_choice=tool_choice,
-        max_tokens=max_tokens,
-    )
-
-    if not first.tool_calls:
-        return ToolRoundtripResult(
-            final_content=first.content or "",
-            model=first.model,
-            tool_names_called=(),
-            tool_results=(),
-            usage=first.usage,
-        )
-
     executor = ToolExecutor(registry)
     tool_results: list[ToolResult] = []
     tool_names: list[str] = []
+    usage: LLMUsage | None = None
+    last_model = ""
+    rounds = max(1, max_tool_rounds)
 
-    messages.append(
-        LLMMessage(
-            role="assistant",
-            content=first.content,
-            tool_calls=first.tool_calls,
-            native_content=first.native_content,
+    for round_idx in range(rounds):
+        choice = tool_choice if round_idx == 0 else "auto"
+        response = provider.generate_with_tools(
+            messages,
+            tools,
+            tool_choice=choice,
+            max_tokens=max_tokens,
         )
-    )
+        usage = _merge_usage(usage, response.usage)
+        last_model = response.model
 
-    for call in first.tool_calls[: max(1, max_tool_calls)]:
-        result = executor.execute(context, call.name, call.arguments)
-        tool_results.append(result)
-        tool_names.append(call.name)
-        messages.append(_tool_result_message(call, result))
+        if not response.tool_calls:
+            return ToolRoundtripResult(
+                final_content=response.content or "",
+                model=response.model,
+                tool_names_called=tuple(tool_names),
+                tool_results=tuple(tool_results),
+                usage=usage,
+            )
 
-    second = provider.generate_with_tools(
+        messages.append(
+            LLMMessage(
+                role="assistant",
+                content=response.content,
+                tool_calls=response.tool_calls,
+                native_content=response.native_content,
+            )
+        )
+
+        remaining = max(1, max_tool_calls) - len(tool_names)
+        if remaining <= 0:
+            break
+
+        pending_write = False
+        for call in response.tool_calls[:remaining]:
+            result = _execute_one(executor, context, call)
+            tool_results.append(result)
+            tool_names.append(call.name)
+            messages.append(_tool_result_message(call, result))
+            if result.confirmation_token:
+                pending_write = True
+
+        if pending_write:
+            break
+
+    final = provider.generate_with_tools(
         messages,
         tools,
         tool_choice="none",
         max_tokens=max_tokens,
     )
+    usage = _merge_usage(usage, final.usage)
 
     return ToolRoundtripResult(
-        final_content=second.content or "",
-        model=second.model,
+        final_content=final.content or "",
+        model=final.model or last_model,
         tool_names_called=tuple(tool_names),
         tool_results=tuple(tool_results),
-        usage=_merge_usage(first.usage, second.usage),
+        usage=usage,
     )
 
 
@@ -121,6 +147,7 @@ def run_controlled_gemini_smoke(
         tool_choice="any",
         max_tokens=512,
         max_tool_calls=1,
+        max_tool_rounds=1,
     )
 
 
@@ -141,7 +168,38 @@ def run_controlled_leave_balance_smoke(
         tool_choice="any",
         max_tokens=512,
         max_tool_calls=1,
+        max_tool_rounds=1,
     )
+
+
+def _execute_one(
+    executor: ToolExecutor,
+    context: AIExecutionContext,
+    call: ToolCall,
+) -> ToolResult:
+    try:
+        return executor.execute(context, call.name, call.arguments)
+    except ToolAuthorizationError as exc:
+        return ToolResult(
+            tool_name=call.name,
+            success=False,
+            data=None,
+            error=str(exc) or "Not authorized to execute this tool",
+        )
+    except ToolValidationError as exc:
+        return ToolResult(
+            tool_name=call.name,
+            success=False,
+            data=None,
+            error=str(exc) or "Invalid tool arguments",
+        )
+    except ToolExecutionError as exc:
+        return ToolResult(
+            tool_name=call.name,
+            success=False,
+            data=None,
+            error=str(exc) or "Tool execution failed",
+        )
 
 
 def _tool_result_message(call: ToolCall, result: ToolResult) -> LLMMessage:
@@ -150,11 +208,14 @@ def _tool_result_message(call: ToolCall, result: ToolResult) -> LLMMessage:
             "status": "pending_confirmation",
             "summary": result.confirmation_summary,
             "message": (
-                "Write action is waiting for explicit user confirmation in the UI. "
-                "Do not claim the mutation succeeded. Ask the user to confirm or cancel."
+                "Write action is waiting for explicit user confirmation via the UI Confirm button. "
+                "Tell the user to click Confirm or Cancel in the chat UI. "
+                "Do not ask them to type confirm in chat. Do not claim the mutation succeeded."
             ),
             "data": result.data,
         }
+    elif not result.success:
+        payload = {"error": result.error or "Tool failed"}
     else:
         payload = result.data if result.data is not None else {"error": result.error}
     return LLMMessage(

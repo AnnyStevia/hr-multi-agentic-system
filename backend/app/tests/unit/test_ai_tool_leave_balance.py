@@ -61,22 +61,21 @@ def test_valid_context_calls_leave_service_with_authenticated_employee_id():
 
     result = ToolExecutor(registry).execute(_context(employee_id=55), "get_my_leave_balance", {})
 
-    service.get_balances.assert_called_once_with(55)
+    service.get_balances.assert_called_once_with(55, year=None)
     assert result.success is True
-    assert result.data == {
-        "employee_id": 55,
-        "year": 2026,
-        "balances": [
-            {
-                "leave_type_id": 1,
-                "leave_type_name": "Annual Leave",
-                "days_allowed": 20,
-                "days_used": 5,
-                "days_pending": 2,
-                "days_available": 15,
-            }
-        ],
-    }
+    assert result.data["employee_id"] == 55
+    assert result.data["year"] == 2026
+    assert result.data["balances"] == [
+        {
+            "leave_type_id": 1,
+            "leave_type_name": "Annual Leave",
+            "days_allowed": 20,
+            "days_used": 5,
+            "days_pending": 2,
+            "days_available": 15,
+        }
+    ]
+    assert "pending" in result.data["note"].lower()
 
 
 def test_missing_employee_id_rejects_without_calling_service():
@@ -149,11 +148,13 @@ def test_result_uses_context_employee_id_not_service_row_identity_spoof():
 
     output = tool.execute(_context(employee_id=55), GetMyLeaveBalanceInput())
     assert output.employee_id == 55
-    service.get_balances.assert_called_once_with(55)
+    service.get_balances.assert_called_once_with(55, year=None)
 
 
-def test_tool_to_definition_has_empty_object_parameters():
+def test_tool_to_definition_exposes_optional_year_only():
     definition = tool_to_definition(GetMyLeaveBalanceTool(MagicMock()))
     assert definition.name == "get_my_leave_balance"
     assert definition.parameters.get("type") == "object"
-    assert definition.parameters.get("properties") == {}
+    props = definition.parameters.get("properties") or {}
+    assert "employee_id" not in props
+    assert "year" in props

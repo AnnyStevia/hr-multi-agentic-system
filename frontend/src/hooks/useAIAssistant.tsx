@@ -44,7 +44,9 @@ function newId(): string {
 }
 
 function resolveAgentMode(pathname: string): AIAssistantAgentMode {
-  if (pathname.startsWith("/hr/leave")) return "leave";
+  if (pathname.startsWith("/hr/leave") || pathname.startsWith("/employee/leave")) {
+    return "leave";
+  }
   if (pathname.startsWith("/hr")) return "recruitment";
   return "knowledge";
 }
@@ -61,9 +63,13 @@ function mapError(err: unknown, mode: AIAssistantAgentMode): string {
       return "You do not have access to company knowledge. Ask HR if you need document permissions.";
     }
     if (err.status === 409) {
-      return mode === "recruitment"
-        ? "This confirmation is no longer valid or the action cannot be applied in the current state."
-        : err.message || "This request conflicts with the current state.";
+      if (mode === "leave" && err.message) {
+        return err.message;
+      }
+      if (mode === "recruitment") {
+        return "This confirmation is no longer valid or the action cannot be applied in the current state.";
+      }
+      return err.message || "This request conflicts with the current state.";
     }
     if (err.status === 422) {
       return "Please enter a valid question.";
@@ -145,10 +151,13 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       try {
         if (agentMode === "leave") {
           const result = await api.askLeaveAgent({ question: text });
+          const pending: RecruitmentPendingConfirmation | null =
+            result.pending_confirmation ?? null;
           const assistantMessage: AIChatMessage = {
             id: newId(),
             role: "assistant",
             content: result.answer,
+            pendingConfirmation: pending,
           };
           setMessages((prev) => [...prev, assistantMessage]);
         } else if (agentMode === "recruitment") {
@@ -193,9 +202,12 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       setError(null);
       setLoading(true);
       try {
-        const result = await api.confirmRecruitmentAction({
-          confirmation_token: token,
-        });
+        const result =
+          agentMode === "leave"
+            ? await api.confirmLeaveAction({ confirmation_token: token })
+            : await api.confirmRecruitmentAction({
+                confirmation_token: token,
+              });
         setMessages((prev) =>
           prev.map((m) =>
             m.id === messageId
@@ -216,12 +228,12 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           },
         ]);
       } catch (err) {
-        setError(mapError(err, "recruitment"));
+        setError(mapError(err, agentMode === "leave" ? "leave" : "recruitment"));
       } finally {
         setLoading(false);
       }
     },
-    [loading, messages]
+    [loading, messages, agentMode]
   );
 
   const cancelPending = useCallback((messageId: string) => {

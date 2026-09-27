@@ -17,10 +17,19 @@ class LeaveAgentUsage(BaseModel):
 
 
 class LeaveAgentRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     question: str = Field(min_length=1, max_length=4000)
     context: AIExecutionContext
+
+
+class PendingConfirmationInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str
+    tool_name: str
+    summary: str
+    expires_at: int
 
 
 class LeaveAgentAnswer(BaseModel):
@@ -30,3 +39,4 @@ class LeaveAgentAnswer(BaseModel):
     model: str
     tool_names_called: list[str] = Field(default_factory=list)
     usage: LeaveAgentUsage | None = None
+    pending_confirmation: PendingConfirmationInfo | None = None

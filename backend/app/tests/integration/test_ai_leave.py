@@ -30,7 +30,7 @@ def test_candidate_cannot_ask_leave_agent(client, db_session):
     assert response.status_code == 403
 
 
-def test_employee_cannot_ask_leave_agent(client, db_session):
+def test_employee_can_ask_leave_agent(client, db_session):
     create_user_with_role(
         db_session,
         email="emp.leave.ai@test.com",
@@ -38,15 +38,27 @@ def test_employee_cannot_ask_leave_agent(client, db_session):
         role_name="employee",
     )
     headers = auth_header(client, email="emp.leave.ai@test.com", password="pass12345")
-    response = client.post(
-        "/api/v1/ai/leave/ask",
-        json={"question": "List pending leave"},
-        headers=headers,
+    mock_agent = MagicMock()
+    mock_agent.ask.return_value = LeaveAgentAnswer(
+        answer="You have 15 days available.",
+        model="mock",
+        tool_names_called=["get_my_leave_balance"],
+        usage=None,
     )
-    assert response.status_code == 403
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_agent
+    try:
+        response = client.post(
+            "/api/v1/ai/leave/ask",
+            json={"question": "How many leave days do I have?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+    assert response.status_code == 200, response.text
+    assert response.json()["tool_names_called"] == ["get_my_leave_balance"]
 
 
-def test_manager_cannot_ask_leave_agent(client, db_session):
+def test_manager_can_ask_leave_agent(client, db_session):
     create_user_with_role(
         db_session,
         email="mgr.leave.ai@test.com",
@@ -54,12 +66,24 @@ def test_manager_cannot_ask_leave_agent(client, db_session):
         role_name="manager",
     )
     headers = auth_header(client, email="mgr.leave.ai@test.com", password="mgrpass123")
-    response = client.post(
-        "/api/v1/ai/leave/ask",
-        json={"question": "Who is on leave?"},
-        headers=headers,
+    mock_agent = MagicMock()
+    mock_agent.ask.return_value = LeaveAgentAnswer(
+        answer="No team leave pending.",
+        model="mock",
+        tool_names_called=["list_team_pending_leave_requests"],
+        usage=None,
     )
-    assert response.status_code == 403
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_agent
+    try:
+        response = client.post(
+            "/api/v1/ai/leave/ask",
+            json={"question": "Show my team's pending leave"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+    assert response.status_code == 200, response.text
+    assert "list_team_pending_leave_requests" in response.json()["tool_names_called"]
 
 
 def test_hr_ask_leave_returns_answer(client, db_session):

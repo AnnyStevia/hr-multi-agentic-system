@@ -298,6 +298,23 @@ def test_leave_read_tools_require_hr_role_not_just_permission():
     service.get_balances.assert_not_called()
 
 
+def test_employee_can_list_leave_types():
+    service = MagicMock()
+    lt = MagicMock()
+    lt.id = 1
+    lt.name = "Annual"
+    lt.is_paid = True
+    service.list_types.return_value = [lt]
+    registry = ToolRegistry()
+    registry.register(ListLeaveTypesTool(service))
+    out = ToolExecutor(registry).execute(
+        _employee_with_leaves_read(), "list_leave_types", {}
+    )
+    assert out.data["count"] == 1
+    assert out.data["leave_types"][0]["leave_type_id"] == 1
+    service.list_types.assert_called_once()
+
+
 def test_candidate_cannot_invoke_leave_tools():
     registry = ToolRegistry()
     registry.register(GetLeaveBalanceTool(MagicMock()))
