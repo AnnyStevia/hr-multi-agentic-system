@@ -38,7 +38,11 @@ class TrainingService:
         description = payload.description.strip() if payload.description else None
         if description == "":
             description = None
-        training = Training(title=payload.title.strip(), description=description)
+        training = Training(
+            title=payload.title.strip(),
+            description=description,
+            resource_url=payload.resource_url,
+        )
         return self.repository.add_training(training)
 
     def update_training(self, training_id: int, payload: TrainingUpdateRequest) -> Training:
@@ -53,6 +57,8 @@ class TrainingService:
             if description is not None:
                 description = description.strip() or None
             training.description = description
+        if "resource_url" in data:
+            training.resource_url = data["resource_url"]
         return self.repository.save_training(training)
 
     def delete_training(self, training_id: int) -> None:
@@ -173,4 +179,5 @@ def build_assignment_response(assignment: OnboardingTraining) -> OnboardingTrain
         updated_at=assignment.updated_at,
         title=assignment.training.title,
         description=assignment.training.description,
+        resource_url=assignment.training.resource_url,
     )

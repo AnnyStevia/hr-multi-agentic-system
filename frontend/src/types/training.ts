@@ -4,13 +4,15 @@ export interface Training {
   id: number;
   title: string;
   description: string | null;
+  resource_url: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface TrainingPayload {
-  title: string;
+  title?: string;
   description?: string | null;
+  resource_url?: string | null;
 }
 
 export interface OnboardingTrainingAssignment {
@@ -24,4 +26,5 @@ export interface OnboardingTrainingAssignment {
   updated_at: string;
   title: string;
   description: string | null;
+  resource_url: string | null;
 }

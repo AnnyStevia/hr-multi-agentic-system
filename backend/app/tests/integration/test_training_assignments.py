@@ -190,3 +190,115 @@ def test_rbac_enforced_for_training_catalog_and_assign(client, db_session):
     )
     plain = auth_header(client, email="train.plain.emp@test.com", password="emppass123")
     assert client.get("/api/v1/trainings", headers=plain).status_code == 403
+    assert (
+        client.patch(
+            f"/api/v1/trainings/{training['id']}",
+            json={"resource_url": "https://learn.example.com/x"},
+            headers=plain,
+        ).status_code
+        == 403
+    )
+
+
+def test_training_resource_url_create_update_and_assignment_exposure(client, db_session):
+    _a, _j, candidate_headers, headers, body = _hire(
+        client, db_session, email="train.resource@test.com"
+    )
+    onboarding_id = _onboarding_id(db_session, body["hired_employee_id"])
+    url = "https://learn.example.com/courses/safety"
+
+    created = client.post(
+        "/api/v1/trainings",
+        json={
+            "title": "Safety with resource",
+            "description": "Read the portal",
+            "resource_url": url,
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["resource_url"] == url
+
+    http_created = client.post(
+        "/api/v1/trainings",
+        json={"title": "HTTP resource", "resource_url": "http://intranet.local/t"},
+        headers=headers,
+    )
+    assert http_created.status_code == 201, http_created.text
+    assert http_created.json()["resource_url"] == "http://intranet.local/t"
+
+    omitted = client.post(
+        "/api/v1/trainings",
+        json={"title": "No resource"},
+        headers=headers,
+    )
+    assert omitted.status_code == 201, omitted.text
+    assert omitted.json()["resource_url"] is None
+
+    assert (
+        client.post(
+            "/api/v1/trainings",
+            json={"title": "Bad", "resource_url": "javascript:alert(1)"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/v1/trainings",
+            json={"title": "Bad2", "resource_url": "not-a-url"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
+
+    training_id = created.json()["id"]
+    updated = client.patch(
+        f"/api/v1/trainings/{training_id}",
+        json={"resource_url": "https://learn.example.com/courses/safety-v2"},
+        headers=headers,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["resource_url"] == "https://learn.example.com/courses/safety-v2"
+
+    cleared = client.patch(
+        f"/api/v1/trainings/{training_id}",
+        json={"resource_url": None},
+        headers=headers,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["resource_url"] is None
+
+    assert (
+        client.patch(
+            f"/api/v1/trainings/{training_id}",
+            json={"resource_url": "ftp://files.example.com/x"},
+            headers=headers,
+        ).status_code
+        == 422
+    )
+
+    restore = client.patch(
+        f"/api/v1/trainings/{training_id}",
+        json={"resource_url": url},
+        headers=headers,
+    )
+    assert restore.status_code == 200, restore.text
+
+    catalog = client.get("/api/v1/trainings", headers=headers)
+    assert catalog.status_code == 200
+    match = next(item for item in catalog.json() if item["id"] == training_id)
+    assert match["resource_url"] == url
+
+    assigned = client.post(
+        f"/api/v1/onboarding/{onboarding_id}/trainings",
+        json={"training_id": training_id},
+        headers=headers,
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert assigned.json()["resource_url"] == url
+    assert assigned.json()["title"] == "Safety with resource"
+
+    me_list = client.get("/api/v1/me/onboarding/trainings", headers=candidate_headers)
+    assert me_list.status_code == 200
+    assert me_list.json()[0]["resource_url"] == url

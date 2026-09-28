@@ -822,6 +822,19 @@ class ApiClient {
     });
   }
 
+  async updateTraining(trainingId: number, payload: TrainingPayload): Promise<Training> {
+    return this.request<Training>(`/api/v1/trainings/${trainingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteTraining(trainingId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/trainings/${trainingId}`, {
+      method: "DELETE",
+    });
+  }
+
   async listOnboardingTrainings(onboardingId: number): Promise<OnboardingTrainingAssignment[]> {
     return this.request<OnboardingTrainingAssignment[]>(
       `/api/v1/onboarding/${onboardingId}/trainings`,

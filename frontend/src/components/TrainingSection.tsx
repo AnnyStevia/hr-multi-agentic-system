@@ -1,7 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import {
+  TrainingResourcePreview,
+  TrainingResourcePreviewLive,
+} from "@/components/TrainingResourcePreview";
 import { api } from "@/lib/api";
 import type { OnboardingTrainingAssignment, Training } from "@/types/training";
 
@@ -28,6 +33,7 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
   const [selectedTrainingId, setSelectedTrainingId] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newResourceUrl, setNewResourceUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [assigning, setAssigning] = useState(false);
@@ -110,10 +116,12 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
       const created = await api.createTraining({
         title: newTitle.trim(),
         description: newDescription.trim() || null,
+        resource_url: newResourceUrl.trim() || null,
       });
       await api.assignOnboardingTraining(onboardingId, created.id);
       setNewTitle("");
       setNewDescription("");
+      setNewResourceUrl("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create training");
@@ -147,10 +155,18 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
 
       {mode === "hr" && onboardingId && (
         <div className="mb-6 space-y-4">
+          <p className="text-xs text-gray-500">
+            Manage the full catalogue (with link previews) in{" "}
+            <Link href="/hr/training" className="text-brand-700 underline underline-offset-2">
+              Training
+            </Link>
+            .
+          </p>
+
           <form onSubmit={handleAssign} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
             <div className="sm:col-span-2">
               <label className="block text-xs text-gray-500 mb-1" htmlFor="assign-training">
-                Assign existing training
+                Assign from catalogue
               </label>
               <select
                 id="assign-training"
@@ -175,34 +191,58 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
             </button>
           </form>
 
-          <form onSubmit={handleCreateAndAssign} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1" htmlFor="new-training-title">
-                New training title
-              </label>
-              <input
-                id="new-training-title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                placeholder="e.g. Security awareness"
-              />
+          <form
+            onSubmit={handleCreateAndAssign}
+            className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3"
+          >
+            <p className="text-xs font-medium text-gray-600">Quick create &amp; assign</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1" htmlFor="new-training-title">
+                  Title
+                </label>
+                <input
+                  id="new-training-title"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                  placeholder="e.g. Security awareness"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1" htmlFor="new-training-desc">
+                  Description
+                </label>
+                <input
+                  id="new-training-desc"
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-gray-500 mb-1" htmlFor="new-training-url">
+                  Resource URL
+                </label>
+                <input
+                  id="new-training-url"
+                  type="url"
+                  value={newResourceUrl}
+                  onChange={(e) => setNewResourceUrl(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+                  placeholder="https://…"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1" htmlFor="new-training-desc">
-                Description (optional)
-              </label>
-              <input
-                id="new-training-desc"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
+            {newResourceUrl.trim() && (
+              <div className="max-w-sm">
+                <TrainingResourcePreviewLive url={newResourceUrl} />
+              </div>
+            )}
             <button
               type="submit"
               disabled={creating || !newTitle.trim()}
-              className="border border-gray-300 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              className="border border-gray-300 bg-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
             >
               {creating ? "Creating..." : "Create & assign"}
             </button>
@@ -217,25 +257,27 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
       ) : assignments.length === 0 ? (
         <p className="text-sm text-gray-500">No trainings assigned yet.</p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="grid gap-4 sm:grid-cols-2">
           {assignments.map((assignment) => (
             <li
               key={assignment.id}
-              className={`border rounded-lg p-4 space-y-2 ${
+              className={`flex flex-col overflow-hidden rounded-xl border ${
                 assignment.status === "completed"
                   ? "border-green-100 bg-green-50/40"
                   : "border-gray-200 bg-white"
               }`}
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{assignment.title}</p>
+              <div className="flex items-start justify-between gap-3 p-4 pb-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{assignment.title}</p>
                   {assignment.description && (
-                    <p className="mt-1 text-sm text-gray-600">{assignment.description}</p>
+                    <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                      {assignment.description}
+                    </p>
                   )}
                 </div>
                 <span
-                  className={`text-xs font-medium px-2 py-1 rounded-full ${
+                  className={`shrink-0 text-xs font-medium px-2 py-1 rounded-full ${
                     assignment.status === "completed"
                       ? "bg-green-100 text-green-800"
                       : "bg-amber-100 text-amber-800"
@@ -244,12 +286,28 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
                   {statusLabel(assignment.status)}
                 </span>
               </div>
+
+              <div className="px-4 pb-3">
+                {assignment.resource_url ? (
+                  <TrainingResourcePreview
+                    url={assignment.resource_url}
+                    title={assignment.title}
+                    compact
+                  />
+                ) : (
+                  <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-xs text-gray-400">
+                    No resource link
+                  </div>
+                )}
+              </div>
+
               {assignment.completed_at && (
-                <p className="text-xs text-gray-500">
+                <p className="px-4 text-xs text-gray-500">
                   Completed {formatDateTime(assignment.completed_at)}
                 </p>
               )}
-              <div className="flex flex-wrap gap-2">
+
+              <div className="mt-auto flex flex-wrap gap-2 border-t border-gray-100 px-4 py-3">
                 {mode === "employee" && assignment.status === "pending" && (
                   <button
                     type="button"

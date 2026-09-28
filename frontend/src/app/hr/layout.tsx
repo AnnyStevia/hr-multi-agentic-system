@@ -22,12 +22,9 @@ const CORE_NAV_ITEMS = [
   { href: "/employee/interviews", label: "My interviews", enabled: true },
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
   { href: "/hr/onboarding/templates", label: "Task catalogue", enabled: true },
+  { href: "/hr/training", label: "Training", enabled: true },
   { href: "/hr/leave", label: "Leave", enabled: true },
   { href: "/hr/documents", label: "Documents", enabled: true },
-];
-
-const LATER_NAV_ITEMS = [
-  { href: "#", label: "Training", enabled: false },
 ];
 
 export default function HrLayout({ children }: { children: React.ReactNode }) {
@@ -76,12 +73,6 @@ export default function HrLayout({ children }: { children: React.ReactNode }) {
               Core HR
             </p>
             {CORE_NAV_ITEMS.map((item) => (
-              <NavLink key={item.label} item={item} pathname={pathname} />
-            ))}
-            <p className="px-3 pt-5 pb-2 text-xs font-semibold text-brand-300 uppercase tracking-wide">
-              Coming later
-            </p>
-            {LATER_NAV_ITEMS.map((item) => (
               <NavLink key={item.label} item={item} pathname={pathname} />
             ))}
           </nav>
