@@ -75,3 +75,18 @@ class OnboardingTrainingResponse(BaseModel):
     resource_url: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class MyTrainingResourceResponse(BaseModel):
+    """Catalogue training with the current employee's personal completion status."""
+
+    training_id: int
+    title: str
+    description: str | None
+    resource_url: str | None = None
+    status: OnboardingTrainingStatus
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

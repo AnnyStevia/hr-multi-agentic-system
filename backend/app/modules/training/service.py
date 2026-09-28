@@ -6,9 +6,15 @@ from app.modules.notifications.service import NotificationService
 from app.modules.onboarding.models import OnboardingTaskType
 from app.modules.onboarding.repository import OnboardingRepository
 from app.modules.onboarding.sync import sync_onboarding_tasks_for_employee
-from app.modules.training.models import OnboardingTraining, OnboardingTrainingStatus, Training
+from app.modules.training.models import (
+    EmployeeTrainingProgress,
+    OnboardingTraining,
+    OnboardingTrainingStatus,
+    Training,
+)
 from app.modules.training.repository import TrainingRepository
 from app.modules.training.schemas import (
+    MyTrainingResourceResponse,
     OnboardingTrainingAssignRequest,
     OnboardingTrainingResponse,
     TrainingCreateRequest,
@@ -43,7 +49,9 @@ class TrainingService:
             description=description,
             resource_url=payload.resource_url,
         )
-        return self.repository.add_training(training)
+        saved = self.repository.add_training(training)
+        self._notify_training_resource_published(saved)
+        return saved
 
     def update_training(self, training_id: int, payload: TrainingUpdateRequest) -> Training:
         training = self.repository.get_training(training_id)
@@ -115,8 +123,97 @@ class TrainingService:
         )
 
     def list_assignments_for_user(self, user_id: int) -> list[OnboardingTraining]:
-        onboarding = self._require_onboarding_for_user(user_id)
+        onboarding = self._onboarding_for_user(user_id)
+        if onboarding is None:
+            return []
         return self.repository.list_assignments(onboarding.id)
+
+    def list_catalogue_for_user(self, user_id: int) -> list[MyTrainingResourceResponse]:
+        employee = self.employees.get_by_user_id(user_id)
+        if employee is None:
+            raise AppException("Employee profile not found", status_code=404)
+
+        progress_by_id = {
+            row.training_id: row
+            for row in self.repository.list_progress_for_employee(employee.id)
+        }
+        assignment_by_id: dict[int, OnboardingTraining] = {}
+        onboarding = self.onboardings.get_by_employee_id(employee.id)
+        if onboarding is not None:
+            for assignment in self.repository.list_assignments(onboarding.id):
+                assignment_by_id[assignment.training_id] = assignment
+
+        items: list[MyTrainingResourceResponse] = []
+        for training in self.repository.list_trainings_newest_first():
+            progress = progress_by_id.get(training.id)
+            assignment = assignment_by_id.get(training.id)
+            completed = False
+            completed_at = None
+            if progress is not None and progress.status == OnboardingTrainingStatus.COMPLETED:
+                completed = True
+                completed_at = progress.completed_at
+            elif (
+                assignment is not None
+                and assignment.status == OnboardingTrainingStatus.COMPLETED
+            ):
+                completed = True
+                completed_at = assignment.completed_at
+
+            items.append(
+                MyTrainingResourceResponse(
+                    training_id=training.id,
+                    title=training.title,
+                    description=training.description,
+                    resource_url=training.resource_url,
+                    status=(
+                        OnboardingTrainingStatus.COMPLETED
+                        if completed
+                        else OnboardingTrainingStatus.PENDING
+                    ),
+                    completed_at=completed_at,
+                    created_at=training.created_at,
+                    updated_at=training.updated_at,
+                )
+            )
+        return items
+
+    def complete_training_for_user(
+        self, user_id: int, training_id: int
+    ) -> MyTrainingResourceResponse:
+        employee = self.employees.get_by_user_id(user_id)
+        if employee is None:
+            raise AppException("Employee profile not found", status_code=404)
+        training = self.repository.get_training(training_id)
+        if training is None:
+            raise AppException("Training not found", status_code=404)
+
+        now = datetime.now(UTC)
+        progress = self.repository.get_progress(employee.id, training_id)
+        if progress is None:
+            progress = EmployeeTrainingProgress(
+                employee_id=employee.id,
+                training_id=training_id,
+                status=OnboardingTrainingStatus.COMPLETED,
+                completed_at=now,
+            )
+            progress = self.repository.add_progress(progress)
+        elif progress.status != OnboardingTrainingStatus.COMPLETED:
+            progress.status = OnboardingTrainingStatus.COMPLETED
+            progress.completed_at = now
+            progress = self.repository.save_progress(progress)
+
+        self._complete_matching_onboarding_assignment(employee.id, training_id, now)
+
+        return MyTrainingResourceResponse(
+            training_id=training.id,
+            title=training.title,
+            description=training.description,
+            resource_url=training.resource_url,
+            status=OnboardingTrainingStatus.COMPLETED,
+            completed_at=progress.completed_at,
+            created_at=training.created_at,
+            updated_at=training.updated_at,
+        )
 
     def complete_assignment_for_user(self, user_id: int, assignment_id: int) -> OnboardingTraining:
         onboarding = self._require_onboarding_for_user(user_id)
@@ -124,10 +221,18 @@ class TrainingService:
         if assignment is None:
             raise AppException("Training assignment not found", status_code=404)
         if assignment.status == OnboardingTrainingStatus.COMPLETED:
-            raise AppException("Training is already completed", status_code=400)
+            # Idempotent: opening a resource again should not fail.
+            self._ensure_employee_progress_completed(
+                onboarding.employee_id, assignment.training_id, assignment.completed_at
+            )
+            return assignment
+        now = datetime.now(UTC)
         assignment.status = OnboardingTrainingStatus.COMPLETED
-        assignment.completed_at = datetime.now(UTC)
+        assignment.completed_at = now
         saved = self.repository.save_assignment(assignment)
+        self._ensure_employee_progress_completed(
+            onboarding.employee_id, assignment.training_id, now
+        )
         sync_onboarding_tasks_for_employee(
             self.repository.db,
             onboarding.employee_id,
@@ -135,11 +240,56 @@ class TrainingService:
         )
         return saved
 
-    def _require_onboarding_for_user(self, user_id: int):
+    def _complete_matching_onboarding_assignment(
+        self, employee_id: int, training_id: int, completed_at: datetime
+    ) -> None:
+        onboarding = self.onboardings.get_by_employee_id(employee_id)
+        if onboarding is None:
+            return
+        assignment = self.repository.find_assignment(onboarding.id, training_id)
+        if assignment is None:
+            return
+        if assignment.status != OnboardingTrainingStatus.COMPLETED:
+            assignment.status = OnboardingTrainingStatus.COMPLETED
+            assignment.completed_at = completed_at
+            self.repository.save_assignment(assignment)
+            sync_onboarding_tasks_for_employee(
+                self.repository.db,
+                employee_id,
+                task_types={OnboardingTaskType.TRAINING},
+            )
+
+    def _ensure_employee_progress_completed(
+        self,
+        employee_id: int,
+        training_id: int,
+        completed_at: datetime | None,
+    ) -> None:
+        now = completed_at or datetime.now(UTC)
+        progress = self.repository.get_progress(employee_id, training_id)
+        if progress is None:
+            self.repository.add_progress(
+                EmployeeTrainingProgress(
+                    employee_id=employee_id,
+                    training_id=training_id,
+                    status=OnboardingTrainingStatus.COMPLETED,
+                    completed_at=now,
+                )
+            )
+            return
+        if progress.status != OnboardingTrainingStatus.COMPLETED:
+            progress.status = OnboardingTrainingStatus.COMPLETED
+            progress.completed_at = now
+            self.repository.save_progress(progress)
+
+    def _onboarding_for_user(self, user_id: int):
         employee = self.employees.get_by_user_id(user_id)
         if employee is None:
-            raise AppException("Onboarding not found", status_code=404)
-        onboarding = self.onboardings.get_by_employee_id(employee.id)
+            return None
+        return self.onboardings.get_by_employee_id(employee.id)
+
+    def _require_onboarding_for_user(self, user_id: int):
+        onboarding = self._onboarding_for_user(user_id)
         if onboarding is None:
             raise AppException("Onboarding not found", status_code=404)
         return onboarding
@@ -161,6 +311,24 @@ class TrainingService:
             related_entity_type="onboarding_training",
             related_entity_id=assignment.id,
         )
+
+    def _notify_training_resource_published(self, training: Training) -> None:
+        if self.notifications is None:
+            return
+        title = "New training resource"
+        message = (
+            f'A new training resource is available: "{training.title}". '
+            "Open Training to view it."
+        )
+        for user_id in self.employees.list_active_user_ids():
+            self.notifications.create_if_absent(
+                recipient_user_id=user_id,
+                type=NotificationType.TRAINING_RESOURCE_PUBLISHED,
+                title=title,
+                message=message,
+                related_entity_type="training",
+                related_entity_id=training.id,
+            )
 
 
 def build_training_response(training: Training) -> TrainingResponse:

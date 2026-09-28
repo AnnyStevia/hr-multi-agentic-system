@@ -5,6 +5,7 @@ from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.modules.training.dependencies import get_training_service
 from app.modules.training.schemas import (
+    MyTrainingResourceResponse,
     OnboardingTrainingAssignRequest,
     OnboardingTrainingResponse,
     TrainingCreateRequest,
@@ -21,6 +22,7 @@ from app.shared.exceptions import AppException
 catalog_router = APIRouter(prefix="/trainings", tags=["Trainings"])
 onboarding_router = APIRouter(prefix="/onboarding", tags=["Onboarding Trainings"])
 me_router = APIRouter(prefix="/me/onboarding/trainings", tags=["My Onboarding Trainings"])
+me_catalogue_router = APIRouter(prefix="/me/trainings", tags=["My Trainings"])
 
 
 def _handle(exc: AppException) -> None:
@@ -119,6 +121,32 @@ def remove_onboarding_training(
 ) -> None:
     try:
         service.remove_assignment(onboarding_id, assignment_id)
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_catalogue_router.get("", response_model=list[MyTrainingResourceResponse])
+def list_my_trainings(
+    current_user: User = Depends(get_current_user),
+    service: TrainingService = Depends(get_training_service),
+) -> list[MyTrainingResourceResponse]:
+    try:
+        return service.list_catalogue_for_user(current_user.id)
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_catalogue_router.patch(
+    "/{training_id}/complete",
+    response_model=MyTrainingResourceResponse,
+)
+def complete_my_training(
+    training_id: int,
+    current_user: User = Depends(get_current_user),
+    service: TrainingService = Depends(get_training_service),
+) -> MyTrainingResourceResponse:
+    try:
+        return service.complete_training_for_user(current_user.id, training_id)
     except AppException as exc:
         _handle(exc)
 

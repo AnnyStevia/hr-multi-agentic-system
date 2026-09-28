@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.training.models import OnboardingTraining, Training
+from app.modules.training.models import EmployeeTrainingProgress, OnboardingTraining, Training
 
 
 class TrainingRepository:
@@ -9,6 +9,13 @@ class TrainingRepository:
 
     def list_trainings(self) -> list[Training]:
         return self.db.query(Training).order_by(Training.title.asc(), Training.id.asc()).all()
+
+    def list_trainings_newest_first(self) -> list[Training]:
+        return (
+            self.db.query(Training)
+            .order_by(Training.created_at.desc(), Training.id.desc())
+            .all()
+        )
 
     def get_training(self, training_id: int) -> Training | None:
         return self.db.query(Training).filter(Training.id == training_id).first()
@@ -96,3 +103,33 @@ class TrainingRepository:
     def delete_assignment(self, assignment: OnboardingTraining) -> None:
         self.db.delete(assignment)
         self.db.commit()
+
+    def list_progress_for_employee(self, employee_id: int) -> list[EmployeeTrainingProgress]:
+        return (
+            self.db.query(EmployeeTrainingProgress)
+            .filter(EmployeeTrainingProgress.employee_id == employee_id)
+            .all()
+        )
+
+    def get_progress(
+        self, employee_id: int, training_id: int
+    ) -> EmployeeTrainingProgress | None:
+        return (
+            self.db.query(EmployeeTrainingProgress)
+            .filter(
+                EmployeeTrainingProgress.employee_id == employee_id,
+                EmployeeTrainingProgress.training_id == training_id,
+            )
+            .first()
+        )
+
+    def add_progress(self, progress: EmployeeTrainingProgress) -> EmployeeTrainingProgress:
+        self.db.add(progress)
+        self.db.commit()
+        self.db.refresh(progress)
+        return progress
+
+    def save_progress(self, progress: EmployeeTrainingProgress) -> EmployeeTrainingProgress:
+        self.db.commit()
+        self.db.refresh(progress)
+        return progress

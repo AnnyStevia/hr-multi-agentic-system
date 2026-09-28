@@ -175,6 +175,20 @@ class EmployeeRepository:
             .count()
         )
 
+    def list_active_user_ids(self) -> list[int]:
+        """User ids linked to ACTIVE employees (deduplicated, sorted)."""
+        rows = (
+            self.db.query(Employee.user_id)
+            .filter(
+                Employee.employment_status == EmploymentStatus.ACTIVE,
+                Employee.user_id.isnot(None),
+            )
+            .distinct()
+            .order_by(Employee.user_id.asc())
+            .all()
+        )
+        return [row[0] for row in rows if row[0] is not None]
+
     def count_all(self) -> int:
         return self.db.query(Employee).count()
 

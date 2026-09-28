@@ -218,7 +218,7 @@ def test_retry_complete_does_not_duplicate_notifications(client, db_session):
             f"/api/v1/me/onboarding/trainings/{assignment['id']}/complete",
             headers=candidate_headers,
         ).status_code
-        == 400
+        == 200
     )
 
     assert _count_type(db_session, notification_type=NotificationType.ONBOARDING_TASK_COMPLETED) == task_count

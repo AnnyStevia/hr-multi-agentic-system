@@ -101,7 +101,10 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   };
 
   const handleNotificationClick = async (notification: Notification) => {
-    if (notification.related_entity_type === "leave_request") {
+    if (
+      notification.related_entity_type === "leave_request" ||
+      notification.related_entity_type === "training"
+    ) {
       await navigateFromNotification(notification);
       return;
     }
@@ -120,7 +123,9 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
       setOpen(false);
 
       if (variant === "employee") {
-        if (
+        if (notification.related_entity_type === "training") {
+          router.push("/employee/training");
+        } else if (
           notification.related_entity_type === "onboarding" ||
           notification.related_entity_type === "onboarding_training"
         ) {

@@ -352,7 +352,10 @@ flowchart TD
 
 - Hire-triggered onboarding with task templates and verification sync
 - **Employee documents** (onboarding / personal files) and **Company Document Library** + private docs (separate stores)
-- Training assignments tied to the employee lifecycle
+- **Training catalogue** (HR) with optional `resource_url`, search, and link previews
+- **Employee Training** portal — all published resources visible; open-to-complete is **per employee** (`employee_training_progress`)
+- Onboarding training assignments still sync TRAINING tasks when used
+- Notify all active employees when a new catalogue resource is published
 - Lifecycle and task notifications
 - **Onboarding Agent** — self + HR reads; confirmation-gated ACK / complete writes via the unified assistant (or `POST /api/v1/ai/onboarding/ask` + `/confirm`)
 
@@ -536,6 +539,7 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Organization structure (departments, positions, reporting tree)
 - [x] Onboarding workflow (tasks, verification, notifications)
 - [x] Employee documents, company library, private documents & training
+- [x] Training catalogue (resource URLs) + employee Training portal with per-employee completion & publish notifications
 - [x] Leave management (policies, dual approval, calendar, on-leave status)
 - [x] Premium HR dashboard & role portals
 - [x] Core HR security hardening (RBAC / IDOR, inactive-manager validation)

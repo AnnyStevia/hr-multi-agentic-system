@@ -7,6 +7,8 @@ type TrainingResourcePreviewProps = {
   url: string;
   title?: string;
   compact?: boolean;
+  /** Called when the user opens the resource (before navigation). */
+  onOpen?: () => void;
 };
 
 function PreviewMedia({ meta, title }: { meta: LinkPreviewMeta; title?: string }) {
@@ -59,6 +61,7 @@ export function TrainingResourcePreview({
   url,
   title,
   compact = false,
+  onOpen,
 }: TrainingResourcePreviewProps) {
   const meta = getLinkPreviewMeta(url);
   if (!meta) return null;
@@ -68,6 +71,9 @@ export function TrainingResourcePreview({
       href={meta.href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={() => {
+        onOpen?.();
+      }}
       className={`group block overflow-hidden rounded-xl border border-brand-200 bg-white transition hover:border-brand-400 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
         compact ? "max-w-sm" : ""
       }`}

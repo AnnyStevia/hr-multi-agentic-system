@@ -18,7 +18,11 @@ import {
   needsOnboarding,
 } from "@/lib/roles";
 
-const ONBOARDING_ALLOWED = new Set(["/employee/onboarding", "/employee/profile"]);
+const ONBOARDING_ALLOWED = new Set([
+  "/employee/onboarding",
+  "/employee/profile",
+  "/employee/training",
+]);
 
 function isInterviewAssignmentsPath(pathname: string): boolean {
   return pathname === "/employee/interviews" || pathname.startsWith("/employee/interviews/");
@@ -129,6 +133,7 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
                   </>
                 )}
+                <SideLink href="/employee/training" pathname={pathname} label="Training" />
                 <SideLink href="/employee/onboarding" pathname={pathname} label="Onboarding" />
               </>
             )}

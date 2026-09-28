@@ -73,6 +73,7 @@ import type {
   ProfileUpdatePayload,
 } from "@/types/profile";
 import type {
+  MyTrainingResource,
   OnboardingTrainingAssignment,
   Training,
   TrainingPayload,
@@ -867,6 +868,17 @@ class ApiClient {
   async completeMyOnboardingTraining(assignmentId: number): Promise<OnboardingTrainingAssignment> {
     return this.request<OnboardingTrainingAssignment>(
       `/api/v1/me/onboarding/trainings/${assignmentId}/complete`,
+      { method: "PATCH" },
+    );
+  }
+
+  async listMyTrainings(): Promise<MyTrainingResource[]> {
+    return this.request<MyTrainingResource[]>("/api/v1/me/trainings");
+  }
+
+  async completeMyTraining(trainingId: number): Promise<MyTrainingResource> {
+    return this.request<MyTrainingResource>(
+      `/api/v1/me/trainings/${trainingId}/complete`,
       { method: "PATCH" },
     );
   }

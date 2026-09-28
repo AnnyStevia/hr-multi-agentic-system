@@ -28,3 +28,15 @@ export interface OnboardingTrainingAssignment {
   description: string | null;
   resource_url: string | null;
 }
+
+/** Catalogue item with the current employee's personal completion status. */
+export interface MyTrainingResource {
+  training_id: number;
+  title: string;
+  description: string | null;
+  resource_url: string | null;
+  status: OnboardingTrainingStatus;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

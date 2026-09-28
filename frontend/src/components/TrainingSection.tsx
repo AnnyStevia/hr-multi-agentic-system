@@ -293,6 +293,13 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
                     url={assignment.resource_url}
                     title={assignment.title}
                     compact
+                    onOpen={
+                      mode === "employee"
+                        ? () => {
+                            void handleComplete(assignment.id);
+                          }
+                        : undefined
+                    }
                   />
                 ) : (
                   <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-6 text-center text-xs text-gray-400">
@@ -308,7 +315,9 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
               )}
 
               <div className="mt-auto flex flex-wrap gap-2 border-t border-gray-100 px-4 py-3">
-                {mode === "employee" && assignment.status === "pending" && (
+                {mode === "employee" &&
+                  assignment.status === "pending" &&
+                  !assignment.resource_url && (
                   <button
                     type="button"
                     disabled={busyId === assignment.id}
@@ -318,6 +327,13 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
                     {busyId === assignment.id ? "Completing..." : "Mark as completed"}
                   </button>
                 )}
+                {mode === "employee" &&
+                  assignment.status === "pending" &&
+                  assignment.resource_url && (
+                    <p className="text-xs text-gray-500">
+                      Open the resource above to mark this training completed.
+                    </p>
+                  )}
                 {mode === "hr" && (
                   <button
                     type="button"

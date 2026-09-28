@@ -33,6 +33,48 @@ class Training(Base):
         back_populates="training",
         cascade="all, delete-orphan",
     )
+    employee_progress: Mapped[list["EmployeeTrainingProgress"]] = relationship(
+        back_populates="training",
+        cascade="all, delete-orphan",
+    )
+
+
+class EmployeeTrainingProgress(Base):
+    """Per-employee completion for a catalogue training (independent of peers)."""
+
+    __tablename__ = "employee_training_progress"
+    __table_args__ = (
+        UniqueConstraint("employee_id", "training_id", name="uq_employee_training_progress"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    training_id: Mapped[int] = mapped_column(
+        ForeignKey("trainings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[OnboardingTrainingStatus] = mapped_column(
+        SAEnum(
+            OnboardingTrainingStatus,
+            name="employee_training_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=OnboardingTrainingStatus.PENDING,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    training: Mapped[Training] = relationship(back_populates="employee_progress")
 
 
 class OnboardingTraining(Base):
