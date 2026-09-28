@@ -98,6 +98,63 @@ _ONBOARDING_TASK_MARKERS: tuple[str, ...] = (
     "pending onboarding",
 )
 
+_TRAINING_KEYWORDS: tuple[str, ...] = (
+    "training assignment",
+    "training assignments",
+    "my training",
+    "my trainings",
+    "training progress",
+    "training status",
+    "training catalogue",
+    "training catalog",
+    "assigned training",
+    "assigned trainings",
+    "training is assigned",
+    "trainings are assigned",
+    "training assigned to",
+    "training to onboarding",
+    "complete my training",
+    "complete training",
+    "mark training complete",
+    "mark training completed",
+    "assign training",
+    "list trainings",
+    "onboarding training",
+    "training tasks",
+    "training resource",
+    "pending training",
+    "training",
+    "trainings",
+)
+
+# Vague Training-adjacent terms that alone are not enough to route.
+_TRAINING_VAGUE: tuple[str, ...] = (
+    "course",
+    "courses",
+    "learning",
+)
+
+# Operational language that keeps routing on Training even if "policy" appears.
+_TRAINING_TASK_MARKERS: tuple[str, ...] = (
+    "my training",
+    "my trainings",
+    "training assignment",
+    "training assignments",
+    "complete training",
+    "complete my training",
+    "assign training",
+    "mark training",
+    "training progress",
+    "training status",
+    "training catalogue",
+    "training catalog",
+    "assigned training",
+    "assigned trainings",
+    "list trainings",
+    "onboarding training",
+    "training tasks",
+)
+
 _KNOWLEDGE_POLICY_MARKERS: tuple[str, ...] = (
     "handbook",
     "according to our policy",
@@ -111,7 +168,7 @@ _KNOWLEDGE_POLICY_MARKERS: tuple[str, ...] = (
     "company documents",
 )
 
-# Strong policy-document phrasing used vs Onboarding ambiguity.
+# Strong policy-document phrasing used vs Onboarding / Training ambiguity.
 _KNOWLEDGE_VS_ONBOARDING_MARKERS: tuple[str, ...] = (
     *_KNOWLEDGE_POLICY_MARKERS,
     "policy say",
@@ -167,6 +224,12 @@ def _score_agent(agent_id: str, text: str) -> int:
         return strong + vague
     if agent_id == "onboarding":
         return _score_keywords(text, _ONBOARDING_KEYWORDS)
+    if agent_id == "training":
+        strong = _score_keywords(text, _TRAINING_KEYWORDS)
+        vague = _score_keywords(text, _TRAINING_VAGUE)
+        if strong == 0 and vague > 0:
+            return 0
+        return strong + vague
     return 0
 
 
@@ -233,6 +296,20 @@ def route_message(
         and _has_any(text, _KNOWLEDGE_VS_ONBOARDING_MARKERS)
         and not _has_any(text, _ONBOARDING_TASK_MARKERS)
         and _score_keywords(text, _ONBOARDING_KEYWORDS) > 0
+    ):
+        return RouteDecision(
+            kind="agent",
+            agent_id="knowledge",
+            reason="policy_document_preference",
+        )
+
+    # Policy/handbook Qs without training operational language → Knowledge
+    # (even if the word "training" appears in a policy question).
+    if (
+        "knowledge" in available_ids
+        and _has_any(text, _KNOWLEDGE_VS_ONBOARDING_MARKERS)
+        and not _has_any(text, _TRAINING_TASK_MARKERS)
+        and _score_keywords(text, _TRAINING_KEYWORDS) > 0
     ):
         return RouteDecision(
             kind="agent",

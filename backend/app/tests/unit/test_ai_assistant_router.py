@@ -8,17 +8,24 @@ from app.ai.registry import (
     LEAVE_AGENT,
     ONBOARDING_AGENT,
     RECRUITMENT_AGENT,
+    TRAINING_AGENT,
     get_available_agents,
 )
 from app.ai.routing import route_message
 
 
 def _emp_available():
-    return (KNOWLEDGE_AGENT, LEAVE_AGENT, ONBOARDING_AGENT)
+    return (KNOWLEDGE_AGENT, LEAVE_AGENT, ONBOARDING_AGENT, TRAINING_AGENT)
 
 
 def _hr_available():
-    return (KNOWLEDGE_AGENT, LEAVE_AGENT, RECRUITMENT_AGENT, ONBOARDING_AGENT)
+    return (
+        KNOWLEDGE_AGENT,
+        LEAVE_AGENT,
+        RECRUITMENT_AGENT,
+        ONBOARDING_AGENT,
+        TRAINING_AGENT,
+    )
 
 
 def test_leave_intent_routes_to_leave():
@@ -37,6 +44,79 @@ def test_onboarding_progress_routes_to_onboarding():
     )
     assert decision.kind == "agent"
     assert decision.agent_id == "onboarding"
+
+
+def test_my_training_routes_to_training():
+    decision = route_message(
+        "What trainings do I have?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_show_assigned_trainings_routes_to_training():
+    decision = route_message(
+        "Show my assigned trainings",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_complete_my_training_routes_to_training():
+    decision = route_message(
+        "Mark my training as complete",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_list_trainings_catalogue_routes_to_training():
+    decision = route_message(
+        "What trainings are available?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_assign_training_to_onboarding_routes_to_training():
+    decision = route_message(
+        "Assign security training to onboarding 42",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_training_assigned_to_onboarding_routes_to_training():
+    decision = route_message(
+        "What training is assigned to onboarding 42?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_policy_say_about_training_prefers_knowledge():
+    decision = route_message(
+        "What does the employee handbook say about training?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "knowledge"
+    assert decision.reason == "policy_document_preference"
+
+
+def test_course_alone_does_not_route_to_training():
+    decision = route_message(
+        "Tell me about courses.",
+        _emp_available(),
+    )
+    assert decision.kind == "clarify"
+    assert decision.agent_id is None
 
 
 def test_knowledge_handbook_preferred_over_leave():
@@ -85,6 +165,15 @@ def test_leave_balance_not_onboarding():
     )
     assert decision.kind == "agent"
     assert decision.agent_id == "leave"
+
+
+def test_onboarding_tasks_not_training():
+    decision = route_message(
+        "What are my onboarding tasks?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "onboarding"
 
 
 def test_recruitment_intent_when_available():
@@ -161,6 +250,7 @@ def test_availability_filter_before_routing_employee():
     available = get_available_agents(ctx)
     assert "recruitment" not in {a.id for a in available}
     assert "onboarding" in {a.id for a in available}
+    assert "training" in {a.id for a in available}
     decision = route_message("Shortlist this candidate", available)
     assert decision.kind == "unavailable"
 
@@ -172,3 +262,12 @@ def test_onboarding_unavailable_signal_for_candidate():
     )
     assert decision.kind == "unavailable"
     assert "onboarding" in decision.reason
+
+
+def test_training_unavailable_signal_for_candidate():
+    decision = route_message(
+        "What trainings do I have?",
+        (KNOWLEDGE_AGENT,),  # no training available
+    )
+    assert decision.kind == "unavailable"
+    assert "training" in decision.reason

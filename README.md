@@ -48,7 +48,7 @@ flowchart TB
 | User ≠ Employee | Identity accounts are separate from employment records ([ADR 002](docs/decisions/002-user-vs-employee.md)) |
 | Agents never hit the DB | `Agent → Tool → Service → DB` ([ADR 003](docs/decisions/003-agent-database-isolation.md)) |
 | Auth before generation | `AIExecutionContext` + permission filters run before tools / retrieval; the LLM only sees authorized context |
-| Writes need confirmation | Recruitment, Leave, and Onboarding write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation |
+| Writes need confirmation | Recruitment, Leave, Onboarding, and Training write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation |
 | Embed ≠ generate | `gemini-embedding-2` for vectors; conversational `GEMINI_MODEL` for grounded answers |
 | Registry ≠ authorization | Agent registry / router decide **availability + intent only**; tools + domain services remain authoritative |
 
@@ -56,7 +56,7 @@ flowchart TB
 
 ```
 backend/app/
-├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/onboarding, leave, recruitment, knowledge)
+├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/training, /ai/onboarding, leave, recruitment, knowledge)
 ├── core/                # Config, security, database
 ├── modules/             # Core HR domains
 │   ├── identity/        # Auth, RBAC, seed admin
@@ -74,8 +74,8 @@ backend/app/
 │   ├── core/            # LLM providers, AIExecutionContext
 │   ├── registry/        # Static agent catalog + permission / employee_id availability
 │   ├── routing/         # Deterministic keyword router (no LLM supervisor)
-│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding
-│   ├── tools/           # Registry, auth, domain tools (incl. onboarding reads/writes)
+│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding, Training
+│   ├── tools/           # Registry, auth, domain tools (incl. training / onboarding reads/writes)
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
 │   ├── orchestration/   # Tool roundtrips
@@ -87,7 +87,7 @@ backend/app/
 
 On authenticated portals, the floating assistant is **one UI** backed by the **unified gateway**:
 
-`POST /api/v1/ai/assistant/ask` → `get_available_agents` → deterministic `route_message` → Knowledge / Leave / Recruitment / Onboarding.
+`POST /api/v1/ai/assistant/ask` → `get_available_agents` → deterministic `route_message` → Knowledge / Leave / Recruitment / Onboarding / Training.
 
 | Agent | When it is available | Confirm endpoint (writes) |
 |-------|----------------------|---------------------------|
@@ -95,10 +95,11 @@ On authenticated portals, the floating assistant is **one UI** backed by the **u
 | Leave | `leaves:read` | `POST /api/v1/ai/leave/confirm` |
 | Recruitment | `recruitment:read` (HR/Admin) | `POST /api/v1/ai/recruitment/confirm` |
 | Onboarding | `employee_id` set **or** `onboarding:read` | `POST /api/v1/ai/onboarding/confirm` |
+| Training | `employee_id` set **or** HR/Admin + `training:read` | `POST /api/v1/ai/training/confirm` |
 
 The UI stores each reply’s `agent_id` and routes Confirm by that id (not by pathname). Write proposals show a **Confirm / Cancel** card; the HMAC token stays in client state (not rendered as text). Cancel drops the token locally. Typing “I confirm” in chat does nothing — only the UI button completes a write.
 
-Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`).
+Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`).
 
 ---
 
@@ -269,6 +270,7 @@ flowchart TD
   Reg[get_available_agents]
   Route[route_message keywords]
   OA[OnboardingAgent]
+  TA[TrainingAgent]
   Leave[LeaveAgent]
   Rec[RecruitmentAgent]
   Know[KnowledgeAgent]
@@ -278,14 +280,17 @@ flowchart TD
 
   User --> Ask --> Ctx --> Reg --> Route
   Route -->|onboarding| OA
+  Route -->|training| TA
   Route -->|leave| Leave
   Route -->|recruitment| Rec
   Route -->|knowledge| Know
   OA --> Tools --> Svc
+  TA --> Tools
   Leave --> Tools
   Rec --> Tools
   Know --> Tools
   OA --> Env
+  TA --> Env
   Leave --> Env
   Rec --> Env
   Know --> Env
@@ -304,6 +309,47 @@ flowchart TD
 **Onboarding availability (locked):** agent is available when `AIExecutionContext.employee_id` is set **or** the user has `onboarding:read`. Candidates with neither are unavailable. That does **not** grant cross-employee access — tools + `OnboardingService` still authorize.
 
 **Write tools (confirmation-gated)** — employee ACK of own tasks; HR/Admin manual task complete and force-complete onboarding (see [`backend/docs/phase_9_2e_onboarding_unified_assistant.md`](backend/docs/phase_9_2e_onboarding_unified_assistant.md)).
+
+---
+
+### Training AI (Phases 10.1–10.2E) — reads, writes, unified assistant
+
+```mermaid
+flowchart TD
+  User[Authenticated user]
+  Ask[POST /ai/assistant/ask]
+  Reg[Registry availability]
+  Route[Deterministic router]
+  Agent[TrainingAgent]
+  Tools[training_reads / training_writes]
+  Pending[pending_confirmation]
+  Conf[POST /ai/training/confirm]
+  Svc[TrainingService]
+  DB[(PostgreSQL)]
+
+  User --> Ask --> Reg --> Route --> Agent
+  Agent --> Tools
+  Tools -->|writes propose| Pending
+  Pending -->|UI Confirm| Conf --> Agent
+  Agent -->|verify HMAC + re-auth| Tools --> Svc --> DB
+```
+
+| Phase | Capability |
+|-------|------------|
+| 10.1 / 10.1B | Domain audit; optional `Training.resource_url` |
+| 10.2A | Read-only Training Agent + `POST /ai/training/ask` |
+| 10.2B | Authorization hardening (self vs HR/Admin; no manager team scope) |
+| 10.2C | Confirmation-gated complete own assignment + HR assign to onboarding |
+| 10.2D | Confirm hardening + FE `agentId=training` confirm plumbing |
+| 10.2E | Registry + router + unified `/ai/assistant/ask` dispatch |
+
+**Training availability (locked):** available when `employee_id` is set **or** the user is HR/Admin staff with `training:read`. Bare `training:read` without an employee profile and without staff role does **not** open the agent. Tools remain authoritative (employees get self tools only; catalogue / assign need HR/Admin + permissions).
+
+**Read tools** — `list_my_training_assignments` (self); `list_trainings`, `list_onboarding_training_assignments` (HR/Admin + `training:read`).
+
+**Write tools (confirmation-gated)** — `complete_my_training_assignment` (self); `assign_training_to_onboarding` (HR/Admin + `training:write`).
+
+Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/phase_10_2e_training_unified_integration.md).
 
 ---
 
@@ -358,6 +404,7 @@ flowchart TD
 - Notify all active employees when a new catalogue resource is published
 - Lifecycle and task notifications
 - **Onboarding Agent** — self + HR reads; confirmation-gated ACK / complete writes via the unified assistant (or `POST /api/v1/ai/onboarding/ask` + `/confirm`)
+- **Training Agent** — self assignments + HR catalogue/onboarding-assignment reads; confirmation-gated complete own / assign to onboarding via the unified assistant (or `POST /api/v1/ai/training/ask` + `/confirm`)
 
 ### Leave
 
@@ -372,7 +419,7 @@ flowchart TD
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating **unified AI assistant** (intent routing across Knowledge, Leave, Recruitment, Onboarding)
+- Floating **unified AI assistant** (intent routing across Knowledge, Leave, Recruitment, Onboarding, Training)
 
 ### AI foundation (shipped)
 
@@ -383,17 +430,19 @@ flowchart TD
 - **Recruitment Agent** — authorized read/write tools over recruitment & interviews (writes confirmation-gated)
 - **Leave Agent** — scoped leave reads + confirmation-gated writes via `LeaveService`
 - **Onboarding Agent** — self/HR onboarding reads + confirmation-gated writes via `OnboardingService`
+- **Training Agent** — self/HR training reads + confirmation-gated writes via `TrainingService`
 - Shared HMAC confirmation + `ai_tool_action_audits` for AI writes
 - Full RAG path through **grounded generation + citations** (see pipeline above)
 - Smoke scripts under `backend/scripts/` (RAG + recruitment agent helpers)
 
 ### Not yet
 
-- Training / Document / Offboarding specialized agents
+- Document / Offboarding specialized agents
 - LLM supervisor / chat history / rich Markdown renderer for the assistant
 - LLM rerank / query reformulation for RAG
 - Autonomous domain decisions (writes always require UI confirmation)
-- Manager onboarding “reports” scope (employees see self only; HR sees org-wide)
+- Manager team-training or onboarding “reports” scope (employees see self only; HR sees org-wide)
+- Training catalogue CRUD / LMS features via AI (due dates, certificates, mandatory flags)
 
 ---
 
@@ -443,7 +492,7 @@ After pulling, apply migrations:
 ```bash
 cd backend
 alembic upgrade head
-# Current head includes 045_application_rejection_reason
+# Current head: 048_employee_training_progress
 ```
 
 ---
@@ -490,17 +539,19 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
-### Unified assistant (Knowledge / Leave / Recruitment / Onboarding)
+### Unified assistant (Knowledge / Leave / Recruitment / Onboarding / Training)
 
 1. Log in (employee with a linked Employee record, or HR) → open the floating assistant on any authenticated portal.
 2. Ask in natural language; the backend routes by intent:
    - Leave: “What’s my leave balance?”
    - Onboarding: “What’s my onboarding progress?” / “Acknowledge my pending onboarding task.”
+   - Training: “What trainings do I have?” / “Mark my safety training as completed.” / (HR) “Assign training 5 to onboarding 42.”
    - Knowledge: “What does the company policy say about remote work?”
    - Recruitment (HR): “How many candidates are currently shortlisted?”
-3. **Writes** (leave, recruitment, or onboarding ACK/complete): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing.
+3. **Writes** (leave, recruitment, onboarding ACK/complete, or training complete/assign): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing.
 4. Do not type “I confirm” in chat — only the UI button completes the write.
-5. Candidates without `employee_id` / `onboarding:read` should get unavailable for onboarding (and typically have no agents).
+5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training (and typically have no agents).
+6. Policy/handbook questions about training still prefer **Knowledge**; operational “my training” / assign phrases prefer **Training**.
 
 ---
 
@@ -550,7 +601,8 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Leave Agent (scoped reads + confirmation-gated writes) — Phases 7.1–7.4B
 - [x] Multi-agent registry + deterministic router + unified `/ai/assistant/ask` — Phases 8.1–8.3
 - [x] Onboarding Agent (reads, auth harden, confirmation writes, unified registration) — Phases 9.1–9.2E
-- [ ] Training / Document / Offboarding agents
+- [x] Training Agent (reads, auth harden, confirmation writes, FE confirm, unified registration) — Phases 10.1–10.2E
+- [ ] Document / Offboarding agents
 - [ ] Assistant chat history & richer answer rendering
 
 ---

@@ -31,8 +31,12 @@ def _infer_target(tool_name: str, arguments: dict[str, Any]) -> tuple[str | None
         return "leave_request", int(arguments["request_id"])
     if "task_id" in arguments and arguments["task_id"] is not None:
         return "onboarding_task", int(arguments["task_id"])
+    if "training_assignment_id" in arguments and arguments["training_assignment_id"] is not None:
+        return "onboarding_training", int(arguments["training_assignment_id"])
     if "onboarding_id" in arguments and arguments["onboarding_id"] is not None:
         return "onboarding", int(arguments["onboarding_id"])
+    if "training_id" in arguments and arguments["training_id"] is not None:
+        return "training", int(arguments["training_id"])
     if "employee_id" in arguments and arguments["employee_id"] is not None:
         return "employee", int(arguments["employee_id"])
     return None, None

@@ -15,11 +15,20 @@ def is_agent_available(definition: AgentDefinition, context: AIExecutionContext)
     Onboarding is special: employees lack ``onboarding:read`` by design, so the
     agent is available when ``employee_id`` is present OR the user has
     ``onboarding:read`` (HR/Admin). Candidates with neither are unavailable.
+
+    Training is special: employees already carry ``training:read``, so bare
+    permission intersection would over-open Training. Available when
+    ``employee_id`` is present OR HR/Admin staff with ``training:read``.
     """
     if definition.id == "onboarding":
         if context.employee_id is not None:
             return True
         return "onboarding:read" in context.permission_names
+    if definition.id == "training":
+        if context.employee_id is not None:
+            return True
+        staff = bool(context.role_names & frozenset({"hr", "admin"}))
+        return staff and "training:read" in context.permission_names
     return bool(context.permission_names & definition.required_permissions_any)
 
 

@@ -98,12 +98,39 @@ ONBOARDING_AGENT = AgentDefinition(
     supports_confirmation=True,
 )
 
-# Implemented agents only. Training / Documents / Offboarding are not registered.
+TRAINING_AGENT = AgentDefinition(
+    id="training",
+    display_name="Training Agent",
+    description=(
+        "Training assignments, training catalogue information, and authorized "
+        "training actions. Availability uses employee_id or HR/Admin with "
+        "training:read — not tool authorization."
+    ),
+    intents=(
+        "training",
+        "trainings",
+        "my training",
+        "my trainings",
+        "training assignment",
+        "assigned training",
+        "complete my training",
+        "assign training",
+        "training catalogue",
+        "training catalog",
+        "onboarding training",
+        "list trainings",
+    ),
+    required_permissions_any=frozenset({"training:read"}),
+    supports_confirmation=True,
+)
+
+# Implemented agents only. Documents / Offboarding are not registered.
 REGISTERED_AGENTS: tuple[AgentDefinition, ...] = (
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
     RECRUITMENT_AGENT,
     ONBOARDING_AGENT,
+    TRAINING_AGENT,
 )
 
 _AGENTS_BY_ID: dict[str, AgentDefinition] = {a.id: a for a in REGISTERED_AGENTS}

@@ -55,8 +55,21 @@ export interface OnboardingAskResponse {
   pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
+export interface TrainingAskResponse {
+  answer: string;
+  model: string;
+  tool_names_called: string[];
+  usage: LeaveUsage | null;
+  pending_confirmation?: RecruitmentPendingConfirmation | null;
+}
+
 /** Agent that handled a unified assistant ask (backend-selected). */
-export type AssistantAgentId = "knowledge" | "leave" | "recruitment" | "onboarding";
+export type AssistantAgentId =
+  | "knowledge"
+  | "leave"
+  | "recruitment"
+  | "onboarding"
+  | "training";
 
 export type AssistantAskStatus =
   | "completed"

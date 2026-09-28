@@ -13,8 +13,18 @@ from app.ai.agents.recruitment.schemas import (
     PendingConfirmationInfo as RecPending,
 )
 from app.ai.agents.recruitment.schemas import RecruitmentAgentAnswer
+from app.ai.agents.training.schemas import (
+    PendingConfirmationInfo as TrainingPending,
+    TrainingAgentAnswer,
+)
 from app.ai.rag.generation.schemas import Citation, RAGAnswer
-from app.api.v1 import ai_knowledge, ai_leave, ai_onboarding, ai_recruitment
+from app.api.v1 import (
+    ai_knowledge,
+    ai_leave,
+    ai_onboarding,
+    ai_recruitment,
+    ai_training,
+)
 from app.tests.helpers import auth_header, create_user_with_role
 
 
@@ -475,6 +485,80 @@ def test_unified_ask_routes_to_onboarding_preserves_pending(client, db_session):
     mock_leave.ask.assert_not_called()
     mock_knowledge.ask.assert_not_called()
     mock_recruitment.ask.assert_not_called()
+
+
+def test_unified_ask_routes_to_training_preserves_pending(client, db_session):
+    # HR has training:read + staff role (no Employee row required for availability).
+    create_user_with_role(
+        db_session,
+        email="hr.asst.train@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.train@test.com", password="hrpass123"
+    )
+    mock_training = MagicMock()
+    mock_training.ask.return_value = TrainingAgentAnswer(
+        answer="Confirm complete training assignment?",
+        model="mock-train",
+        tool_names_called=["complete_my_training_assignment"],
+        usage=None,
+        pending_confirmation=TrainingPending(
+            token="train-tok",
+            tool_name="complete_my_training_assignment",
+            summary="Complete assignment 11",
+            expires_at=8888888888,
+        ),
+    )
+    mock_leave = MagicMock()
+    mock_knowledge = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "What trainings do I have?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["agent_id"] == "training"
+    assert body["answer"] == "Confirm complete training assignment?"
+    assert body["pending_confirmation"]["token"] == "train-tok"
+    assert (
+        body["pending_confirmation"]["tool_name"]
+        == "complete_my_training_assignment"
+    )
+    assert body["tool_names_called"] == ["complete_my_training_assignment"]
+    mock_training.ask.assert_called_once()
+    mock_leave.ask.assert_not_called()
+    mock_knowledge.ask.assert_not_called()
+    mock_recruitment.ask.assert_not_called()
+    mock_onboarding.ask.assert_not_called()
 
 
 def test_existing_leave_endpoint_still_works(client, db_session):

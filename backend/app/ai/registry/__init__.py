@@ -10,6 +10,7 @@ from app.ai.registry.registry import (
     ONBOARDING_AGENT,
     RECRUITMENT_AGENT,
     REGISTERED_AGENTS,
+    TRAINING_AGENT,
     get_agent_definition,
     list_registered_agents,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "LEAVE_AGENT",
     "ONBOARDING_AGENT",
     "RECRUITMENT_AGENT",
+    "TRAINING_AGENT",
     "REGISTERED_AGENTS",
     "get_agent_definition",
     "get_available_agents",

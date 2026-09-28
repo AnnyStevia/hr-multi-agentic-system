@@ -38,6 +38,15 @@ from app.ai.agents.recruitment import (
 from app.ai.agents.recruitment.schemas import (
     PendingConfirmationInfo as RecruitmentPendingConfirmation,
 )
+from app.ai.agents.training import (
+    TrainingAgent,
+    TrainingAgentError,
+    TrainingAgentRequest,
+    TrainingAgentValidationError,
+)
+from app.ai.agents.training.schemas import (
+    PendingConfirmationInfo as TrainingPendingConfirmation,
+)
 from app.ai.core.context.dependencies import get_ai_execution_context
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.registry import get_available_agents
@@ -46,6 +55,7 @@ from app.api.v1.ai_knowledge import get_knowledge_agent
 from app.api.v1.ai_leave import get_leave_agent
 from app.api.v1.ai_onboarding import get_onboarding_agent
 from app.api.v1.ai_recruitment import get_recruitment_agent
+from app.api.v1.ai_training import get_training_agent
 from app.modules.identity.dependencies import get_current_user
 from app.modules.identity.models import User
 
@@ -56,13 +66,13 @@ AssistantStatus = Literal["completed", "clarification_required", "unavailable"]
 _CLARIFY_ANSWER = (
     "I am not sure which assistant should handle this. "
     "Please clarify whether you need company policy documents, leave help, "
-    "onboarding support, or recruitment help."
+    "onboarding support, training help, or recruitment help."
 )
 
 _UNAVAILABLE_ANSWER = (
     "This assistant cannot perform that request with your current access. "
-    "If you need help with company documents, leave, or onboarding, try rephrasing; "
-    "recruitment actions require HR or Admin access."
+    "If you need help with company documents, leave, onboarding, or training, "
+    "try rephrasing; recruitment actions require HR or Admin access."
 )
 
 _NO_AGENTS_ANSWER = (
@@ -123,6 +133,7 @@ def _pending_from(
         LeavePendingConfirmation
         | RecruitmentPendingConfirmation
         | OnboardingPendingConfirmation
+        | TrainingPendingConfirmation
         | None
     ),
 ) -> AssistantPendingConfirmationResponse | None:
@@ -156,6 +167,7 @@ def ask_assistant(
     leave_agent: LeaveAgent = Depends(get_leave_agent),
     recruitment_agent: RecruitmentAgent = Depends(get_recruitment_agent),
     onboarding_agent: OnboardingAgent = Depends(get_onboarding_agent),
+    training_agent: TrainingAgent = Depends(get_training_agent),
 ) -> AssistantAskResponse:
     """Unified ask: availability → route → existing agent (no confirm writes)."""
     available = get_available_agents(context)
@@ -296,6 +308,32 @@ def ask_assistant(
             ) from exc
         return AssistantAskResponse(
             agent_id="onboarding",
+            answer=result.answer,
+            citations=[],
+            pending_confirmation=_pending_from(result.pending_confirmation),
+            status="completed",
+            model=result.model,
+            tool_names_called=list(result.tool_names_called),
+            usage=_usage_from(result.usage),
+        )
+
+    if agent_id == "training":
+        try:
+            result = training_agent.ask(
+                TrainingAgentRequest(question=question, context=context)
+            )
+        except TrainingAgentValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.message,
+            ) from exc
+        except TrainingAgentError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Unable to answer the training question right now.",
+            ) from exc
+        return AssistantAskResponse(
+            agent_id="training",
             answer=result.answer,
             citations=[],
             pending_confirmation=_pending_from(result.pending_confirmation),
