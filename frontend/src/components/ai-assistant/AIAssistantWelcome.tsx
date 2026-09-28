@@ -2,8 +2,6 @@
 
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
-import { useAIAssistant } from "@/hooks/useAIAssistant";
-import type { AIAssistantAgentMode } from "@/types/ai";
 
 function greetingForNow(): string {
   const hour = new Date().getHours();
@@ -12,29 +10,11 @@ function greetingForNow(): string {
   return "Good evening";
 }
 
-const SUGGESTIONS: Record<AIAssistantAgentMode, string[]> = {
-  knowledge: [
-    "What position did Anny Stevia hold during her internship?",
-    "Where is the Talent Performer office located?",
-    "Summarize what you know from company documents.",
-  ],
-  recruitment: [
-    "List recent applications for open jobs.",
-    "What is the status of application 3?",
-    "Who has interviews scheduled this week?",
-  ],
-  leave: [
-    "Who is currently on leave?",
-    "List pending leave requests.",
-    "What is the annual leave policy for this year?",
-  ],
-};
-
-const TOPIC: Record<AIAssistantAgentMode, string> = {
-  knowledge: "company knowledge",
-  recruitment: "recruitment and interviews",
-  leave: "leave balances and requests",
-};
+const SUGGESTIONS = [
+  "What is my remaining annual leave?",
+  "According to the employee handbook, how many annual leave days do we have?",
+  "Who is currently on leave?",
+];
 
 export function AIAssistantWelcome({
   onPickSuggestion,
@@ -42,9 +22,7 @@ export function AIAssistantWelcome({
   onPickSuggestion: (text: string) => void;
 }) {
   const { user } = useAuth();
-  const { agentMode } = useAIAssistant();
   const name = user?.first_name || user?.full_name?.split(" ")[0] || "there";
-  const suggestions = SUGGESTIONS[agentMode];
 
   return (
     <div className="h-full min-h-0 flex flex-col items-center justify-center text-center px-4 py-4 sm:py-6 overflow-hidden animate-dash-fade-up">
@@ -63,8 +41,7 @@ export function AIAssistantWelcome({
         {greetingForNow()}, {name}
       </h1>
       <p className="mt-2 text-sm sm:text-base text-brand-300 max-w-md shrink-0">
-        How can I help you with{" "}
-        <span className="text-brand-600 font-medium">{TOPIC[agentMode]}</span> today?
+        How can I help you?
       </p>
 
       <div className="mt-6 w-full max-w-2xl shrink-0">
@@ -72,7 +49,7 @@ export function AIAssistantWelcome({
           Suggested questions
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          {suggestions.map((item) => (
+          {SUGGESTIONS.map((item) => (
             <button
               key={item}
               type="button"

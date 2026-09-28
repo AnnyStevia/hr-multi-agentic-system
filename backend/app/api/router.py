@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    ai_assistant,
     ai_knowledge,
     ai_leave,
+    ai_onboarding,
     ai_recruitment,
     applications,
     auth,
@@ -34,6 +36,8 @@ api_router.include_router(dashboard.router)
 api_router.include_router(ai_knowledge.router)
 api_router.include_router(ai_recruitment.router)
 api_router.include_router(ai_leave.router)
+api_router.include_router(ai_assistant.router)
+api_router.include_router(ai_onboarding.router)
 api_router.include_router(departments.router)
 api_router.include_router(positions.router)
 api_router.include_router(employees.router)

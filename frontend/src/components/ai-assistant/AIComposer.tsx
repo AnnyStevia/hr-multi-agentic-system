@@ -2,28 +2,9 @@
 
 import { useRef, type FormEvent, type KeyboardEvent } from "react";
 import { useAIAssistant } from "@/hooks/useAIAssistant";
-import type { AIAssistantAgentMode } from "@/types/ai";
-
-const LABEL: Record<AIAssistantAgentMode, string> = {
-  knowledge: "Ask about company knowledge",
-  recruitment: "Ask about recruitment or interviews",
-  leave: "Ask about leave",
-};
-
-const PLACEHOLDER: Record<AIAssistantAgentMode, string> = {
-  knowledge: "Ask about company policies, procedures, documents…",
-  recruitment: "Ask about jobs, applications, interviews…",
-  leave: "Ask about balances, pending requests, who is on leave…",
-};
-
-const FOOTER: Record<AIAssistantAgentMode, string> = {
-  knowledge: "Answers use your company document library",
-  recruitment: "Answers use live recruitment and interview data",
-  leave: "Answers use live leave data; writes require confirmation",
-};
 
 export function AIComposer() {
-  const { draft, setDraft, ask, loading, clearError, agentMode } = useAIAssistant();
+  const { draft, setDraft, ask, loading, clearError } = useAIAssistant();
   const areaRef = useRef<HTMLTextAreaElement>(null);
 
   const onSubmit = async (event?: FormEvent) => {
@@ -45,7 +26,7 @@ export function AIComposer() {
       className="w-full max-w-2xl mx-auto rounded-3xl border border-brand-200 bg-white shadow-[0_18px_50px_-28px_rgba(15,34,74,0.35)]"
     >
       <label htmlFor="ai-composer-input" className="sr-only">
-        {LABEL[agentMode]}
+        Ask your HR Assistant
       </label>
       <div className="flex items-start gap-3 px-5 pt-4">
         <span
@@ -62,12 +43,14 @@ export function AIComposer() {
           disabled={loading}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder={PLACEHOLDER[agentMode]}
+          placeholder="Ask your HR Assistant…"
           className="w-full resize-none border-0 bg-transparent text-sm sm:text-base text-brand-900 placeholder:text-brand-300 focus:outline-none focus:ring-0 disabled:opacity-60"
         />
       </div>
       <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-2">
-        <p className="text-xs text-brand-300 pl-1">{FOOTER[agentMode]}</p>
+        <p className="text-xs text-brand-300 pl-1">
+          Leave, knowledge, and recruitment — routed by the assistant
+        </p>
         <button
           type="submit"
           disabled={loading || !draft.trim()}
