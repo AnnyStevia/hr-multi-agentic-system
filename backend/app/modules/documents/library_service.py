@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from io import BytesIO
 
+from app.modules.documents.content_payload import AuthorizedDocumentBytes
 from app.modules.documents.file_validation import (
+    MAX_DOCUMENT_BYTES,
     ValidatedUpload,
     sanitize_filename,
     validate_employee_document,
@@ -54,13 +56,41 @@ class CompanyDocumentService:
         category_id: int | None = None,
         status: CompanyDocumentStatus | None = None,
     ) -> list[CompanyDocument]:
+        return self.list_documents_for_access(
+            include_archived=_is_hr_staff(user),
+            q=q,
+            category_id=category_id,
+            status=status,
+        )
+
+    def list_documents_for_access(
+        self,
+        *,
+        include_archived: bool,
+        q: str | None = None,
+        category_id: int | None = None,
+        status: CompanyDocumentStatus | None = None,
+    ) -> list[CompanyDocument]:
+        """List company documents with optional archived visibility (HR metadata)."""
         effective_status = status
-        if not _is_hr_staff(user):
-            # Employees only see active library documents.
+        if not include_archived:
+            # Non-HR / AI non-staff: ACTIVE only (matches HTTP list semantics).
             effective_status = CompanyDocumentStatus.ACTIVE
         return self.repository.list_documents(
             q=q, category_id=category_id, status=effective_status
         )
+
+    def get_document_for_access(
+        self, document_id: int, *, include_archived: bool
+    ) -> CompanyDocument:
+        """Return one company document metadata row; archived hidden when not allowed."""
+        document = self._require_document(document_id)
+        if (
+            not include_archived
+            and document.status != CompanyDocumentStatus.ACTIVE
+        ):
+            raise AppException("Document not found", status_code=404)
+        return document
 
     def upload(
         self,
@@ -136,6 +166,35 @@ class CompanyDocumentService:
         if "status" in data and data["status"] is not None:
             document.status = data["status"]
         return self.repository.save(document)
+
+    def assert_indexable(self, document_id: int) -> CompanyDocument:
+        """Raise 409 if the document cannot be RAG-indexed (e.g. archived)."""
+        document = self._require_document(document_id)
+        if document.status != CompanyDocumentStatus.ACTIVE:
+            raise AppException(
+                "Archived company documents cannot be indexed. "
+                "Restore the document before reindexing.",
+                status_code=409,
+            )
+        return document
+
+    def load_active_file_bytes(self, document_id: int) -> AuthorizedDocumentBytes:
+        """Download ACTIVE company library file bytes (archived → 404).
+
+        Callers must enforce ``company_documents:read`` before invoking.
+        """
+        document = self._require_document(document_id)
+        if document.status != CompanyDocumentStatus.ACTIVE:
+            raise AppException("Document not found", status_code=404)
+        file_bytes = _download_file_bytes(self.storage, document.storage_key)
+        return AuthorizedDocumentBytes(
+            document_id=document.id,
+            title=document.title,
+            filename=document.original_filename,
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+            file_bytes=file_bytes,
+        )
 
     def delete(self, document_id: int) -> None:
         document = self._require_document(document_id)
@@ -269,6 +328,21 @@ class PrivateDocumentService:
             download=download,
         )
 
+    def load_file_bytes_for_owner(
+        self, user_id: int, document_id: int
+    ) -> AuthorizedDocumentBytes:
+        """Download private document bytes for the owning user only."""
+        document = self._require_owned(user_id, document_id)
+        file_bytes = _download_file_bytes(self.storage, document.storage_key)
+        return AuthorizedDocumentBytes(
+            document_id=document.id,
+            title=document.title,
+            filename=document.original_filename,
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+            file_bytes=file_bytes,
+        )
+
     def _require_employee_for_user(self, user_id: int):
         employee = self.employees.get_by_user_id(user_id)
         if employee is None:
@@ -327,6 +401,18 @@ def _optional_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _download_file_bytes(storage: StorageService, storage_key: str) -> bytes:
+    if not storage_key or storage_key == "pending":
+        raise AppException("Document file is not available", status_code=404)
+    try:
+        data = storage.download_file(storage_key)
+    except StorageException as exc:
+        raise AppException(exc.message, status_code=exc.status_code) from exc
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise AppException("Document exceeds the 5 MB size limit", status_code=413)
+    return data
 
 
 def _presign(

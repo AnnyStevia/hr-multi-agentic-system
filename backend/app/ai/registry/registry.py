@@ -124,13 +124,43 @@ TRAINING_AGENT = AgentDefinition(
     supports_confirmation=True,
 )
 
-# Implemented agents only. Documents / Offboarding are not registered.
+DOCUMENTS_AGENT = AgentDefinition(
+    id="documents",
+    display_name="Document Agent",
+    description=(
+        "Company library metadata, private and employee document lists, and "
+        "read-only Document Understanding (summarize / ask-about a specific "
+        "document). Not company-policy RAG — that is Knowledge. Availability "
+        "uses employee_id or HR/Admin with company_documents:read — not tool "
+        "authorization for a particular file."
+    ),
+    intents=(
+        "my documents",
+        "my private documents",
+        "private documents",
+        "list company documents",
+        "company document library",
+        "document library",
+        "document categories",
+        "summarize document",
+        "summarize this document",
+        "ask about this document",
+        "this pdf",
+        "this document",
+        "document_id=",
+    ),
+    required_permissions_any=frozenset({"company_documents:read"}),
+    supports_confirmation=False,
+)
+
+# Implemented agents only. Offboarding is not registered.
 REGISTERED_AGENTS: tuple[AgentDefinition, ...] = (
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
     RECRUITMENT_AGENT,
     ONBOARDING_AGENT,
     TRAINING_AGENT,
+    DOCUMENTS_AGENT,
 )
 
 _AGENTS_BY_ID: dict[str, AgentDefinition] = {a.id: a for a in REGISTERED_AGENTS}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.ai.registry.availability import get_available_agents, is_agent_available
 from app.ai.registry.definitions import AgentDefinition
 from app.ai.registry.registry import (
+    DOCUMENTS_AGENT,
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
     ONBOARDING_AGENT,
@@ -17,6 +18,7 @@ from app.ai.registry.registry import (
 
 __all__ = [
     "AgentDefinition",
+    "DOCUMENTS_AGENT",
     "KNOWLEDGE_AGENT",
     "LEAVE_AGENT",
     "ONBOARDING_AGENT",

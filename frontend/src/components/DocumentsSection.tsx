@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { DocumentAIPanel, isPdfDocument } from "@/components/DocumentAIPanel";
 import { api } from "@/lib/api";
 import {
   DOCUMENT_TYPE_LABELS,
@@ -45,6 +46,8 @@ export function DocumentsSection({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [aiDocument, setAiDocument] = useState<EmployeeDocument | null>(null);
+  const [aiInitialAction, setAiInitialAction] = useState<"summarize" | "ask">("ask");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -101,10 +104,15 @@ export function DocumentsSection({
     setUploading(true);
     setError("");
     try {
+      let uploaded: EmployeeDocument;
       if (mode === "employee") {
-        await api.uploadMyDocument(documentType, file);
+        uploaded = await api.uploadMyDocument(documentType, file);
       } else {
-        await api.uploadEmployeeDocument(employeeId as number, documentType, file);
+        uploaded = await api.uploadEmployeeDocument(
+          employeeId as number,
+          documentType,
+          file,
+        );
       }
       setFile(null);
       if (fileInputRef.current) {
@@ -112,6 +120,10 @@ export function DocumentsSection({
       }
       await load();
       await onChanged?.();
+      if (isPdfDocument(uploaded.content_type, uploaded.original_filename)) {
+        setAiInitialAction("ask");
+        setAiDocument(uploaded);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload document");
     } finally {
@@ -126,6 +138,9 @@ export function DocumentsSection({
     setError("");
     try {
       await api.deleteEmployeeDocument(employeeId, document.id);
+      if (aiDocument?.id === document.id) {
+        setAiDocument(null);
+      }
       await load();
       await onChanged?.();
     } catch (err) {
@@ -190,6 +205,20 @@ export function DocumentsSection({
         </button>
       </form>
 
+      {aiDocument ? (
+        <div className="mb-6">
+          <DocumentAIPanel
+            documentId={aiDocument.id}
+            documentType="employee"
+            title={aiDocument.original_filename}
+            filename={aiDocument.original_filename}
+            employeeId={mode === "hr" ? employeeId : undefined}
+            initialAction={aiInitialAction}
+            onClose={() => setAiDocument(null)}
+          />
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="py-8 flex justify-center">
           <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-brand-600" />
@@ -227,6 +256,30 @@ export function DocumentsSection({
                 >
                   Download
                 </button>
+                {isPdfDocument(document.content_type, document.original_filename) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiInitialAction("summarize");
+                        setAiDocument(document);
+                      }}
+                      className="border border-brand-300 text-brand-800 px-3 py-1.5 rounded-lg text-sm hover:bg-brand-50"
+                    >
+                      Summarize with AI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAiInitialAction("ask");
+                        setAiDocument(document);
+                      }}
+                      className="border border-brand-300 text-brand-800 px-3 py-1.5 rounded-lg text-sm hover:bg-brand-50"
+                    >
+                      Ask AI
+                    </button>
+                  </>
+                ) : null}
                 {allowDelete && mode === "hr" && (
                   <button
                     type="button"

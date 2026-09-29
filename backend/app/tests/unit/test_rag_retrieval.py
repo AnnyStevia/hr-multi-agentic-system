@@ -57,22 +57,14 @@ def test_require_company_documents_read():
         )
 
 
-def test_eligibility_clause_active_only_for_non_hr():
-    clause = company_document_eligibility_clause(
-        _context(roles={"employee"}, permissions={COMPANY_DOCUMENTS_READ})
-    )
-    assert clause is not None
-    compiled = str(clause.compile(compile_kwargs={"literal_binds": True}))
-    assert "active" in compiled.lower()
-
-
-def test_eligibility_clause_none_for_hr():
-    assert (
-        company_document_eligibility_clause(
-            _context(roles={"hr"}, permissions={COMPANY_DOCUMENTS_READ})
+def test_eligibility_clause_active_only_for_all_actors():
+    for roles in ({"employee"}, {"manager"}, {"hr"}, {"admin"}):
+        clause = company_document_eligibility_clause(
+            _context(roles=roles, permissions={COMPANY_DOCUMENTS_READ})
         )
-        is None
-    )
+        assert clause is not None
+        compiled = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert "active" in compiled.lower()
 
 
 def test_dimension_mismatch():

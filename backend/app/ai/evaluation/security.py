@@ -60,12 +60,25 @@ def evaluate_security() -> SecurityChecks:
     if not employee_ok:
         details.append("employee eligibility clause is not ACTIVE-only")
 
-    # 2. HR/Admin can retrieve archived (no status clause)
-    hr_ok = company_document_eligibility_clause(hr) is None and is_hr_staff(hr)
-    admin_ok = company_document_eligibility_clause(admin) is None and is_hr_staff(admin)
-    hr_archived_ok = hr_ok and admin_ok
+    # 2. HR/Admin also ACTIVE-only (archived withdrawn from RAG for all actors)
+    def _is_active_only(ctx: AIExecutionContext) -> bool:
+        clause = company_document_eligibility_clause(ctx)
+        if clause is None:
+            return False
+        compiled = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        return (
+            CompanyDocumentStatus.ACTIVE.value in compiled.lower()
+            or "active" in compiled.lower()
+        )
+
+    hr_archived_ok = (
+        is_hr_staff(hr)
+        and is_hr_staff(admin)
+        and _is_active_only(hr)
+        and _is_active_only(admin)
+    )
     if not hr_archived_ok:
-        details.append("HR/admin eligibility should have no status restriction")
+        details.append("HR/admin eligibility must be ACTIVE-only (archived excluded from RAG)")
 
     # 3. Unauthorized excluded before generation
     unauthorized_ok = False
@@ -152,7 +165,7 @@ def evaluate_security() -> SecurityChecks:
     )
     return SecurityChecks(
         employee_archived_filtered=employee_ok,
-        hr_can_access_archived=hr_archived_ok,
+        hr_archived_filtered=hr_archived_ok,
         unauthorized_excluded=unauthorized_ok,
         private_docs_isolated=private_ok,
         candidate_cvs_isolated=cv_ok,

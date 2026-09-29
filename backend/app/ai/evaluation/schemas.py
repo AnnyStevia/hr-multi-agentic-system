@@ -104,7 +104,7 @@ class SecurityChecks(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     employee_archived_filtered: bool = False
-    hr_can_access_archived: bool = False
+    hr_archived_filtered: bool = False
     unauthorized_excluded: bool = False
     private_docs_isolated: bool = False
     candidate_cvs_isolated: bool = False

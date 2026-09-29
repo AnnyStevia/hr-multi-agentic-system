@@ -129,7 +129,7 @@ def reindex_company_document(
 ) -> CompanyDocumentResponse:
     """Retry or re-run RAG indexing for a company document (async)."""
     try:
-        document = service._require_document(document_id)
+        document = service.assert_indexable(document_id)
     except AppException as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     background_tasks.add_task(run_company_document_indexing, document.id)

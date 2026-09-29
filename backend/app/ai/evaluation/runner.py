@@ -426,7 +426,7 @@ def format_report(summary: EvaluationSummary) -> str:
         lines.extend(
             [
                 f"Access control: {'PASS' if sec.unauthorized_excluded else 'FAIL'}",
-                f"Archived document filtering: {'PASS' if sec.employee_archived_filtered and sec.hr_can_access_archived else 'FAIL'}",
+                f"Archived document filtering: {'PASS' if sec.employee_archived_filtered and sec.hr_archived_filtered else 'FAIL'}",
                 f"Private document isolation: {'PASS' if sec.private_docs_isolated else 'FAIL'}",
                 f"Candidate CV isolation: {'PASS' if sec.candidate_cvs_isolated else 'FAIL'}",
                 f"Prompt injection handling: {'PASS' if sec.prompt_injection_structure_ok else 'FAIL'}",

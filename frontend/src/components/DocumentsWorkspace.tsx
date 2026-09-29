@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FileText, FolderLock, Library, Search } from "lucide-react";
+import { DocumentAIPanel, isPdfDocument } from "@/components/DocumentAIPanel";
 import { api } from "@/lib/api";
 import type {
   CompanyDocument,
@@ -10,6 +11,15 @@ import type {
   CompanyDocumentStatus,
   PrivateDocument,
 } from "@/types/libraryDocuments";
+import type { DocumentSourceType } from "@/types/ai";
+
+type AiTarget = {
+  documentId: number;
+  documentType: DocumentSourceType;
+  title: string;
+  filename: string;
+  initialAction: "summarize" | "ask";
+};
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`;
@@ -47,6 +57,7 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
   const [showPrivateUpload, setShowPrivateUpload] = useState(false);
   const [editingCompany, setEditingCompany] = useState<CompanyDocument | null>(null);
   const [editingPrivate, setEditingPrivate] = useState<PrivateDocument | null>(null);
+  const [aiTarget, setAiTarget] = useState<AiTarget | null>(null);
 
   const loadCategories = useCallback(async () => {
     setCategories(await api.listCompanyDocumentCategories());
@@ -211,6 +222,17 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
         </div>
       ) : null}
 
+      {aiTarget ? (
+        <DocumentAIPanel
+          documentId={aiTarget.documentId}
+          documentType={aiTarget.documentType}
+          title={aiTarget.title}
+          filename={aiTarget.filename}
+          initialAction={aiTarget.initialAction}
+          onClose={() => setAiTarget(null)}
+        />
+      ) : null}
+
       <section className="bg-white rounded-xl border border-brand-200 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-brand-100 flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -341,6 +363,37 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
                     >
                       Download
                     </ActionButton>
+                    {doc.status === "active" &&
+                    isPdfDocument(doc.content_type, doc.original_filename) ? (
+                      <>
+                        <ActionButton
+                          onClick={() =>
+                            setAiTarget({
+                              documentId: doc.id,
+                              documentType: "company",
+                              title: doc.title,
+                              filename: doc.original_filename,
+                              initialAction: "summarize",
+                            })
+                          }
+                        >
+                          Summarize with AI
+                        </ActionButton>
+                        <ActionButton
+                          onClick={() =>
+                            setAiTarget({
+                              documentId: doc.id,
+                              documentType: "company",
+                              title: doc.title,
+                              filename: doc.original_filename,
+                              initialAction: "ask",
+                            })
+                          }
+                        >
+                          Ask AI
+                        </ActionButton>
+                      </>
+                    ) : null}
                     {canManageLibrary ? (
                       <>
                         <ActionButton
@@ -446,6 +499,36 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
                     >
                       Download
                     </ActionButton>
+                    {isPdfDocument(doc.content_type, doc.original_filename) ? (
+                      <>
+                        <ActionButton
+                          onClick={() =>
+                            setAiTarget({
+                              documentId: doc.id,
+                              documentType: "private",
+                              title: doc.title,
+                              filename: doc.original_filename,
+                              initialAction: "summarize",
+                            })
+                          }
+                        >
+                          Summarize with AI
+                        </ActionButton>
+                        <ActionButton
+                          onClick={() =>
+                            setAiTarget({
+                              documentId: doc.id,
+                              documentType: "private",
+                              title: doc.title,
+                              filename: doc.original_filename,
+                              initialAction: "ask",
+                            })
+                          }
+                        >
+                          Ask AI
+                        </ActionButton>
+                      </>
+                    ) : null}
                     <ActionButton
                       disabled={busyId === `p-${doc.id}`}
                       onClick={() => setEditingPrivate(doc)}
@@ -471,9 +554,21 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
         <CompanyUploadDialog
           categories={categoryOptions}
           onClose={() => setShowCompanyUpload(false)}
-          onSaved={async () => {
+          onSaved={async (doc) => {
             setShowCompanyUpload(false);
             await loadCompany();
+            if (
+              doc.status === "active" &&
+              isPdfDocument(doc.content_type, doc.original_filename)
+            ) {
+              setAiTarget({
+                documentId: doc.id,
+                documentType: "company",
+                title: doc.title,
+                filename: doc.original_filename,
+                initialAction: "ask",
+              });
+            }
           }}
           onError={setError}
         />
@@ -495,9 +590,18 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
       {showPrivateUpload ? (
         <PrivateUploadDialog
           onClose={() => setShowPrivateUpload(false)}
-          onSaved={async () => {
+          onSaved={async (doc) => {
             setShowPrivateUpload(false);
             await loadPrivate();
+            if (isPdfDocument(doc.content_type, doc.original_filename)) {
+              setAiTarget({
+                documentId: doc.id,
+                documentType: "private",
+                title: doc.title,
+                filename: doc.original_filename,
+                initialAction: "ask",
+              });
+            }
           }}
           onError={setError}
         />
@@ -697,7 +801,7 @@ function CompanyUploadDialog({
 }: {
   categories: CompanyDocumentCategory[];
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (doc: CompanyDocument) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -718,13 +822,13 @@ function CompanyUploadDialog({
     setSubmitting(true);
     onError("");
     try {
-      await api.uploadCompanyDocument({
+      const doc = await api.uploadCompanyDocument({
         title,
         description: description || undefined,
         category_id: categoryId,
         file,
       });
-      await onSaved();
+      await onSaved(doc);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -905,7 +1009,7 @@ function PrivateUploadDialog({
   onError,
 }: {
   onClose: () => void;
-  onSaved: () => Promise<void>;
+  onSaved: (doc: PrivateDocument) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -922,12 +1026,12 @@ function PrivateUploadDialog({
     setSubmitting(true);
     onError("");
     try {
-      await api.uploadMyPrivateDocument({
+      const doc = await api.uploadMyPrivateDocument({
         title,
         description: description || undefined,
         file,
       });
-      await onSaved();
+      await onSaved(doc);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Upload failed");
     } finally {

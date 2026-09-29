@@ -48,15 +48,16 @@ flowchart TB
 | User ≠ Employee | Identity accounts are separate from employment records ([ADR 002](docs/decisions/002-user-vs-employee.md)) |
 | Agents never hit the DB | `Agent → Tool → Service → DB` ([ADR 003](docs/decisions/003-agent-database-isolation.md)) |
 | Auth before generation | `AIExecutionContext` + permission filters run before tools / retrieval; the LLM only sees authorized context |
-| Writes need confirmation | Recruitment, Leave, Onboarding, and Training write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation |
+| Writes need confirmation | Recruitment, Leave, Onboarding, and Training write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation. Documents Agent is **read-only** (no confirm). |
 | Embed ≠ generate | `gemini-embedding-2` for vectors; conversational `GEMINI_MODEL` for grounded answers |
 | Registry ≠ authorization | Agent registry / router decide **availability + intent only**; tools + domain services remain authoritative |
+| Knowledge ≠ Documents | Company RAG (Knowledge) is separate from Document Understanding (per-file PDF summarize / Q&A) |
 
 ### Backend layout
 
 ```
 backend/app/
-├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/training, /ai/onboarding, leave, recruitment, knowledge)
+├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/documents, /ai/training, …)
 ├── core/                # Config, security, database
 ├── modules/             # Core HR domains
 │   ├── identity/        # Auth, RBAC, seed admin
@@ -64,7 +65,7 @@ backend/app/
 │   ├── recruitment/     # Jobs, applications, fit fields, rejection_reason
 │   ├── interviews/      # Invites, slots, feedback, outcomes, Meet
 │   ├── onboarding/      # Tasks & verification
-│   ├── documents/       # Employee docs + company library
+│   ├── documents/       # Employee docs + company library + private vault
 │   ├── training/        # Assignments
 │   ├── leave/           # Policies, dual approval
 │   ├── notifications/   # In-app alerts
@@ -74,12 +75,13 @@ backend/app/
 │   ├── core/            # LLM providers, AIExecutionContext
 │   ├── registry/        # Static agent catalog + permission / employee_id availability
 │   ├── routing/         # Deterministic keyword router (no LLM supervisor)
-│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding, Training
-│   ├── tools/           # Registry, auth, domain tools (incl. training / onboarding reads/writes)
+│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding, Training, Documents
+│   ├── documents/       # Document Understanding (authorize → parse PDF → summarize / Q&A)
+│   ├── tools/           # Registry, auth, domain tools (incl. document_reads)
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
 │   ├── orchestration/   # Tool roundtrips
-│   └── rag/             # Ingest → embed → retrieve → answer
+│   └── rag/             # Ingest → embed → retrieve → answer (ACTIVE company docs only)
 └── shared/              # StorageService (S3), MeetingProvider, helpers
 ```
 
@@ -87,19 +89,22 @@ backend/app/
 
 On authenticated portals, the floating assistant is **one UI** backed by the **unified gateway**:
 
-`POST /api/v1/ai/assistant/ask` → `get_available_agents` → deterministic `route_message` → Knowledge / Leave / Recruitment / Onboarding / Training.
+`POST /api/v1/ai/assistant/ask` → `get_available_agents` → deterministic `route_message` → Knowledge / Leave / Recruitment / Onboarding / Training / Documents.
 
 | Agent | When it is available | Confirm endpoint (writes) |
 |-------|----------------------|---------------------------|
-| Knowledge | `company_documents:read` | — (read-only) |
+| Knowledge | `company_documents:read` | — (read-only RAG) |
 | Leave | `leaves:read` | `POST /api/v1/ai/leave/confirm` |
 | Recruitment | `recruitment:read` (HR/Admin) | `POST /api/v1/ai/recruitment/confirm` |
 | Onboarding | `employee_id` set **or** `onboarding:read` | `POST /api/v1/ai/onboarding/confirm` |
 | Training | `employee_id` set **or** HR/Admin + `training:read` | `POST /api/v1/ai/training/confirm` |
+| Documents | `employee_id` set **or** HR/Admin + `company_documents:read` | — (read-only) |
 
 The UI stores each reply’s `agent_id` and routes Confirm by that id (not by pathname). Write proposals show a **Confirm / Cancel** card; the HMAC token stays in client state (not rendered as text). Cancel drops the token locally. Typing “I confirm” in chat does nothing — only the UI button completes a write.
 
-Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`).
+Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`, `/ai/documents`).
+
+Document library pages also expose a **Document AI panel** (Summarize / Ask) that calls `POST /api/v1/ai/documents/ask` directly for structured summary + page citations.
 
 ---
 
@@ -125,7 +130,7 @@ flowchart LR
 
 1. **Ingest** — download company-library PDF via `StorageService`, parse pages, deterministic chunking with provenance (`chunk_id`, pages, `content_hash`).
 2. **Embed** — persist 768-d vectors (`RETRIEVAL_DOCUMENT`); query embeds use `RETRIEVAL_QUERY`.
-3. **Retrieve** — ACL (`company_documents:read`, ACTIVE docs for non-HR) → cosine HNSW + PostgreSQL FTS → RRF fusion → context budget.
+3. **Retrieve** — ACL (`company_documents:read`, **ACTIVE** docs only — archived withdrawn from RAG) → cosine HNSW + PostgreSQL FTS → RRF fusion → context budget.
 4. **Generate** — conversational Gemini answers **only** from that context; citations mapped from retrieval metadata (not invented by the model). Empty context → deterministic abstention (no LLM call).
 
 Authorization is decided **before** generation. Document text is treated as untrusted data (prompt-injection defense).
@@ -271,6 +276,7 @@ flowchart TD
   Route[route_message keywords]
   OA[OnboardingAgent]
   TA[TrainingAgent]
+  DA[DocumentsAgent]
   Leave[LeaveAgent]
   Rec[RecruitmentAgent]
   Know[KnowledgeAgent]
@@ -281,16 +287,19 @@ flowchart TD
   User --> Ask --> Ctx --> Reg --> Route
   Route -->|onboarding| OA
   Route -->|training| TA
+  Route -->|documents| DA
   Route -->|leave| Leave
   Route -->|recruitment| Rec
   Route -->|knowledge| Know
   OA --> Tools --> Svc
   TA --> Tools
+  DA --> Tools
   Leave --> Tools
   Rec --> Tools
   Know --> Tools
   OA --> Env
   TA --> Env
+  DA --> Env
   Leave --> Env
   Rec --> Env
   Know --> Env
@@ -353,6 +362,49 @@ Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/
 
 ---
 
+### Document AI (Phases 11.1B–11.2D) — understanding, agent, UX, unified routing
+
+```mermaid
+flowchart TD
+  Upload[Core HR document upload]
+  S3[(S3)]
+  Panel[DocumentAIPanel]
+  Standalone[POST /ai/documents/ask]
+  Unified[POST /ai/assistant/ask]
+  Agent[DocumentsAgent]
+  Tools[document_reads tools]
+  Understanding[DocumentUnderstandingService]
+  Access[Authorized download]
+  Parse[PDF page parser]
+
+  Upload --> S3
+  Panel --> Standalone --> Agent
+  Unified -->|documents intent| Agent
+  Agent --> Tools --> Understanding
+  Understanding --> Access --> S3
+  Understanding --> Parse
+```
+
+| Phase | Capability |
+|-------|------------|
+| 11.1B | Archived company documents withdrawn from RAG retrieval / reindex |
+| 11.2A | Document Understanding foundation (authorize → bytes → PDF parse → summarize / Q&A + citations) |
+| 11.2B | Standalone Documents Agent + 8 read tools + `POST /ai/documents/ask` |
+| 11.2C | Document AI panel on company / private / employee PDF UIs (upload stays Core HR) |
+| 11.2D | Registry + router + unified `/ai/assistant/ask` dispatch (`agent_id=documents`) |
+
+**Documents ≠ Knowledge:** Knowledge answers institutional policy via company RAG. Documents operates on an **explicit** file (library metadata, private vault, employee docs, or summarize / ask-about a PDF). Candidate ApplicationDocument / CV stays with Recruitment.
+
+**Availability (locked):** `employee_id` present **or** HR/Admin with `company_documents:read`. Candidates excluded. Availability does **not** grant access to arbitrary files — tools + Document Understanding remain authoritative (ACTIVE company content; private owner-only; employee self or HR with `employee_id`; no manager escalation).
+
+**Read tools** — `list_company_documents`, `get_company_document`, `list_company_document_categories`, `list_my_private_documents`, `list_my_employee_documents`, `list_employee_documents_for_hr`, `summarize_document`, `ask_about_document`.
+
+**No AI upload / writes / confirm** — upload/archive/delete stay on Core HR APIs. No `/ai/documents/confirm`.
+
+Docs: [`backend/docs/phase_11_2d_unified_document_agent.md`](backend/docs/phase_11_2d_unified_document_agent.md).
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -398,6 +450,8 @@ Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/
 
 - Hire-triggered onboarding with task templates and verification sync
 - **Employee documents** (onboarding / personal files) and **Company Document Library** + private docs (separate stores)
+- **Document AI** — Summarize / Ask on authorized PDFs via Document Understanding (panel + Documents Agent); Knowledge RAG remains for company policy Q&A
+- Archived company documents stay visible to HR metadata views but are **withdrawn from RAG** and cannot be reindexed for AI knowledge
 - **Training catalogue** (HR) with optional `resource_url`, search, and link previews
 - **Employee Training** portal — all published resources visible; open-to-complete is **per employee** (`employee_training_progress`)
 - Onboarding training assignments still sync TRAINING tasks when used
@@ -405,6 +459,7 @@ Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/
 - Lifecycle and task notifications
 - **Onboarding Agent** — self + HR reads; confirmation-gated ACK / complete writes via the unified assistant (or `POST /api/v1/ai/onboarding/ask` + `/confirm`)
 - **Training Agent** — self assignments + HR catalogue/onboarding-assignment reads; confirmation-gated complete own / assign to onboarding via the unified assistant (or `POST /api/v1/ai/training/ask` + `/confirm`)
+- **Documents Agent** — read-only library/vault/employee metadata + PDF summarize / Q&A via the unified assistant (or `POST /api/v1/ai/documents/ask`)
 
 ### Leave
 
@@ -419,7 +474,7 @@ Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating **unified AI assistant** (intent routing across Knowledge, Leave, Recruitment, Onboarding, Training)
+- Floating **unified AI assistant** (intent routing across Knowledge, Leave, Recruitment, Onboarding, Training, Documents)
 
 ### AI foundation (shipped)
 
@@ -431,18 +486,21 @@ Docs: [`backend/docs/phase_10_2e_training_unified_integration.md`](backend/docs/
 - **Leave Agent** — scoped leave reads + confirmation-gated writes via `LeaveService`
 - **Onboarding Agent** — self/HR onboarding reads + confirmation-gated writes via `OnboardingService`
 - **Training Agent** — self/HR training reads + confirmation-gated writes via `TrainingService`
+- **Documents Agent** — authorized document metadata + Document Understanding (PDF summarize / page-cited Q&A); read-only
 - Shared HMAC confirmation + `ai_tool_action_audits` for AI writes
-- Full RAG path through **grounded generation + citations** (see pipeline above)
-- Smoke scripts under `backend/scripts/` (RAG + recruitment agent helpers)
+- Full RAG path through **grounded generation + citations** (see pipeline above); archived company docs excluded from retrieval
+- Smoke scripts under `backend/scripts/` (RAG + recruitment / document agent helpers)
 
 ### Not yet
 
-- Document / Offboarding specialized agents
+- Offboarding specialized agent
+- Document Agent writes (AI upload / archive / delete) or persistent document chat
 - LLM supervisor / chat history / rich Markdown renderer for the assistant
 - LLM rerank / query reformulation for RAG
 - Autonomous domain decisions (writes always require UI confirmation)
 - Manager team-training or onboarding “reports” scope (employees see self only; HR sees org-wide)
 - Training catalogue CRUD / LMS features via AI (due dates, certificates, mandatory flags)
+- Candidate CV analysis via Documents Agent (stays Recruitment)
 
 ---
 
@@ -539,19 +597,27 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
-### Unified assistant (Knowledge / Leave / Recruitment / Onboarding / Training)
+### Unified assistant (Knowledge / Leave / Recruitment / Onboarding / Training / Documents)
 
 1. Log in (employee with a linked Employee record, or HR) → open the floating assistant on any authenticated portal.
 2. Ask in natural language; the backend routes by intent:
    - Leave: “What’s my leave balance?”
    - Onboarding: “What’s my onboarding progress?” / “Acknowledge my pending onboarding task.”
    - Training: “What trainings do I have?” / “Mark my safety training as completed.” / (HR) “Assign training 5 to onboarding 42.”
-   - Knowledge: “What does the company policy say about remote work?”
+   - Knowledge: “What is our annual leave policy?” / “What does the company handbook say about remote work?”
+   - Documents: “Show me my private documents.” / “List company documents.” / “Summarize the employee handbook.” / “What does this PDF say about leave?”
    - Recruitment (HR): “How many candidates are currently shortlisted?”
-3. **Writes** (leave, recruitment, onboarding ACK/complete, or training complete/assign): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing.
+3. **Writes** (leave, recruitment, onboarding ACK/complete, or training complete/assign): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing. Documents has no writes.
 4. Do not type “I confirm” in chat — only the UI button completes the write.
-5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training (and typically have no agents).
-6. Policy/handbook questions about training still prefer **Knowledge**; operational “my training” / assign phrases prefer **Training**.
+5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training/documents (and typically have no agents).
+6. Policy/handbook **questions** prefer **Knowledge**; explicit summarize / “this PDF” / private library phrases prefer **Documents**. Operational “my training” / assign phrases prefer **Training**.
+
+### Document AI panel (library / employee docs)
+
+1. Open HR or employee **Documents** (or employee Documents section on profile/onboarding).
+2. On an **active PDF**, click **Summarize with AI** or **Ask AI** — the Document AI panel opens at the top (Summary / Q&A tabs).
+3. Upload remains the normal Core HR upload; AI is never auto-run on upload.
+4. Archived company PDFs: metadata/View for HR, but no content AI actions.
 
 ---
 
@@ -602,7 +668,9 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Multi-agent registry + deterministic router + unified `/ai/assistant/ask` — Phases 8.1–8.3
 - [x] Onboarding Agent (reads, auth harden, confirmation writes, unified registration) — Phases 9.1–9.2E
 - [x] Training Agent (reads, auth harden, confirmation writes, FE confirm, unified registration) — Phases 10.1–10.2E
-- [ ] Document / Offboarding agents
+- [x] Document AI (archive RAG withdrawal, Document Understanding, Documents Agent, FE panel, unified registration) — Phases 11.1B–11.2D
+- [ ] Offboarding agent
+- [ ] Document Agent writes / persistent document chat
 - [ ] Assistant chat history & richer answer rendering
 
 ---

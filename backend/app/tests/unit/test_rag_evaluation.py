@@ -213,7 +213,7 @@ def test_security_checks_pass():
     checks = evaluate_security()
     assert checks.passed
     assert checks.employee_archived_filtered
-    assert checks.hr_can_access_archived
+    assert checks.hr_archived_filtered
     assert checks.unauthorized_excluded
     assert checks.private_docs_isolated
     assert checks.candidate_cvs_isolated

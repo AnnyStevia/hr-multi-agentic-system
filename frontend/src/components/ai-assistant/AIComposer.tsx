@@ -49,7 +49,7 @@ export function AIComposer() {
       </div>
       <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-2">
         <p className="text-xs text-brand-300 pl-1">
-          Leave, knowledge, and recruitment — routed by the assistant
+          Leave, knowledge, documents, and more — routed by the assistant
         </p>
         <button
           type="submit"

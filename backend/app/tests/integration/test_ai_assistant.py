@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from app.ai.agents.documents.schemas import DocumentsAgentAnswer
 from app.ai.agents.leave.schemas import LeaveAgentAnswer, PendingConfirmationInfo
 from app.ai.agents.onboarding.schemas import (
     OnboardingAgentAnswer,
@@ -19,6 +20,7 @@ from app.ai.agents.training.schemas import (
 )
 from app.ai.rag.generation.schemas import Citation, RAGAnswer
 from app.api.v1 import (
+    ai_documents,
     ai_knowledge,
     ai_leave,
     ai_onboarding,
@@ -589,3 +591,232 @@ def test_existing_leave_endpoint_still_works(client, db_session):
         client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
     assert response.status_code == 200, response.text
     assert "agent_id" not in response.json()
+
+
+def test_unified_ask_routes_to_documents(client, db_session):
+    # HR staff + company_documents:read → Documents available without Employee row.
+    create_user_with_role(
+        db_session,
+        email="hr.asst.docs@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.docs@test.com", password="hrpass123"
+    )
+    mock_documents = MagicMock()
+    mock_documents.ask.return_value = DocumentsAgentAnswer(
+        answer="Here is a summary of the handbook.",
+        model="mock-docs",
+        tool_names_called=["summarize_document"],
+        usage=None,
+        pending_confirmation=None,
+        document_summary=None,
+        document_answer=None,
+    )
+    mock_leave = MagicMock()
+    mock_knowledge = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    mock_training = MagicMock()
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "Summarize the employee handbook."},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["agent_id"] == "documents"
+    assert body["answer"] == "Here is a summary of the handbook."
+    assert body["pending_confirmation"] is None
+    assert body["tool_names_called"] == ["summarize_document"]
+    mock_documents.ask.assert_called_once()
+    mock_knowledge.ask.assert_not_called()
+    mock_leave.ask.assert_not_called()
+
+
+def test_unified_ask_private_documents_routes_to_documents(client, db_session):
+    create_user_with_role(
+        db_session,
+        email="hr.asst.privdocs@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.privdocs@test.com", password="hrpass123"
+    )
+    mock_documents = MagicMock()
+    mock_documents.ask.return_value = DocumentsAgentAnswer(
+        answer="You have 2 private documents.",
+        model="mock-docs",
+        tool_names_called=["list_my_private_documents"],
+        usage=None,
+        pending_confirmation=None,
+    )
+    mock_knowledge = MagicMock()
+    mock_leave = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    mock_training = MagicMock()
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "Show me my private documents."},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["agent_id"] == "documents"
+    mock_documents.ask.assert_called_once()
+    mock_knowledge.ask.assert_not_called()
+
+
+def test_unified_ask_annual_leave_policy_still_knowledge(client, db_session):
+    create_user_with_role(
+        db_session,
+        email="hr.asst.knowpolicy@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.knowpolicy@test.com", password="hrpass123"
+    )
+    mock_knowledge = MagicMock()
+    mock_knowledge.ask.return_value = RAGAnswer(
+        query="What is our annual leave policy?",
+        answer="Employees receive 18 days.",
+        citations=[],
+        has_context=True,
+        retrieval_count=0,
+        selected_context_count=0,
+        model="mock-know",
+    )
+    mock_documents = MagicMock()
+    mock_leave = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    mock_training = MagicMock()
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "What is our annual leave policy?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["agent_id"] == "knowledge"
+    mock_knowledge.ask.assert_called_once()
+    mock_documents.ask.assert_not_called()
+
+def test_existing_documents_endpoint_still_works(client, db_session):
+    """Regression: standalone Documents ask remains."""
+    create_user_with_role(
+        db_session,
+        email="hr.asst.docslegacy@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.docslegacy@test.com", password="hrpass123"
+    )
+    mock_documents = MagicMock()
+    mock_documents.ask.return_value = DocumentsAgentAnswer(
+        answer="ok",
+        model="mock",
+        tool_names_called=[],
+    )
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/documents/ask",
+            json={"message": "List company documents."},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["agent_id"] == "documents"
+    assert body["answer"] == "ok"

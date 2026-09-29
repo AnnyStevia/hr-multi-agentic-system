@@ -17,3 +17,7 @@ class DocumentParseError(RAGException):
 
 class DocumentIngestionError(RAGException):
     """Raised when ingestion fails (e.g. storage/key issues)."""
+
+
+class DocumentNotIndexableError(RAGException):
+    """Raised when a company document is not eligible for RAG indexing (e.g. archived)."""

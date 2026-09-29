@@ -172,6 +172,54 @@ def test_hr_can_edit_archive_and_delete_company_document(client, db_session):
     assert client.get("/api/v1/company-documents", headers=headers).json() == []
 
 
+def test_reindex_archived_company_document_returns_409(client, db_session):
+    headers = auth_header(client)
+    _use_storage(client, _mock_storage())
+    category_id = _category_id(db_session)
+    created = _upload_company(client, headers, category_id=category_id)
+    doc_id = created.json()["id"]
+
+    archived = client.patch(
+        f"/api/v1/company-documents/{doc_id}",
+        json={"status": "archived"},
+        headers=headers,
+    )
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["status"] == "archived"
+
+    reindex = client.post(
+        f"/api/v1/company-documents/{doc_id}/rag-index",
+        headers=headers,
+    )
+    assert reindex.status_code == 409, reindex.text
+    assert "Archived" in reindex.json()["detail"]
+    assert "Restore" in reindex.json()["detail"]
+
+
+def test_reindex_active_company_document_schedules_indexing(
+    client, db_session, monkeypatch
+):
+    headers = auth_header(client)
+    _use_storage(client, _mock_storage())
+    category_id = _category_id(db_session)
+    created = _upload_company(client, headers, category_id=category_id)
+    doc_id = created.json()["id"]
+    assert created.json()["status"] == "active"
+
+    scheduled: list[int] = []
+    monkeypatch.setattr(
+        "app.api.v1.library_documents.run_company_document_indexing",
+        lambda document_id: scheduled.append(document_id),
+    )
+
+    reindex = client.post(
+        f"/api/v1/company-documents/{doc_id}/rag-index",
+        headers=headers,
+    )
+    assert reindex.status_code == 202, reindex.text
+    assert scheduled == [doc_id]
+
+
 def test_employee_does_not_see_archived_company_documents(client, db_session):
     admin_headers = auth_header(client)
     _use_storage(client, _mock_storage())

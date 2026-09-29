@@ -21,6 +21,10 @@ _KNOWLEDGE_KEYWORDS: tuple[str, ...] = (
     "according to the handbook",
     "what does the handbook",
     "policy documentation",
+    "leave policy",
+    "remote work policy",
+    "annual leave policy",
+    "our policy",
     "policy say",
     "policies say",
     "document say",
@@ -155,6 +159,86 @@ _TRAINING_TASK_MARKERS: tuple[str, ...] = (
     "training tasks",
 )
 
+# Explicit document-scoped operations (not institutional Knowledge RAG).
+_DOCUMENTS_KEYWORDS: tuple[str, ...] = (
+    "summarize this document",
+    "summarize the document",
+    "summarize this pdf",
+    "summarize the pdf",
+    "summarize this file",
+    "summarize the employee handbook",
+    "summarize the handbook",
+    "summarize document",
+    "ask about this document",
+    "ask the handbook about",
+    "what does this pdf say",
+    "what does this document say",
+    "what does the pdf say",
+    "what does the document say",
+    "according to this document",
+    "according to this pdf",
+    "my private documents",
+    "my private document",
+    "show me my private documents",
+    "open my private documents",
+    "private documents",
+    "my hr documents",
+    "my employee documents",
+    "employee documents",
+    "list company documents",
+    "company document library",
+    "document library",
+    "document categories",
+    "show me my documents",
+    "my documents",
+    "training pdf",
+    "leave policy pdf",
+    "policy pdf",
+    "this document",
+    "this pdf",
+    "this file",
+    "document_id=",
+    "document_type=",
+    "summarize",
+)
+
+# Vague document-adjacent terms that alone are not enough (Knowledge owns "document").
+_DOCUMENTS_VAGUE: tuple[str, ...] = (
+    "document",
+    "documents",
+    "pdf",
+    "file",
+    "files",
+)
+
+# Explicit document-operation language that defeats Knowledge policy preference.
+_DOCUMENTS_TASK_MARKERS: tuple[str, ...] = (
+    "summarize",
+    "this document",
+    "this pdf",
+    "this file",
+    "my private document",
+    "private documents",
+    "list company documents",
+    "document library",
+    "document categories",
+    "my documents",
+    "my hr documents",
+    "my employee documents",
+    "employee documents",
+    "training pdf",
+    "leave policy pdf",
+    "policy pdf",
+    "what does this pdf",
+    "what does this document",
+    "what does the document say",
+    "what does the pdf say",
+    "ask about this document",
+    "ask the handbook about",
+    "document_id=",
+    "document_type=",
+)
+
 _KNOWLEDGE_POLICY_MARKERS: tuple[str, ...] = (
     "handbook",
     "according to our policy",
@@ -166,6 +250,26 @@ _KNOWLEDGE_POLICY_MARKERS: tuple[str, ...] = (
     "what does the handbook",
     "company document",
     "company documents",
+    "leave policy",
+    "remote work policy",
+    "annual leave policy",
+)
+
+# Personal leave operations — keep Leave Agent when these appear without PDF/doc ops.
+_LEAVE_PERSONAL_MARKERS: tuple[str, ...] = (
+    "my leave",
+    "leave balance",
+    "leave days",
+    "leave request",
+    "remaining leave",
+    "how many leave",
+    "approve leave",
+    "reject leave",
+    "cancel leave",
+    "pending leave",
+    "who is on leave",
+    "on leave",
+    "time off",
 )
 
 # Strong policy-document phrasing used vs Onboarding / Training ambiguity.
@@ -230,6 +334,12 @@ def _score_agent(agent_id: str, text: str) -> int:
         if strong == 0 and vague > 0:
             return 0
         return strong + vague
+    if agent_id == "documents":
+        strong = _score_keywords(text, _DOCUMENTS_KEYWORDS)
+        vague = _score_keywords(text, _DOCUMENTS_VAGUE)
+        if strong == 0 and vague > 0:
+            return 0
+        return strong + vague
     return 0
 
 
@@ -277,10 +387,48 @@ def route_message(
             reason="no_available_agents",
         )
 
+    # Explicit document-scoped operations beat institutional Knowledge preference.
+    if "documents" in available_ids and _has_any(text, _DOCUMENTS_TASK_MARKERS):
+        # Pure Training ops without PDF/document language stay on Training.
+        training_ops = _has_any(text, _TRAINING_TASK_MARKERS) and not _has_any(
+            text,
+            (
+                "pdf",
+                "this document",
+                "this pdf",
+                "summarize",
+                "document say",
+                "training pdf",
+            ),
+        )
+        if not training_ops:
+            return RouteDecision(
+                kind="agent",
+                agent_id="documents",
+                reason="document_scoped_preference",
+            )
+
+    # Institutional leave-policy questions → Knowledge (not personal Leave balance).
+    if (
+        "knowledge" in available_ids
+        and _has_any(
+            text,
+            ("leave policy", "annual leave policy", "remote work policy"),
+        )
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
+        and not _has_any(text, _LEAVE_PERSONAL_MARKERS)
+    ):
+        return RouteDecision(
+            kind="agent",
+            agent_id="knowledge",
+            reason="policy_document_preference",
+        )
+
     # Case B: handbook/policy + leave wording → prefer Knowledge when available.
     if (
         "knowledge" in available_ids
         and _has_any(text, _KNOWLEDGE_POLICY_MARKERS)
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
         and _score_keywords(text, _LEAVE_KEYWORDS) > 0
     ):
         return RouteDecision(
@@ -295,6 +443,7 @@ def route_message(
         "knowledge" in available_ids
         and _has_any(text, _KNOWLEDGE_VS_ONBOARDING_MARKERS)
         and not _has_any(text, _ONBOARDING_TASK_MARKERS)
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
         and _score_keywords(text, _ONBOARDING_KEYWORDS) > 0
     ):
         return RouteDecision(
@@ -309,6 +458,7 @@ def route_message(
         "knowledge" in available_ids
         and _has_any(text, _KNOWLEDGE_VS_ONBOARDING_MARKERS)
         and not _has_any(text, _TRAINING_TASK_MARKERS)
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
         and _score_keywords(text, _TRAINING_KEYWORDS) > 0
     ):
         return RouteDecision(

@@ -19,10 +19,10 @@ from app.ai.rag.query.schemas import RAGQueryResult
 from app.ai.rag.retrieval.filters import COMPANY_DOCUMENTS_READ
 
 
-def _ctx() -> AIExecutionContext:
+def _ctx(*, roles: set[str] | None = None) -> AIExecutionContext:
     return AIExecutionContext(
         user_id=7,
-        role_names=frozenset({"employee"}),
+        role_names=frozenset(roles or {"employee"}),
         permission_names=frozenset({COMPANY_DOCUMENTS_READ}),
         employee_id=3,
         candidate_id=None,
@@ -124,6 +124,32 @@ def test_ask_no_context_returns_generation_abstention():
     assert answer.answer == NO_CONTEXT_ABSTENTION
     assert answer.citations == []
     generation.generate.assert_called_once()
+
+
+def test_ask_with_only_archived_matches_yields_no_citations():
+    """When retrieval filters out archived-only hits, KnowledgeAgent has no citations."""
+    ctx = _ctx(roles={"hr"})
+    query = MagicMock()
+    query.query.return_value = _query_result(has_context=False)
+    generation = MagicMock()
+    generation.generate.return_value = RAGAnswer(
+        query="Archived secret policy?",
+        answer=NO_CONTEXT_ABSTENTION,
+        citations=[],
+        has_context=False,
+        retrieval_count=0,
+        selected_context_count=0,
+        model="",
+        embedding_model="gemini-embedding-2",
+        embedding_dimensions=768,
+    )
+    agent = KnowledgeAgent(query_service=query, generation_service=generation)
+    answer = agent.ask(
+        KnowledgeAgentRequest(question="Archived secret policy?", context=ctx)
+    )
+    assert answer.has_context is False
+    assert answer.citations == []
+    assert answer.retrieval_count == 0
 
 
 def test_query_failure_wrapped():

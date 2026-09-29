@@ -20,6 +20,7 @@ from app.ai.rag.embeddings.exceptions import EmbeddingException
 from app.ai.rag.embeddings.service import EmbeddingService
 from app.ai.rag.exceptions import (
     DocumentIngestionError,
+    DocumentNotIndexableError,
     DocumentParseError,
     UnsupportedDocumentError,
 )
@@ -27,6 +28,7 @@ from app.ai.rag.ingestion.parsers.pdf import PDF_MIME
 from app.modules.documents.models import (
     CompanyDocument,
     CompanyDocumentRagIndexStatus,
+    CompanyDocumentStatus,
 )
 from app.shared.storage.base import StorageService
 
@@ -37,10 +39,16 @@ ERROR_PARSE = "Document text extraction failed"
 ERROR_STORAGE = "Document storage could not be read for indexing"
 ERROR_EMBED = "Document embedding failed"
 ERROR_GENERIC = "Document indexing failed"
+ERROR_ARCHIVED = (
+    "Archived company documents cannot be indexed. "
+    "Restore the document before reindexing."
+)
 
 
 def sanitize_indexing_error(exc: BaseException) -> str:
     """Map failures to short operational messages (no content / secrets)."""
+    if isinstance(exc, DocumentNotIndexableError):
+        return ERROR_ARCHIVED
     if isinstance(exc, UnsupportedDocumentError):
         return ERROR_UNSUPPORTED
     if isinstance(exc, DocumentParseError):
@@ -100,6 +108,9 @@ class CompanyDocumentIndexingService:
             raise UnsupportedDocumentError(
                 "Only Company Document Library documents can be indexed"
             )
+        if document.status != CompanyDocumentStatus.ACTIVE:
+            # Reject before mutating rag_index_status (archive must not reindex).
+            raise DocumentNotIndexableError(ERROR_ARCHIVED)
 
         self._set_status(
             document,
@@ -192,6 +203,7 @@ class CompanyDocumentIndexingService:
 def run_company_document_indexing(company_document_id: int) -> None:
     """BackgroundTasks entrypoint: fresh DB session + storage + embedding provider."""
     from app.ai.rag.embeddings import get_embedding_provider
+    from app.ai.rag.exceptions import DocumentNotIndexableError
     from app.core.database import SessionLocal
     from app.shared.storage import get_storage_service
 
@@ -203,6 +215,11 @@ def run_company_document_indexing(company_document_id: int) -> None:
             embedding_provider=get_embedding_provider(),
         )
         service.index_document(company_document_id)
+    except DocumentNotIndexableError:
+        logger.info(
+            "Skipping RAG indexing for non-indexable company document id=%s",
+            company_document_id,
+        )
     except Exception:
         logger.exception(
             "Unhandled error in background RAG indexing for id=%s",

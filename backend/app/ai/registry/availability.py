@@ -19,6 +19,11 @@ def is_agent_available(definition: AgentDefinition, context: AIExecutionContext)
     Training is special: employees already carry ``training:read``, so bare
     permission intersection would over-open Training. Available when
     ``employee_id`` is present OR HR/Admin staff with ``training:read``.
+
+    Documents is special: same shape as Training so candidates stay out even if
+    a stray ``company_documents:read`` appears. Available when ``employee_id``
+    is present OR HR/Admin staff with ``company_documents:read``. Tool/domain
+    authorization still gates each document.
     """
     if definition.id == "onboarding":
         if context.employee_id is not None:
@@ -29,6 +34,11 @@ def is_agent_available(definition: AgentDefinition, context: AIExecutionContext)
             return True
         staff = bool(context.role_names & frozenset({"hr", "admin"}))
         return staff and "training:read" in context.permission_names
+    if definition.id == "documents":
+        if context.employee_id is not None:
+            return True
+        staff = bool(context.role_names & frozenset({"hr", "admin"}))
+        return staff and "company_documents:read" in context.permission_names
     return bool(context.permission_names & definition.required_permissions_any)
 
 

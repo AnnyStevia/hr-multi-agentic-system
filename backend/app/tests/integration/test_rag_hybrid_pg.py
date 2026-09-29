@@ -222,6 +222,18 @@ def test_hybrid_security_excludes_archived_from_all_branches(pg_session):
         h.company_document_id == active.id for h in hits
     )
 
+    # Phase 11.1B: HR also cannot retrieve archived via hybrid
+    hr = _context(roles={"hr"}, permissions={COMPANY_DOCUMENTS_READ})
+    hr_hits = service.retrieve(
+        HybridRequest(
+            query_text=phrase,
+            query_embedding=query,
+            context=hr,
+            top_k=5,
+        )
+    )
+    assert chunk_b.id not in {h.chunk_id for h in hr_hits}
+
 
 def test_rrf_boosts_chunk_in_both_branches(pg_session):
     session, category_id, user_id, created_doc_ids = pg_session

@@ -217,13 +217,19 @@ def test_employee_cannot_retrieve_more_similar_archived_document(pg_session):
     assert chunk_b.id not in hit_ids
     assert all(h.company_document_id != archived.id for h in hits)
 
-    hr = _context(roles={"hr"}, permissions={COMPANY_DOCUMENTS_READ})
-    hr_hits = service.retrieve(
-        RetrievalRequest(query_embedding=query, context=hr, top_k=5)
-    )
-    hr_ids = {h.chunk_id for h in hr_hits}
-    assert chunk_b.id in hr_ids
-    assert hr_hits[0].chunk_id == chunk_b.id
+    # Phase 11.1B: archived withdrawn from RAG for HR/Admin as well as employees.
+    for roles in ({"hr"}, {"admin"}, {"manager"}):
+        staff_hits = service.retrieve(
+            RetrievalRequest(
+                query_embedding=query,
+                context=_context(roles=roles, permissions={COMPANY_DOCUMENTS_READ}),
+                top_k=5,
+            )
+        )
+        staff_ids = {h.chunk_id for h in staff_hits}
+        assert chunk_a.id in staff_ids
+        assert chunk_b.id not in staff_ids
+        assert all(h.company_document_id != archived.id for h in staff_hits)
 
 
 def test_missing_permission_raises(pg_session):

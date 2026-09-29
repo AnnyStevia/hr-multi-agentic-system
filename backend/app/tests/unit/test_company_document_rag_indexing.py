@@ -10,11 +10,17 @@ import pytest
 
 from app.ai.rag.embeddings.exceptions import EmbeddingProviderError
 from app.ai.rag.embeddings.schemas import EmbedChunksResult
-from app.ai.rag.exceptions import DocumentParseError, UnsupportedDocumentError
+from app.ai.rag.exceptions import (
+    DocumentNotIndexableError,
+    DocumentParseError,
+    UnsupportedDocumentError,
+)
 from app.ai.rag.indexing.service import (
+    ERROR_ARCHIVED,
     ERROR_EMBED,
     ERROR_UNSUPPORTED,
     CompanyDocumentIndexingService,
+    run_company_document_indexing,
     sanitize_indexing_error,
 )
 from app.ai.rag.models import KnowledgeChunk  # noqa: F401 — import for mapper side effects
@@ -66,7 +72,67 @@ def test_sanitize_indexing_error_messages():
     assert sanitize_indexing_error(UnsupportedDocumentError("x")) == ERROR_UNSUPPORTED
     assert sanitize_indexing_error(DocumentParseError("x")).startswith("Document text")
     assert sanitize_indexing_error(EmbeddingProviderError("boom")) == ERROR_EMBED
+    assert sanitize_indexing_error(DocumentNotIndexableError("x")) == ERROR_ARCHIVED
     assert "API_KEY" not in sanitize_indexing_error(Exception("secret API_KEY xyz"))
+
+
+def test_archived_index_rejected_before_processing():
+    service, db, chunks, embeddings = _service_with_mocks()
+    document = _doc(
+        status=CompanyDocumentStatus.ARCHIVED,
+        rag_index_status=CompanyDocumentRagIndexStatus.READY,
+    )
+    db.query.return_value.filter.return_value.first.return_value = document
+
+    with pytest.raises(DocumentNotIndexableError, match="Archived"):
+        service.index_document(42)
+
+    assert document.rag_index_status == CompanyDocumentRagIndexStatus.READY
+    assert document.rag_indexing_error is None
+    chunks.ingest_and_replace_chunks.assert_not_called()
+    embeddings.embed_company_document_chunks.assert_not_called()
+    # No PROCESSING mutation — reject before _set_status
+    db.commit.assert_not_called()
+
+
+def test_archived_retry_rejected():
+    service, db, chunks, embeddings = _service_with_mocks()
+    document = _doc(
+        status=CompanyDocumentStatus.ARCHIVED,
+        rag_index_status=CompanyDocumentRagIndexStatus.FAILED,
+    )
+    db.query.return_value.filter.return_value.first.return_value = document
+
+    with pytest.raises(DocumentNotIndexableError, match="Archived"):
+        service.retry_document(42)
+
+    chunks.ingest_and_replace_chunks.assert_not_called()
+    embeddings.embed_company_document_chunks.assert_not_called()
+
+
+def test_background_indexing_skips_archived_without_crash():
+    document = _doc(status=CompanyDocumentStatus.ARCHIVED)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = document
+
+    with (
+        patch(
+            "app.core.database.SessionLocal",
+            return_value=db,
+        ),
+        patch(
+            "app.shared.storage.get_storage_service",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.ai.rag.embeddings.get_embedding_provider",
+            return_value=MagicMock(),
+        ),
+    ):
+        run_company_document_indexing(42)
+
+    assert document.rag_index_status == CompanyDocumentRagIndexStatus.PENDING
+    db.close.assert_called_once()
 
 
 def test_index_success_sets_ready():

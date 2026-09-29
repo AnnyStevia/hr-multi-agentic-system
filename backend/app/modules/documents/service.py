@@ -1,7 +1,13 @@
 from datetime import UTC, datetime
 from io import BytesIO
 
-from app.modules.documents.file_validation import ValidatedUpload, sanitize_filename, validate_employee_document
+from app.modules.documents.content_payload import AuthorizedDocumentBytes
+from app.modules.documents.file_validation import (
+    MAX_DOCUMENT_BYTES,
+    ValidatedUpload,
+    sanitize_filename,
+    validate_employee_document,
+)
 from app.modules.documents.models import Document, DocumentType
 from app.modules.documents.repository import DocumentRepository
 from app.modules.documents.schemas import DocumentResponse, PresignedDocumentUrlResponse
@@ -76,6 +82,29 @@ class DocumentService:
             raise AppException("Document not found", status_code=404)
         return self._presign(document, download=download)
 
+    def load_file_bytes_for_user(
+        self, user_id: int, document_id: int
+    ) -> AuthorizedDocumentBytes:
+        """Download employee document bytes owned by the authenticated user's employee."""
+        employee = self._require_employee_for_user(user_id)
+        document = self.repository.get_for_employee(document_id, employee.id)
+        if document is None:
+            raise AppException("Document not found", status_code=404)
+        return self._to_authorized_bytes(document)
+
+    def load_file_bytes_for_employee(
+        self, employee_id: int, document_id: int
+    ) -> AuthorizedDocumentBytes:
+        """Download employee document bytes for an employee id.
+
+        Callers must enforce HR staff + ``documents:read`` before invoking.
+        """
+        self._require_employee(employee_id)
+        document = self.repository.get_for_employee(document_id, employee_id)
+        if document is None:
+            raise AppException("Document not found", status_code=404)
+        return self._to_authorized_bytes(document)
+
     def delete_for_employee(self, employee_id: int, document_id: int) -> None:
         self._require_employee(employee_id)
         document = self.repository.get_for_employee(document_id, employee_id)
@@ -143,6 +172,35 @@ class DocumentService:
             task_types={OnboardingTaskType.DOCUMENT},
         )
         return saved
+
+    def _to_authorized_bytes(self, document: Document) -> AuthorizedDocumentBytes:
+        file_bytes = self._download_file_bytes(document.storage_key)
+        title = (
+            document.document_type.value
+            if document.document_type is not None
+            else None
+        )
+        return AuthorizedDocumentBytes(
+            document_id=document.id,
+            title=title,
+            filename=document.original_filename,
+            content_type=document.content_type,
+            size_bytes=document.size_bytes,
+            file_bytes=file_bytes,
+        )
+
+    def _download_file_bytes(self, storage_key: str) -> bytes:
+        if not storage_key or storage_key == "pending":
+            raise AppException("Document file is not available", status_code=404)
+        try:
+            data = self.storage.download_file(storage_key)
+        except StorageException as exc:
+            raise AppException(exc.message, status_code=exc.status_code) from exc
+        if len(data) > MAX_DOCUMENT_BYTES:
+            raise AppException(
+                "Document exceeds the 5 MB size limit", status_code=413
+            )
+        return data
 
     def _presign(self, document: Document, *, download: bool) -> PresignedDocumentUrlResponse:
         try:

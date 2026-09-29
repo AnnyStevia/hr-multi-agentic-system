@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.registry import (
+    DOCUMENTS_AGENT,
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
     ONBOARDING_AGENT,
@@ -15,7 +16,13 @@ from app.ai.routing import route_message
 
 
 def _emp_available():
-    return (KNOWLEDGE_AGENT, LEAVE_AGENT, ONBOARDING_AGENT, TRAINING_AGENT)
+    return (
+        KNOWLEDGE_AGENT,
+        LEAVE_AGENT,
+        ONBOARDING_AGENT,
+        TRAINING_AGENT,
+        DOCUMENTS_AGENT,
+    )
 
 
 def _hr_available():
@@ -25,6 +32,7 @@ def _hr_available():
         RECRUITMENT_AGENT,
         ONBOARDING_AGENT,
         TRAINING_AGENT,
+        DOCUMENTS_AGENT,
     )
 
 
@@ -251,6 +259,7 @@ def test_availability_filter_before_routing_employee():
     assert "recruitment" not in {a.id for a in available}
     assert "onboarding" in {a.id for a in available}
     assert "training" in {a.id for a in available}
+    assert "documents" in {a.id for a in available}
     decision = route_message("Shortlist this candidate", available)
     assert decision.kind == "unavailable"
 
@@ -271,3 +280,102 @@ def test_training_unavailable_signal_for_candidate():
     )
     assert decision.kind == "unavailable"
     assert "training" in decision.reason
+
+
+def test_documents_unavailable_signal_for_candidate():
+    decision = route_message(
+        "Show me my private documents.",
+        (KNOWLEDGE_AGENT,),
+    )
+    assert decision.kind == "unavailable"
+    assert "documents" in decision.reason
+
+
+def test_summarize_handbook_routes_to_documents():
+    decision = route_message(
+        "Summarize the employee handbook.",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_what_does_this_pdf_say_routes_to_documents():
+    decision = route_message(
+        "What does this PDF say about leave?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_what_does_the_document_say_routes_to_documents():
+    decision = route_message(
+        "What does the document say about remote work?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_show_private_documents_routes_to_documents():
+    decision = route_message(
+        "Show me my private documents.",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_list_company_documents_routes_to_documents():
+    decision = route_message(
+        "List company documents.",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_annual_leave_policy_routes_to_knowledge():
+    decision = route_message(
+        "What is our annual leave policy?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "knowledge"
+
+
+def test_leave_days_balance_still_leave():
+    decision = route_message(
+        "How many leave days do I have?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "leave"
+
+
+def test_training_pdf_routes_to_documents_not_training():
+    decision = route_message(
+        "What does my training PDF say?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_leave_policy_pdf_routes_to_documents_not_leave():
+    decision = route_message(
+        "What does my leave policy PDF say?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_my_training_still_routes_to_training_not_documents():
+    decision = route_message(
+        "What training do I have?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"

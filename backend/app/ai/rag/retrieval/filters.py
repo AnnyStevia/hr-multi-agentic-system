@@ -27,12 +27,11 @@ def require_company_documents_read(context: AIExecutionContext) -> None:
 def company_document_eligibility_clause(
     context: AIExecutionContext,
 ) -> ColumnElement[bool] | None:
-    """SQL filter for company_documents eligibility.
+    """SQL filter for company_documents eligibility in RAG retrieval.
 
-    Non-HR (employee/manager): ACTIVE only — mirrors list_documents / download.
-    HR/admin: no status restriction — mirrors HR list with status=None.
-    Returns None when no extra status clause is needed.
+    All actors (including HR/Admin) require ACTIVE status — archived library
+    documents remain listable via HTTP for staff but are not RAG-eligible.
+    Returns an ACTIVE-only clause always (never ``None``).
     """
-    if is_hr_staff(context):
-        return None
+    _ = context  # permission checked separately via require_company_documents_read
     return CompanyDocument.status == CompanyDocumentStatus.ACTIVE

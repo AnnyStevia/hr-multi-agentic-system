@@ -63,13 +63,56 @@ export interface TrainingAskResponse {
   pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
+/** Document Understanding source types (standalone Documents Agent). */
+export type DocumentSourceType = "company" | "employee" | "private";
+
+export interface DocumentCitation {
+  page_number: number;
+  excerpt: string | null;
+}
+
+export interface DocumentSummary {
+  title: string;
+  summary: string;
+  key_points: string[];
+  important_dates: string[];
+  action_items: string[];
+  document_id: number | null;
+  document_type: string | null;
+  truncated: boolean;
+}
+
+export interface DocumentAnswer {
+  answer: string;
+  citations: DocumentCitation[];
+  document_id: number | null;
+  document_type: string | null;
+  truncated: boolean;
+}
+
+export interface DocumentsAskPayload {
+  message: string;
+}
+
+export interface DocumentsAskResponse {
+  answer: string;
+  agent_id: "documents";
+  model: string;
+  tool_names_called: string[];
+  usage: LeaveUsage | null;
+  pending_confirmation: null;
+  document_summary: DocumentSummary | null;
+  document_answer: DocumentAnswer | null;
+}
+
 /** Agent that handled a unified assistant ask (backend-selected). */
 export type AssistantAgentId =
   | "knowledge"
   | "leave"
   | "recruitment"
   | "onboarding"
-  | "training";
+  | "training"
+  | "documents";
 
 export type AssistantAskStatus =
   | "completed"
