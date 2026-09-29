@@ -99,11 +99,19 @@ export default function OffboardingListPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Offboarding</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Manage employee offboarding cases. Checklist and clearance come in later phases.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Offboarding</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Manage employee offboarding cases. Checklist and clearance come in later phases.
+          </p>
+        </div>
+        <Link
+          href="/hr/offboarding/requests"
+          className="px-4 py-2 rounded-lg border border-brand-200 text-sm font-medium text-brand-800 hover:bg-brand-50"
+        >
+          Review requests
+        </Link>
       </div>
 
       {error && (

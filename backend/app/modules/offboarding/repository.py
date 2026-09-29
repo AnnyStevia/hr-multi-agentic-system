@@ -5,6 +5,7 @@ from app.modules.offboarding.models import (
     ACTIVE_OFFBOARDING_STATUSES,
     OffboardingCase,
     OffboardingStatus,
+    OffboardingTask,
 )
 
 
@@ -60,13 +61,81 @@ class OffboardingRepository:
             .all()
         )
 
-    def add(self, case: OffboardingCase) -> OffboardingCase:
+    def add(self, case: OffboardingCase, *, commit: bool = True) -> OffboardingCase:
         self.db.add(case)
-        self.db.commit()
-        self.db.refresh(case)
+        self.db.flush()
+        if commit:
+            self.db.commit()
+            self.db.refresh(case)
         return case
 
     def save(self, case: OffboardingCase) -> OffboardingCase:
         self.db.commit()
         self.db.refresh(case)
         return case
+
+    def commit(self) -> None:
+        self.db.commit()
+
+    def rollback(self) -> None:
+        self.db.rollback()
+
+    def list_tasks_for_case(self, case_id: int) -> list[OffboardingTask]:
+        return (
+            self.db.query(OffboardingTask)
+            .options(
+                joinedload(OffboardingTask.assigned_to),
+                joinedload(OffboardingTask.completed_by),
+            )
+            .filter(OffboardingTask.offboarding_case_id == case_id)
+            .order_by(OffboardingTask.id.asc())
+            .all()
+        )
+
+    def get_task_for_case(self, case_id: int, task_id: int) -> OffboardingTask | None:
+        return (
+            self.db.query(OffboardingTask)
+            .options(
+                joinedload(OffboardingTask.assigned_to),
+                joinedload(OffboardingTask.completed_by),
+                joinedload(OffboardingTask.offboarding_case),
+            )
+            .filter(
+                OffboardingTask.id == task_id,
+                OffboardingTask.offboarding_case_id == case_id,
+            )
+            .first()
+        )
+
+    def get_task_by_id(self, task_id: int) -> OffboardingTask | None:
+        return (
+            self.db.query(OffboardingTask)
+            .options(
+                joinedload(OffboardingTask.assigned_to),
+                joinedload(OffboardingTask.offboarding_case),
+            )
+            .filter(OffboardingTask.id == task_id)
+            .first()
+        )
+
+    def list_tasks_assigned_to_employee(self, employee_id: int) -> list[OffboardingTask]:
+        return (
+            self.db.query(OffboardingTask)
+            .options(joinedload(OffboardingTask.offboarding_case))
+            .filter(OffboardingTask.assigned_to_employee_id == employee_id)
+            .order_by(OffboardingTask.id.asc())
+            .all()
+        )
+
+    def add_task(self, task: OffboardingTask, *, commit: bool = True) -> OffboardingTask:
+        self.db.add(task)
+        self.db.flush()
+        if commit:
+            self.db.commit()
+            self.db.refresh(task)
+        return task
+
+    def save_task(self, task: OffboardingTask) -> OffboardingTask:
+        self.db.commit()
+        self.db.refresh(task)
+        return task

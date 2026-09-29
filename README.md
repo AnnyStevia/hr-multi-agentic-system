@@ -65,7 +65,8 @@ backend/app/
 │   ├── recruitment/     # Jobs, applications, fit fields, rejection_reason
 │   ├── interviews/      # Invites, slots, feedback, outcomes, Meet
 │   ├── onboarding/      # Tasks & verification
-│   ├── offboarding/     # Offboarding cases (lifecycle foundation)
+│   ├── offboarding/     # Offboarding cases + checklist
+│   ├── offboarding_requests/  # Employee leave requests (pre-case)
 │   ├── documents/       # Employee docs + company library + private vault
 │   ├── training/        # Assignments
 │   ├── leave/           # Policies, dual approval
@@ -462,17 +463,18 @@ Docs: [`backend/docs/phase_11_2d_unified_document_agent.md`](backend/docs/phase_
 - **Training Agent** — self assignments + HR catalogue/onboarding-assignment reads; confirmation-gated complete own / assign to onboarding via the unified assistant (or `POST /api/v1/ai/training/ask` + `/confirm`)
 - **Documents Agent** — read-only library/vault/employee metadata + PDF summarize / Q&A via the unified assistant (or `POST /api/v1/ai/documents/ask`)
 
-### Offboarding (Phase O.1) — case foundation
+### Offboarding (Phases O.1–O.2 + request layer) — request → case + checklist
 
-Core HR offboarding **case** only (no checklist, clearance, exit interview, Meet, or AI yet).
+Employee **offboarding request** (pre-case) plus core HR offboarding **case** and **checklist tasks** (no clearance, exit interview, Meet, or AI yet).
 
-- **HR** (`/hr/offboarding`): create, list/filter, detail, explicit transitions (`start` → `pending-clearance` → `complete`, or `cancel`)
-- **Employee** (`/employee/offboarding`): read-only view of own cases (`GET /api/v1/me/offboarding`)
-- Permissions: `offboarding:read` / `offboarding:write` for Admin + HR; managers have no offboarding staff authority
-- Lifecycle: `initiated` → `in_progress` → `pending_clearance` → `completed` (or `cancelled` from any active status)
-- **One active case per employee** (`initiated` | `in_progress` | `pending_clearance`); after **completed** or **cancelled**, a new case may be created (historical rows are kept)
-- Creating/completing a case does **not** deactivate the employee or user account
-- Docs: [`backend/docs/phase_offboarding_1_core_case.md`](backend/docs/phase_offboarding_1_core_case.md)
+- **Employee** (`/employee/offboarding/request`): submit / cancel leave request → HR notified; after a case exists, `/employee/offboarding` for case + **My offboarding tasks**
+- **HR** (`/hr/offboarding/requests`): Approve opens the case + checklist and navigates to `/hr/offboarding/{id}`; Reject closes the request; manage cases/checklist on `/hr/offboarding`
+- Permissions: `offboarding:read` / `offboarding:write` for Admin + HR
+- Case lifecycle: `initiated` → `in_progress` → `pending_clearance` → `completed` (or `cancelled`)
+- Default checklist seeded atomically on case create (`DEFAULT_OFFBOARDING_TASK_TEMPLATES`)
+- **One active case per employee**; checklist progress does **not** yet gate case completion
+- **Approve** auto-creates the OffboardingCase via existing O.1 create (no separate create-case click required)
+- Docs: [`phase_offboarding_request.md`](backend/docs/phase_offboarding_request.md), [`phase_offboarding_1_core_case.md`](backend/docs/phase_offboarding_1_core_case.md), [`phase_offboarding_2_checklist.md`](backend/docs/phase_offboarding_2_checklist.md)
 
 ### Leave
 
@@ -633,12 +635,13 @@ Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `
 3. Upload remains the normal Core HR upload; AI is never auto-run on upload.
 4. Archived company PDFs: metadata/View for HR, but no content AI actions.
 
-### Offboarding cases (HR / employee)
+### Offboarding (request → case / employee)
 
-1. As **HR/Admin**, open `/hr/offboarding` → create a case for an **active** employee (last working day ≥ today).
-2. Open the case → **Start** → **Move to pending clearance** → **Complete** (or **Cancel** while active).
-3. A second case for the same employee is rejected while status is active; after **Completed**/**Cancelled**, a new case is allowed.
-4. As that **employee**, open `/employee/offboarding` to see status/reason/dates only (no edits).
+1. As an **employee**, open `/employee/offboarding/request` → submit (reason + requested last day).
+2. As **HR/Admin**, open `/hr/offboarding/requests` → **Approve** — opens `/hr/offboarding/{id}` with case + checklist seeded.
+3. On the case — Start / complete / skip tasks as before.
+4. As an **assigned employee**, open `/employee/offboarding` → **My offboarding tasks** → Start / Complete.
+5. **Reject** leaves the request closed with no case.
 
 ---
 
@@ -691,7 +694,9 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Training Agent (reads, auth harden, confirmation writes, FE confirm, unified registration) — Phases 10.1–10.2E
 - [x] Document AI (archive RAG withdrawal, Document Understanding, Documents Agent, FE panel, unified registration) — Phases 11.1B–11.2D
 - [x] Offboarding Case foundation (entity, lifecycle, HR + employee APIs, HR workspace) — Phase O.1
-- [ ] Offboarding checklist / clearance / exit interview
+- [x] Offboarding Checklist (default tasks, progress, assignee actions) — Phase O.2
+- [x] Employee Offboarding Request (pre-case submit / HR review) — dedicated pages + `/offboarding/requests` APIs
+- [ ] Offboarding clearance / exit interview / Meet
 - [ ] Offboarding agent
 - [ ] Document Agent writes / persistent document chat
 - [ ] Assistant chat history & richer answer rendering

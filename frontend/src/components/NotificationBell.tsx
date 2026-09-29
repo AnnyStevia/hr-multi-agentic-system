@@ -103,7 +103,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   const handleNotificationClick = async (notification: Notification) => {
     if (
       notification.related_entity_type === "leave_request" ||
-      notification.related_entity_type === "training"
+      notification.related_entity_type === "training" ||
+      notification.related_entity_type === "offboarding_request"
     ) {
       await navigateFromNotification(notification);
       return;
@@ -132,6 +133,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
           router.push("/employee/onboarding");
         } else if (notification.related_entity_type === "leave_request") {
           router.push("/employee/leave");
+        } else if (notification.related_entity_type === "offboarding_request") {
+          router.push("/employee/offboarding/request");
         } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
           router.push(`/employee/interviews/${notification.related_entity_id}`);
         }
@@ -148,6 +151,13 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
         router.push(`/hr/onboarding/${notification.related_entity_id}`);
       } else if (notification.related_entity_type === "leave_request") {
         router.push("/hr/leave");
+      } else if (notification.related_entity_type === "offboarding_request") {
+        const requestId = notification.related_entity_id;
+        router.push(
+          requestId
+            ? `/hr/offboarding/requests?request=${requestId}`
+            : "/hr/offboarding/requests",
+        );
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         if (
           notification.type === "interview_assignment" ||
@@ -173,19 +183,23 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     variant === "employee"
       ? expanded?.related_entity_type === "leave_request"
         ? "View leave"
-        : expanded?.related_entity_type === "interview"
-          ? "View interview"
-          : "View onboarding"
+        : expanded?.related_entity_type === "offboarding_request"
+          ? "View offboarding"
+          : expanded?.related_entity_type === "interview"
+            ? "View interview"
+            : "View onboarding"
       : variant === "hr"
         ? expanded?.related_entity_type === "onboarding"
           ? "View onboarding"
           : expanded?.related_entity_type === "leave_request"
             ? "View leave"
-            : expanded?.type === "interview_assignment"
-              ? "Propose slots"
-              : expanded?.type === "interview_meeting_ready"
-                ? "Join interview"
-                : "View application"
+            : expanded?.related_entity_type === "offboarding_request"
+              ? "View offboarding"
+              : expanded?.type === "interview_assignment"
+                ? "Propose slots"
+                : expanded?.type === "interview_meeting_ready"
+                  ? "Join interview"
+                  : "View application"
         : expanded?.related_entity_type === "interview"
           ? "View interview"
           : "View application";

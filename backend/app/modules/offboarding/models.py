@@ -5,11 +5,13 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
     Index,
+    String,
     Text,
     func,
     text,
@@ -39,11 +41,34 @@ class OffboardingStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class OffboardingTaskCategory(str, Enum):
+    DOCUMENTS = "documents"
+    HANDOVER = "handover"
+    EQUIPMENT = "equipment"
+    ACCESS = "access"
+    ADMINISTRATION = "administration"
+    OTHER = "other"
+
+
+class OffboardingTaskStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+
+
 ACTIVE_OFFBOARDING_STATUSES = frozenset(
     {
         OffboardingStatus.INITIATED,
         OffboardingStatus.IN_PROGRESS,
         OffboardingStatus.PENDING_CLEARANCE,
+    }
+)
+
+TERMINAL_TASK_STATUSES = frozenset(
+    {
+        OffboardingTaskStatus.COMPLETED,
+        OffboardingTaskStatus.SKIPPED,
     }
 )
 
@@ -102,3 +127,55 @@ class OffboardingCase(Base):
 
     employee: Mapped[Employee] = relationship()
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    tasks: Mapped[list[OffboardingTask]] = relationship(
+        back_populates="offboarding_case",
+        cascade="all, delete-orphan",
+    )
+
+
+class OffboardingTask(Base):
+    __tablename__ = "offboarding_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offboarding_case_id: Mapped[int] = mapped_column(
+        ForeignKey("offboarding_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[OffboardingTaskCategory] = mapped_column(
+        SAEnum(
+            OffboardingTaskCategory,
+            name="offboarding_task_category",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    status: Mapped[OffboardingTaskStatus] = mapped_column(
+        SAEnum(
+            OffboardingTaskStatus,
+            name="offboarding_task_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=OffboardingTaskStatus.PENDING,
+        index=True,
+    )
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    assigned_to_employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    offboarding_case: Mapped[OffboardingCase] = relationship(back_populates="tasks")
+    assigned_to: Mapped[Employee | None] = relationship(foreign_keys=[assigned_to_employee_id])
+    completed_by: Mapped[User | None] = relationship(foreign_keys=[completed_by_user_id])

@@ -30,6 +30,9 @@ class NotificationType(str, Enum):
     LEAVE_CANCELLATION_REQUESTED = "leave_cancellation_requested"
     LEAVE_CANCELLATION_APPROVED = "leave_cancellation_approved"
     LEAVE_CANCELLATION_REJECTED = "leave_cancellation_rejected"
+    OFFBOARDING_REQUEST_SUBMITTED = "offboarding_request_submitted"
+    OFFBOARDING_REQUEST_APPROVED = "offboarding_request_approved"
+    OFFBOARDING_REQUEST_REJECTED = "offboarding_request_rejected"
 
 
 class Notification(Base):

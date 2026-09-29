@@ -23,6 +23,7 @@ const CORE_NAV_ITEMS = [
   { href: "/hr/onboarding", label: "Onboarding", enabled: true },
   { href: "/hr/onboarding/templates", label: "Task catalogue", enabled: true },
   { href: "/hr/offboarding", label: "Offboarding", enabled: true },
+  { href: "/hr/offboarding/requests", label: "Offboarding requests", enabled: true },
   { href: "/hr/training", label: "Training", enabled: true },
   { href: "/hr/leave", label: "Leave", enabled: true },
   { href: "/hr/documents", label: "Documents", enabled: true },

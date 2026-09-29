@@ -24,6 +24,7 @@ from app.api.v1 import (
     me_interviews,
     notifications,
     offboarding,
+    offboarding_requests,
     onboarding,
     organization,
     positions,
@@ -58,6 +59,8 @@ api_router.include_router(library_documents.private_router)
 api_router.include_router(onboarding.employee_onboarding_router)
 api_router.include_router(onboarding.me_router)
 api_router.include_router(onboarding.router)
+api_router.include_router(offboarding_requests.me_router)
+api_router.include_router(offboarding_requests.router)
 api_router.include_router(offboarding.me_router)
 api_router.include_router(offboarding.router)
 api_router.include_router(training.catalog_router)

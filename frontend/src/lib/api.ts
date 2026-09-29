@@ -48,7 +48,17 @@ import type {
   OffboardingDetail,
   OffboardingEmployeeView,
   OffboardingListItem,
+  OffboardingProgress,
+  OffboardingRequestCreatePayload,
+  OffboardingRequestDetail,
+  OffboardingRequestEmployeeView,
+  OffboardingRequestListItem,
+  OffboardingRequestStatus,
   OffboardingStatus,
+  OffboardingTask,
+  OffboardingTaskCreatePayload,
+  OffboardingTaskEmployeeView,
+  OffboardingTaskUpdatePayload,
 } from "@/types/offboarding";
 import type { DocumentType, EmployeeDocument, PresignedDocumentUrl } from "@/types/documents";
 import type {
@@ -594,6 +604,156 @@ class ApiClient {
 
   async listMyOffboardings(): Promise<OffboardingEmployeeView[]> {
     return this.request<OffboardingEmployeeView[]>("/api/v1/me/offboarding");
+  }
+
+  async getOffboardingProgress(caseId: number): Promise<OffboardingProgress> {
+    return this.request<OffboardingProgress>(`/api/v1/offboarding/${caseId}/progress`);
+  }
+
+  async listOffboardingTasks(caseId: number): Promise<OffboardingTask[]> {
+    return this.request<OffboardingTask[]>(`/api/v1/offboarding/${caseId}/tasks`);
+  }
+
+  async createOffboardingTask(
+    caseId: number,
+    payload: OffboardingTaskCreatePayload,
+  ): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(`/api/v1/offboarding/${caseId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOffboardingTask(
+    caseId: number,
+    taskId: number,
+    payload: OffboardingTaskUpdatePayload,
+  ): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(`/api/v1/offboarding/${caseId}/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async startOffboardingTask(caseId: number, taskId: number): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(
+      `/api/v1/offboarding/${caseId}/tasks/${taskId}/start`,
+      { method: "POST" },
+    );
+  }
+
+  async completeOffboardingTask(caseId: number, taskId: number): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(
+      `/api/v1/offboarding/${caseId}/tasks/${taskId}/complete`,
+      { method: "POST" },
+    );
+  }
+
+  async skipOffboardingTask(caseId: number, taskId: number): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(
+      `/api/v1/offboarding/${caseId}/tasks/${taskId}/skip`,
+      { method: "POST" },
+    );
+  }
+
+  async reopenOffboardingTask(caseId: number, taskId: number): Promise<OffboardingTask> {
+    return this.request<OffboardingTask>(
+      `/api/v1/offboarding/${caseId}/tasks/${taskId}/reopen`,
+      { method: "POST" },
+    );
+  }
+
+  async listMyOffboardingTasks(): Promise<OffboardingTaskEmployeeView[]> {
+    return this.request<OffboardingTaskEmployeeView[]>("/api/v1/me/offboarding/tasks");
+  }
+
+  async startMyOffboardingTask(taskId: number): Promise<OffboardingTaskEmployeeView> {
+    return this.request<OffboardingTaskEmployeeView>(
+      `/api/v1/me/offboarding/tasks/${taskId}/start`,
+      { method: "POST" },
+    );
+  }
+
+  async completeMyOffboardingTask(taskId: number): Promise<OffboardingTaskEmployeeView> {
+    return this.request<OffboardingTaskEmployeeView>(
+      `/api/v1/me/offboarding/tasks/${taskId}/complete`,
+      { method: "POST" },
+    );
+  }
+
+  async listMyOffboardingRequests(): Promise<OffboardingRequestEmployeeView[]> {
+    return this.request<OffboardingRequestEmployeeView[]>("/api/v1/offboarding/requests/me");
+  }
+
+  async createMyOffboardingRequest(
+    payload: OffboardingRequestCreatePayload,
+  ): Promise<OffboardingRequestEmployeeView> {
+    return this.request<OffboardingRequestEmployeeView>("/api/v1/offboarding/requests", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async cancelMyOffboardingRequest(requestId: number): Promise<OffboardingRequestEmployeeView> {
+    return this.request<OffboardingRequestEmployeeView>(
+      `/api/v1/offboarding/requests/${requestId}/cancel`,
+      { method: "POST" },
+    );
+  }
+
+  async listOffboardingRequests(params?: {
+    status?: OffboardingRequestStatus;
+    employee_id?: number;
+  }): Promise<OffboardingRequestListItem[]> {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.employee_id != null) search.set("employee_id", String(params.employee_id));
+    const query = search.toString();
+    return this.request<OffboardingRequestListItem[]>(
+      `/api/v1/offboarding/requests${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async getOffboardingRequest(id: number): Promise<OffboardingRequestDetail> {
+    return this.request<OffboardingRequestDetail>(`/api/v1/offboarding/requests/${id}`);
+  }
+
+  async approveOffboardingRequest(id: number): Promise<OffboardingDetail> {
+    return this.request<OffboardingDetail>(`/api/v1/offboarding/requests/${id}/approve`, {
+      method: "POST",
+    });
+  }
+
+  async rejectOffboardingRequest(
+    id: number,
+    rejection_reason?: string | null,
+  ): Promise<OffboardingRequestDetail> {
+    return this.request<OffboardingRequestDetail>(`/api/v1/offboarding/requests/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({
+        rejection_reason: rejection_reason?.trim() ? rejection_reason.trim() : null,
+      }),
+    });
+  }
+
+  async linkOffboardingRequestCase(
+    requestId: number,
+    offboarding_case_id: number,
+  ): Promise<OffboardingRequestDetail> {
+    return this.request<OffboardingRequestDetail>(
+      `/api/v1/offboarding/requests/${requestId}/link-case`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ offboarding_case_id }),
+      },
+    );
+  }
+
+  async createOffboardingCaseFromRequest(requestId: number): Promise<OffboardingDetail> {
+    return this.request<OffboardingDetail>(
+      `/api/v1/offboarding/requests/${requestId}/create-case`,
+      { method: "POST" },
+    );
   }
 
   async getOnboarding(id: number): Promise<Onboarding> {

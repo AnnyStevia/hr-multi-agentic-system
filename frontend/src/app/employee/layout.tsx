@@ -132,6 +132,11 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
                     <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
                     <SideLink href="/employee/offboarding" pathname={pathname} label="Offboarding" />
+                    <SideLink
+                      href="/employee/offboarding/request"
+                      pathname={pathname}
+                      label="Leave request"
+                    />
                   </>
                 )}
                 <SideLink href="/employee/training" pathname={pathname} label="Training" />
