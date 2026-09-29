@@ -289,6 +289,8 @@ class SeedService:
         ("company_documents:write", "Manage company document library", "company_documents", "write"),
         ("onboarding:read", "Read onboarding data", "onboarding", "read"),
         ("onboarding:write", "Manage onboarding", "onboarding", "write"),
+        ("offboarding:read", "Read offboarding data", "offboarding", "read"),
+        ("offboarding:write", "Manage offboarding", "offboarding", "write"),
     ]
 
     ROLE_PERMISSIONS = {
@@ -309,6 +311,8 @@ class SeedService:
             "company_documents:write",
             "onboarding:read",
             "onboarding:write",
+            "offboarding:read",
+            "offboarding:write",
         ],
         "manager": [
             "employees:read",
@@ -349,6 +353,7 @@ class SeedService:
             self._ensure_candidate_role()
             self._sync_manager_permissions()
             self._sync_company_document_permissions()
+            self._sync_offboarding_permissions()
             self._ensure_company_document_categories()
             return
 
@@ -450,6 +455,51 @@ class SeedService:
             }
             for perm_name in perm_names:
                 if not perm_name.startswith("company_documents:"):
+                    continue
+                if perm_name in existing:
+                    continue
+                perm = permissions.get(perm_name)
+                if perm is None:
+                    continue
+                self.db.add(RolePermission(role_id=role.id, permission_id=perm.id))
+                linked = True
+        if created or linked:
+            self.db.commit()
+
+    def _sync_offboarding_permissions(self) -> None:
+        """Ensure offboarding permissions exist and are assigned to admin/hr."""
+        permissions: dict[str, Permission] = {
+            perm.name: perm for perm in self.db.query(Permission).all()
+        }
+        created = False
+        for name, desc, resource, action in self.PERMISSIONS:
+            if name in permissions:
+                continue
+            if not name.startswith("offboarding:"):
+                continue
+            perm = Permission(
+                name=name, description=desc, resource=resource, action=action
+            )
+            self.db.add(perm)
+            self.db.flush()
+            permissions[name] = perm
+            created = True
+
+        roles = {role.name: role for role in self.db.query(Role).all()}
+        linked = False
+        for role_name, perm_names in self.ROLE_PERMISSIONS.items():
+            role = roles.get(role_name)
+            if role is None:
+                continue
+            existing = {
+                name
+                for (name,) in self.db.query(Permission.name)
+                .join(RolePermission, RolePermission.permission_id == Permission.id)
+                .filter(RolePermission.role_id == role.id)
+                .all()
+            }
+            for perm_name in perm_names:
+                if not perm_name.startswith("offboarding:"):
                     continue
                 if perm_name in existing:
                     continue
