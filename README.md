@@ -2,7 +2,7 @@
 
 A web-based HR management platform with a layered AI foundation — a 5th-year Software Engineering final-year project (PFE).
 
-The product is a **real HR system first**: identity, recruitment, organization, onboarding, leave, documents, and dashboards. The AI layer sits beside Core HR — it never invents authorization, never touches the database directly, and answers only from authorized tools or retrieved, ACL-filtered documents.
+The product is a **real HR system first**: identity, recruitment, organization, onboarding, offboarding, leave, documents, training, and dashboards. The AI layer sits beside Core HR — it never invents authorization, never touches the database directly, and answers only from authorized tools or retrieved, ACL-filtered documents.
 
 ---
 
@@ -48,7 +48,7 @@ flowchart TB
 | User ≠ Employee | Identity accounts are separate from employment records ([ADR 002](docs/decisions/002-user-vs-employee.md)) |
 | Agents never hit the DB | `Agent → Tool → Service → DB` ([ADR 003](docs/decisions/003-agent-database-isolation.md)) |
 | Auth before generation | `AIExecutionContext` + permission filters run before tools / retrieval; the LLM only sees authorized context |
-| Writes need confirmation | Recruitment, Leave, Onboarding, and Training write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation. Documents Agent is **read-only** (no confirm). |
+| Writes need confirmation | Recruitment, Leave, Onboarding, Training, and Offboarding write tools return an HMAC-signed pending action; the user must Confirm in the UI before mutation. Knowledge and Documents Agents are **read-only** (no confirm). |
 | Embed ≠ generate | `gemini-embedding-2` for vectors; conversational `GEMINI_MODEL` for grounded answers |
 | Registry ≠ authorization | Agent registry / router decide **availability + intent only**; tools + domain services remain authoritative |
 | Knowledge ≠ Documents | Company RAG (Knowledge) is separate from Document Understanding (per-file PDF summarize / Q&A) |
@@ -77,12 +77,12 @@ backend/app/
 │   ├── core/            # LLM providers, AIExecutionContext
 │   ├── registry/        # Static agent catalog + permission / employee_id availability
 │   ├── routing/         # Deterministic keyword router (no LLM supervisor)
-│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding, Training, Documents
+│   ├── agents/          # Knowledge, Recruitment, Leave, Onboarding, Training, Documents, Offboarding
 │   ├── documents/       # Document Understanding (authorize → parse PDF → summarize / Q&A)
-│   ├── tools/           # Registry, auth, domain tools (incl. document_reads)
+│   ├── tools/           # Registry, auth, domain tools (incl. document_reads / offboarding_*)
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
-│   ├── orchestration/   # LangGraph unified ask + tool roundtrips
+│   ├── orchestration/   # LangGraph unified ask (one specialist) + tool roundtrips
 │   └── rag/             # Ingest → embed → retrieve → answer (ACTIVE company docs only)
 └── shared/              # StorageService (S3), MeetingProvider, helpers
 ```
@@ -268,44 +268,25 @@ Audits: [`backend/docs/phase_7_3a_auth_audit.md`](backend/docs/phase_7_3a_auth_a
 
 ---
 
-### Multi-agent gateway + Onboarding AI (Phases 8.1–9.2E)
+### Multi-agent gateway + Onboarding AI (Phases 8.1–9.2E) + LangGraph orchestration (Orc.1–Orc.4)
 
 ```mermaid
 flowchart TD
   User[Authenticated user]
   Ask[POST /ai/assistant/ask]
   Ctx[AIExecutionContext]
-  Reg[get_available_agents]
+  Graph[LangGraph orchestrator]
+  Reg[filter_available]
   Route[route_message keywords]
-  OA[OnboardingAgent]
-  TA[TrainingAgent]
-  DA[DocumentsAgent]
-  Leave[LeaveAgent]
-  Rec[RecruitmentAgent]
-  Know[KnowledgeAgent]
-  Tools[Existing tools]
+  Soft[clarify or unavailable]
+  Spec[One specialist agent]
+  Tools[That agent's tools only]
   Svc[Domain services]
   Env[agent_id + pending_confirmation]
 
-  User --> Ask --> Ctx --> Reg --> Route
-  Route -->|onboarding| OA
-  Route -->|training| TA
-  Route -->|documents| DA
-  Route -->|leave| Leave
-  Route -->|recruitment| Rec
-  Route -->|knowledge| Know
-  OA --> Tools --> Svc
-  TA --> Tools
-  DA --> Tools
-  Leave --> Tools
-  Rec --> Tools
-  Know --> Tools
-  OA --> Env
-  TA --> Env
-  DA --> Env
-  Leave --> Env
-  Rec --> Env
-  Know --> Env
+  User --> Ask --> Ctx --> Graph --> Reg --> Route
+  Route -->|agent| Spec --> Tools --> Svc --> Env
+  Route -->|soft| Soft --> Env
 ```
 
 | Phase | Capability |
@@ -317,10 +298,17 @@ flowchart TD
 | 9.2C | Confirmation-gated ACK / manual complete / force-complete writes |
 | 9.2D | Confirm UX + HMAC hardening |
 | 9.2E | Onboarding registered in unified assistant (availability + routing + dispatch) |
+| Orc.1–Orc.2 | LangGraph wraps availability → route → **one** specialist invoke; FE ask/confirm contract unchanged |
+| Orc.3 | Optional constrained LLM clarify among **available** agent ids (`ai_orchestrator_llm_clarify`, default off) |
+| Orc.4 | Allowlisted handoff hook (empty by default) + chat-history schema design only |
+
+**Orchestration constraint:** LangGraph is infrastructure only — not an HR business layer and not a mega-supervisor with all tools. Writes still stop at HMAC propose; Confirm stays on `POST /ai/{domain}/confirm`.
 
 **Onboarding availability (locked):** agent is available when `AIExecutionContext.employee_id` is set **or** the user has `onboarding:read`. Candidates with neither are unavailable. That does **not** grant cross-employee access — tools + `OnboardingService` still authorize.
 
 **Write tools (confirmation-gated)** — employee ACK of own tasks; HR/Admin manual task complete and force-complete onboarding (see [`backend/docs/phase_9_2e_onboarding_unified_assistant.md`](backend/docs/phase_9_2e_onboarding_unified_assistant.md)).
+
+Docs: [`backend/docs/phase_orc_1_langgraph_orchestration.md`](backend/docs/phase_orc_1_langgraph_orchestration.md), [`backend/docs/phase_orc_4_handoffs_and_chat_history.md`](backend/docs/phase_orc_4_handoffs_and_chat_history.md).
 
 ---
 
@@ -408,6 +396,40 @@ Docs: [`backend/docs/phase_11_2d_unified_document_agent.md`](backend/docs/phase_
 
 ---
 
+### Offboarding AI (Phases O.6A–O.6D) — reads, writes, unified assistant
+
+```mermaid
+flowchart TD
+  User[Authenticated user]
+  Ask[POST /ai/assistant/ask or /ai/offboarding/ask]
+  Agent[OffboardingAgent]
+  Tools[offboarding_reads / offboarding_writes]
+  Pending[pending_confirmation]
+  Conf[POST /ai/offboarding/confirm]
+  Svc[OffboardingService]
+  DB[(PostgreSQL)]
+
+  User --> Ask --> Agent --> Tools
+  Tools -->|writes propose| Pending
+  Pending -->|UI Confirm| Conf --> Agent
+  Agent -->|verify HMAC + re-auth| Tools --> Svc --> DB
+```
+
+| Phase | Capability |
+|-------|------------|
+| O.6A | Agent audit (tools vs domain gates; no parallel completion rules) |
+| O.6B | Read-only tools + standalone `POST /ai/offboarding/ask` |
+| O.6C | Registry + router + unified `/ai/assistant/ask` dispatch |
+| O.6D | Confirmation-gated complete case / clearance / task writes |
+
+**Availability (locked):** `employee_id` present **or** HR/Admin with `offboarding:read`. Availability does **not** authorize a particular case — tools + `OffboardingService` remain authoritative (self vs HR scope; O.5 completion gates unchanged).
+
+**Read tools** — case status, progress, tasks, clearance, exit interview, readiness / blockers.
+
+**Write tools (confirmation-gated)** — complete offboarding case; mutate clearance; offboarding task mutations (see [`backend/docs/phase_offboarding_6d_writes.md`](backend/docs/phase_offboarding_6d_writes.md)).
+
+---
+
 ## Tech stack
 
 | Layer | Choice |
@@ -419,6 +441,7 @@ Docs: [`backend/docs/phase_11_2d_unified_document_agent.md`](backend/docs/phase_
 | Meetings | Google Calendar API + Meet (`MeetingProvider`: noop / fake / google) |
 | Embeddings | Gemini Embedding 2 (`gemini-embedding-2`) |
 | Generation / tools | Gemini Flash (`GEMINI_MODEL`), provider-agnostic `LLMProvider` (Mistral adapter also present) |
+| Assistant orchestration | LangGraph (select + invoke one specialist; specialists still use `LLMProvider`) |
 | Auth | JWT + RBAC permissions |
 
 ---
@@ -513,7 +536,8 @@ Employee **offboarding request** (pre-case) plus core HR offboarding **case**, *
 
 - Offboarding Meet reminders
 - Document Agent writes (AI upload / archive / delete) or persistent document chat
-- LLM supervisor / chat history / rich Markdown renderer for the assistant
+- Assistant chat-history persistence / rich Markdown renderer (schema designed in Orc.4; not stored yet)
+- Allowlisted multi-agent handoffs enabled in product (hook present; allowlist empty)
 - LLM rerank / query reformulation for RAG
 - Autonomous domain decisions (writes always require UI confirmation)
 - Manager team-training or onboarding “reports” scope (employees see self only; HR sees org-wide)
@@ -568,7 +592,7 @@ After pulling, apply migrations:
 ```bash
 cd backend
 alembic upgrade head
-# Current head: 048_employee_training_progress
+# Current head: 053_offboarding_exit_interview
 ```
 
 ---
@@ -615,20 +639,21 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
-### Unified assistant (Knowledge / Leave / Recruitment / Onboarding / Training / Documents)
+### Unified assistant (seven specialists via LangGraph)
 
 1. Log in (employee with a linked Employee record, or HR) → open the floating assistant on any authenticated portal.
-2. Ask in natural language; the backend routes by intent:
+2. Ask in natural language; LangGraph filters available agents, then the deterministic router picks **one** specialist:
    - Leave: “What’s my leave balance?”
    - Onboarding: “What’s my onboarding progress?” / “Acknowledge my pending onboarding task.”
    - Training: “What trainings do I have?” / “Mark my safety training as completed.” / (HR) “Assign training 5 to onboarding 42.”
+   - Offboarding: “What’s my offboarding status?” / “Is this case ready to complete?” / (HR) “Mark laptop clearance complete.”
    - Knowledge: “What is our annual leave policy?” / “What does the company handbook say about remote work?”
    - Documents: “Show me my private documents.” / “List company documents.” / “Summarize the employee handbook.” / “What does this PDF say about leave?”
    - Recruitment (HR): “How many candidates are currently shortlisted?”
-3. **Writes** (leave, recruitment, onboarding ACK/complete, or training complete/assign): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing. Documents has no writes.
+3. **Writes** (leave, recruitment, onboarding, training, or offboarding): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing. Knowledge and Documents have no writes.
 4. Do not type “I confirm” in chat — only the UI button completes the write.
-5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training/documents (and typically have no agents).
-6. Policy/handbook **questions** prefer **Knowledge**; explicit summarize / “this PDF” / private library phrases prefer **Documents**. Operational “my training” / assign phrases prefer **Training**.
+5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training/documents/offboarding (and typically have no agents).
+6. Policy/handbook **questions** prefer **Knowledge**; explicit summarize / “this PDF” / private library phrases prefer **Documents**. Operational “my training” / assign phrases prefer **Training**. Case readiness / clearance phrases prefer **Offboarding** (not Knowledge).
 
 ### Document AI panel (library / employee docs)
 
@@ -637,13 +662,13 @@ Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `
 3. Upload remains the normal Core HR upload; AI is never auto-run on upload.
 4. Archived company PDFs: metadata/View for HR, but no content AI actions.
 
-### Offboarding (request → case / employee)
+### Offboarding (request → case → clearance → exit interview → complete)
 
 1. As an **employee**, open `/employee/offboarding/request` → submit (reason + requested last day).
-2. As **HR/Admin**, open `/hr/offboarding/requests` → **Approve** — opens `/hr/offboarding/{id}` with case + checklist seeded.
-3. On the case — Start / complete / skip tasks as before.
-4. As an **assigned employee**, open `/employee/offboarding` → **My offboarding tasks** → Start / Complete.
-5. **Reject** leaves the request closed with no case.
+2. As **HR/Admin**, open `/hr/offboarding/requests` → **Approve** — opens `/hr/offboarding/{id}` with case + checklist + clearance seeded.
+3. On the HR case page — run checklist tasks, update clearance, schedule exit interview (Meet), then **Complete** when O.5 gates pass.
+4. As the departing **employee**, open `/employee/offboarding` for tasks, clearance (read-only), and exit-interview join / feedback.
+5. **Reject** leaves the request closed with no case. Successful complete deactivates the employee’s login account.
 
 ---
 
@@ -654,7 +679,7 @@ HR-Multi-Agentic-System/
 ├── backend/                 # FastAPI app, Alembic, smoke scripts
 │   ├── app/
 │   │   ├── api/
-│   │   ├── ai/              # LLM, agents, tools, confirmation, audit, RAG
+│   │   ├── ai/              # LLM, agents, LangGraph orchestration, tools, confirmation, audit, RAG
 │   │   ├── modules/         # Core HR domains
 │   │   └── shared/          # S3, MeetingProvider, etc.
 │   ├── alembic/
