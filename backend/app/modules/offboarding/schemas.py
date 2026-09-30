@@ -3,6 +3,9 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from app.modules.offboarding.models import (
+    ExitInterviewStatus,
+    OffboardingClearanceCategory,
+    OffboardingClearanceStatus,
     OffboardingReason,
     OffboardingStatus,
     OffboardingTaskCategory,
@@ -142,3 +145,112 @@ class OffboardingProgressResponse(BaseModel):
     percentage: int
     required_complete: bool
     overdue_tasks: int
+
+
+class OffboardingClearanceCreateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    category: OffboardingClearanceCategory
+    item: str = Field(min_length=1, max_length=200)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class OffboardingClearanceUpdateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    status: OffboardingClearanceStatus | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class OffboardingClearanceItemResponse(BaseModel):
+    id: int
+    offboarding_case_id: int
+    category: OffboardingClearanceCategory
+    item: str
+    status: OffboardingClearanceStatus
+    notes: str | None
+    completed_at: datetime | None
+    completed_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class OffboardingClearanceEmployeeViewResponse(BaseModel):
+    id: int
+    offboarding_case_id: int
+    category: OffboardingClearanceCategory
+    item: str
+    status: OffboardingClearanceStatus
+    notes: str | None
+    completed_at: datetime | None
+
+
+class OffboardingClearanceProgressResponse(BaseModel):
+    offboarding_case_id: int
+    total: int
+    pending: int
+    cleared: int
+    not_applicable: int
+    percentage: int
+    clearance_complete: bool
+
+
+class OffboardingCanCompleteResponse(BaseModel):
+    offboarding_case_id: int
+    can_complete: bool
+    blockers: list[str]
+
+
+class ExitInterviewCreateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interviewer_employee_id: int
+    scheduled_at: datetime
+    ends_at: datetime
+
+
+class ExitInterviewUpdateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    interviewer_employee_id: int | None = None
+    scheduled_at: datetime | None = None
+    ends_at: datetime | None = None
+    feedback: str | None = Field(default=None, max_length=10000)
+
+
+class ExitInterviewCompleteRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    feedback: str = Field(min_length=1, max_length=10000)
+
+
+class ExitInterviewInterviewerSummary(BaseModel):
+    id: int
+    full_name: str
+    email: str
+
+
+class ExitInterviewResponse(BaseModel):
+    id: int
+    offboarding_case_id: int
+    interviewer_employee_id: int | None
+    interviewer: ExitInterviewInterviewerSummary | None
+    scheduled_at: datetime
+    ends_at: datetime
+    meeting_url: str | None
+    status: ExitInterviewStatus
+    feedback: str | None
+    completed_at: datetime | None
+    created_by_user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExitInterviewEmployeeViewResponse(BaseModel):
+    id: int
+    offboarding_case_id: int
+    interviewer: ExitInterviewInterviewerSummary | None
+    scheduled_at: datetime
+    ends_at: datetime
+    meeting_url: str | None
+    status: ExitInterviewStatus

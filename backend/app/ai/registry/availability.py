@@ -24,6 +24,12 @@ def is_agent_available(definition: AgentDefinition, context: AIExecutionContext)
     a stray ``company_documents:read`` appears. Available when ``employee_id``
     is present OR HR/Admin staff with ``company_documents:read``. Tool/domain
     authorization still gates each document.
+
+    Offboarding is special: same shape as Documents/Training. Available when
+    ``employee_id`` is present OR HR/Admin staff with ``offboarding:read``.
+    Managers without that staff+permission pair are unavailable. Availability
+    is not business authorization — dual-mode / HR offboarding tools remain
+    authoritative for self vs cross-employee access.
     """
     if definition.id == "onboarding":
         if context.employee_id is not None:
@@ -39,6 +45,11 @@ def is_agent_available(definition: AgentDefinition, context: AIExecutionContext)
             return True
         staff = bool(context.role_names & frozenset({"hr", "admin"}))
         return staff and "company_documents:read" in context.permission_names
+    if definition.id == "offboarding":
+        if context.employee_id is not None:
+            return True
+        staff = bool(context.role_names & frozenset({"hr", "admin"}))
+        return staff and "offboarding:read" in context.permission_names
     return bool(context.permission_names & definition.required_permissions_any)
 
 

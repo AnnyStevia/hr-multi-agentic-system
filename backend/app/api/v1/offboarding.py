@@ -1,11 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 from app.modules.identity.dependencies import get_current_user
 from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
-from app.modules.offboarding.dependencies import get_offboarding_service
+from app.modules.offboarding.dependencies import (
+    get_exit_interview_meeting_service,
+    get_offboarding_service,
+)
+from app.modules.offboarding.meeting_runner import run_exit_interview_meeting_provision
+from app.modules.offboarding.meeting_service import ExitInterviewMeetingService
 from app.modules.offboarding.models import OffboardingStatus
 from app.modules.offboarding.schemas import (
+    ExitInterviewCompleteRequest,
+    ExitInterviewCreateRequest,
+    ExitInterviewEmployeeViewResponse,
+    ExitInterviewResponse,
+    ExitInterviewUpdateRequest,
+    OffboardingClearanceCreateRequest,
+    OffboardingClearanceEmployeeViewResponse,
+    OffboardingClearanceItemResponse,
+    OffboardingClearanceProgressResponse,
+    OffboardingClearanceUpdateRequest,
+    OffboardingCanCompleteResponse,
     OffboardingCreateRequest,
     OffboardingDetailResponse,
     OffboardingEmployeeViewResponse,
@@ -18,9 +34,13 @@ from app.modules.offboarding.schemas import (
 )
 from app.modules.offboarding.service import (
     OffboardingService,
+    build_clearance_item_response,
     build_detail_response,
+    build_employee_clearance_response,
+    build_employee_exit_interview_response,
     build_employee_task_response,
     build_employee_view_response,
+    build_exit_interview_response,
     build_task_response,
 )
 from app.shared.exceptions import AppException
@@ -91,6 +111,40 @@ def complete_my_offboarding_task(
         return build_employee_task_response(
             service.complete_task_for_user(current_user.id, task_id, current_user)
         )
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.get(
+    "/offboarding/clearance",
+    response_model=list[OffboardingClearanceEmployeeViewResponse],
+)
+def list_my_offboarding_clearance(
+    current_user: User = Depends(get_current_user),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> list[OffboardingClearanceEmployeeViewResponse]:
+    try:
+        return [
+            build_employee_clearance_response(item)
+            for item in service.list_clearance_for_user(current_user.id)
+        ]
+    except AppException as exc:
+        _handle(exc)
+
+
+@me_router.get(
+    "/offboarding/exit-interview",
+    response_model=ExitInterviewEmployeeViewResponse | None,
+)
+def get_my_exit_interview(
+    current_user: User = Depends(get_current_user),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewEmployeeViewResponse | None:
+    try:
+        interview = service.get_exit_interview_for_user(current_user.id)
+        if interview is None:
+            return None
+        return build_employee_exit_interview_response(interview)
     except AppException as exc:
         _handle(exc)
 
@@ -245,6 +299,197 @@ def reopen_offboarding_task(
         _handle(exc)
 
 
+@router.get("/{case_id}/clearance", response_model=list[OffboardingClearanceItemResponse])
+def list_offboarding_clearance(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:read")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> list[OffboardingClearanceItemResponse]:
+    try:
+        return [
+            build_clearance_item_response(item)
+            for item in service.list_clearance_for_hr(case_id)
+        ]
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.get(
+    "/{case_id}/clearance/progress",
+    response_model=OffboardingClearanceProgressResponse,
+)
+def get_offboarding_clearance_progress(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:read")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> OffboardingClearanceProgressResponse:
+    try:
+        return service.get_clearance_progress(case_id)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.post(
+    "/{case_id}/clearance",
+    response_model=OffboardingClearanceItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_offboarding_clearance_item(
+    case_id: int,
+    payload: OffboardingClearanceCreateRequest,
+    _user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> OffboardingClearanceItemResponse:
+    try:
+        item = service.create_clearance_item_for_hr(case_id, payload)
+        loaded = service.repository.get_clearance_for_case(case_id, item.id)
+        assert loaded is not None
+        return build_clearance_item_response(loaded)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.patch(
+    "/{case_id}/clearance/{item_id}",
+    response_model=OffboardingClearanceItemResponse,
+)
+def update_offboarding_clearance_item(
+    case_id: int,
+    item_id: int,
+    payload: OffboardingClearanceUpdateRequest,
+    current_user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> OffboardingClearanceItemResponse:
+    try:
+        item = service.update_clearance_item_for_hr(
+            case_id, item_id, payload, current_user
+        )
+        loaded = service.repository.get_clearance_for_case(case_id, item.id)
+        assert loaded is not None
+        return build_clearance_item_response(loaded)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.get(
+    "/{case_id}/exit-interview",
+    response_model=ExitInterviewResponse | None,
+)
+def get_exit_interview(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:read")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewResponse | None:
+    try:
+        interview = service.get_exit_interview_for_hr(case_id)
+        if interview is None:
+            return None
+        return build_exit_interview_response(interview)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.post(
+    "/{case_id}/exit-interview",
+    response_model=ExitInterviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_exit_interview(
+    case_id: int,
+    payload: ExitInterviewCreateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewResponse:
+    try:
+        interview = service.create_exit_interview_for_hr(case_id, current_user, payload)
+        if interview.meeting_url is None:
+            background_tasks.add_task(
+                run_exit_interview_meeting_provision, interview.id
+            )
+        return build_exit_interview_response(interview)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.patch("/{case_id}/exit-interview", response_model=ExitInterviewResponse)
+def update_exit_interview(
+    case_id: int,
+    payload: ExitInterviewUpdateRequest,
+    background_tasks: BackgroundTasks,
+    _user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewResponse:
+    try:
+        interview = service.update_exit_interview_for_hr(case_id, payload)
+        if interview.status.value == "scheduled" and interview.meeting_url is None:
+            background_tasks.add_task(
+                run_exit_interview_meeting_provision, interview.id
+            )
+        return build_exit_interview_response(interview)
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.post(
+    "/{case_id}/exit-interview/complete",
+    response_model=ExitInterviewResponse,
+)
+def complete_exit_interview(
+    case_id: int,
+    payload: ExitInterviewCompleteRequest,
+    _user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewResponse:
+    try:
+        return build_exit_interview_response(
+            service.complete_exit_interview_for_hr(case_id, payload)
+        )
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.post(
+    "/{case_id}/exit-interview/cancel",
+    response_model=ExitInterviewResponse,
+)
+def cancel_exit_interview(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> ExitInterviewResponse:
+    try:
+        return build_exit_interview_response(
+            service.cancel_exit_interview_for_hr(case_id)
+        )
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.post(
+    "/{case_id}/exit-interview/meeting",
+    response_model=ExitInterviewResponse,
+)
+def ensure_exit_interview_meeting(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:write")),
+    service: OffboardingService = Depends(get_offboarding_service),
+    meeting_service: ExitInterviewMeetingService = Depends(
+        get_exit_interview_meeting_service
+    ),
+) -> ExitInterviewResponse:
+    try:
+        interview = service.get_exit_interview_for_hr(case_id)
+        if interview is None:
+            raise AppException("Exit interview not found", status_code=404)
+        ensured = meeting_service.ensure_meeting(interview.id)
+        loaded = service.repository.get_exit_interview_by_id(ensured.id)
+        assert loaded is not None
+        return build_exit_interview_response(loaded)
+    except AppException as exc:
+        _handle(exc)
+
+
 @router.post("/{case_id}/start", response_model=OffboardingDetailResponse)
 def start_offboarding(
     case_id: int,
@@ -265,6 +510,23 @@ def pending_clearance_offboarding(
 ) -> OffboardingDetailResponse:
     try:
         return build_detail_response(service.move_to_pending_clearance(case_id))
+    except AppException as exc:
+        _handle(exc)
+
+
+@router.get("/{case_id}/can-complete", response_model=OffboardingCanCompleteResponse)
+def get_offboarding_can_complete(
+    case_id: int,
+    _user: User = Depends(require_hr_staff("offboarding:read")),
+    service: OffboardingService = Depends(get_offboarding_service),
+) -> OffboardingCanCompleteResponse:
+    try:
+        can_complete, blockers = service.can_complete(case_id)
+        return OffboardingCanCompleteResponse(
+            offboarding_case_id=case_id,
+            can_complete=can_complete,
+            blockers=blockers,
+        )
     except AppException as exc:
         _handle(exc)
 

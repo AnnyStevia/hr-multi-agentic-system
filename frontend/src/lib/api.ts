@@ -4,6 +4,7 @@ import type {
   DocumentsAskPayload,
   DocumentsAskResponse,
   LeaveAskResponse,
+  OffboardingAskResponse,
   OnboardingAskResponse,
   RecruitmentAskResponse,
   RecruitmentConfirmPayload,
@@ -44,6 +45,17 @@ import type {
   OnboardingTaskUpdatePayload,
 } from "@/types/onboarding";
 import type {
+  OffboardingClearanceCreatePayload,
+  OffboardingClearanceEmployeeView,
+  OffboardingClearanceItem,
+  OffboardingClearanceProgress,
+  OffboardingClearanceUpdatePayload,
+  OffboardingCanComplete,
+  ExitInterview,
+  ExitInterviewCompletePayload,
+  ExitInterviewCreatePayload,
+  ExitInterviewEmployeeView,
+  ExitInterviewUpdatePayload,
   OffboardingCreatePayload,
   OffboardingDetail,
   OffboardingEmployeeView,
@@ -596,6 +608,12 @@ class ApiClient {
     });
   }
 
+  async getOffboardingCanComplete(caseId: number): Promise<OffboardingCanComplete> {
+    return this.request<OffboardingCanComplete>(
+      `/api/v1/offboarding/${caseId}/can-complete`,
+    );
+  }
+
   async cancelOffboarding(id: number): Promise<OffboardingDetail> {
     return this.request<OffboardingDetail>(`/api/v1/offboarding/${id}/cancel`, {
       method: "POST",
@@ -678,6 +696,105 @@ class ApiClient {
     return this.request<OffboardingTaskEmployeeView>(
       `/api/v1/me/offboarding/tasks/${taskId}/complete`,
       { method: "POST" },
+    );
+  }
+
+  async listOffboardingClearance(caseId: number): Promise<OffboardingClearanceItem[]> {
+    return this.request<OffboardingClearanceItem[]>(
+      `/api/v1/offboarding/${caseId}/clearance`,
+    );
+  }
+
+  async getOffboardingClearanceProgress(
+    caseId: number,
+  ): Promise<OffboardingClearanceProgress> {
+    return this.request<OffboardingClearanceProgress>(
+      `/api/v1/offboarding/${caseId}/clearance/progress`,
+    );
+  }
+
+  async createOffboardingClearanceItem(
+    caseId: number,
+    payload: OffboardingClearanceCreatePayload,
+  ): Promise<OffboardingClearanceItem> {
+    return this.request<OffboardingClearanceItem>(`/api/v1/offboarding/${caseId}/clearance`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOffboardingClearanceItem(
+    caseId: number,
+    itemId: number,
+    payload: OffboardingClearanceUpdatePayload,
+  ): Promise<OffboardingClearanceItem> {
+    return this.request<OffboardingClearanceItem>(
+      `/api/v1/offboarding/${caseId}/clearance/${itemId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  async listMyOffboardingClearance(): Promise<OffboardingClearanceEmployeeView[]> {
+    return this.request<OffboardingClearanceEmployeeView[]>("/api/v1/me/offboarding/clearance");
+  }
+
+  async getOffboardingExitInterview(caseId: number): Promise<ExitInterview | null> {
+    return this.request<ExitInterview | null>(`/api/v1/offboarding/${caseId}/exit-interview`);
+  }
+
+  async createOffboardingExitInterview(
+    caseId: number,
+    payload: ExitInterviewCreatePayload,
+  ): Promise<ExitInterview> {
+    return this.request<ExitInterview>(`/api/v1/offboarding/${caseId}/exit-interview`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateOffboardingExitInterview(
+    caseId: number,
+    payload: ExitInterviewUpdatePayload,
+  ): Promise<ExitInterview> {
+    return this.request<ExitInterview>(`/api/v1/offboarding/${caseId}/exit-interview`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async completeOffboardingExitInterview(
+    caseId: number,
+    payload: ExitInterviewCompletePayload,
+  ): Promise<ExitInterview> {
+    return this.request<ExitInterview>(
+      `/api/v1/offboarding/${caseId}/exit-interview/complete`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  async cancelOffboardingExitInterview(caseId: number): Promise<ExitInterview> {
+    return this.request<ExitInterview>(
+      `/api/v1/offboarding/${caseId}/exit-interview/cancel`,
+      { method: "POST" },
+    );
+  }
+
+  async ensureOffboardingExitInterviewMeeting(caseId: number): Promise<ExitInterview> {
+    return this.request<ExitInterview>(
+      `/api/v1/offboarding/${caseId}/exit-interview/meeting`,
+      { method: "POST" },
+    );
+  }
+
+  async getMyOffboardingExitInterview(): Promise<ExitInterviewEmployeeView | null> {
+    return this.request<ExitInterviewEmployeeView | null>(
+      "/api/v1/me/offboarding/exit-interview",
     );
   }
 
@@ -1538,6 +1655,38 @@ class ApiClient {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/api/v1/ai/training/confirm`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new ApiClientError("Cannot reach the server. Is the backend running?", 0);
+    }
+
+    if (!response.ok) {
+      const error: ApiError = await response.json().catch(() => ({
+        detail: "An unexpected error occurred",
+      }));
+      throw new ApiClientError(formatApiDetail(error.detail), response.status);
+    }
+
+    return response.json();
+  }
+
+  async confirmOffboardingAction(
+    payload: RecruitmentConfirmPayload
+  ): Promise<OffboardingAskResponse> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v1/ai/offboarding/confirm`, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),

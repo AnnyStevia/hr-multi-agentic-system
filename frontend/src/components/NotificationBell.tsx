@@ -104,7 +104,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
     if (
       notification.related_entity_type === "leave_request" ||
       notification.related_entity_type === "training" ||
-      notification.related_entity_type === "offboarding_request"
+      notification.related_entity_type === "offboarding_request" ||
+      notification.related_entity_type === "exit_interview"
     ) {
       await navigateFromNotification(notification);
       return;
@@ -135,6 +136,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
           router.push("/employee/leave");
         } else if (notification.related_entity_type === "offboarding_request") {
           router.push("/employee/offboarding/request");
+        } else if (notification.related_entity_type === "exit_interview") {
+          router.push("/employee/offboarding");
         } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
           router.push(`/employee/interviews/${notification.related_entity_id}`);
         }
@@ -158,6 +161,8 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
             ? `/hr/offboarding/requests?request=${requestId}`
             : "/hr/offboarding/requests",
         );
+      } else if (notification.related_entity_type === "exit_interview") {
+        router.push("/hr/offboarding");
       } else if (notification.related_entity_type === "interview" && notification.related_entity_id) {
         if (
           notification.type === "interview_assignment" ||

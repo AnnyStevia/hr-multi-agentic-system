@@ -65,7 +65,7 @@ backend/app/
 │   ├── recruitment/     # Jobs, applications, fit fields, rejection_reason
 │   ├── interviews/      # Invites, slots, feedback, outcomes, Meet
 │   ├── onboarding/      # Tasks & verification
-│   ├── offboarding/     # Offboarding cases + checklist
+│   ├── offboarding/     # Offboarding cases + checklist + clearance + exit interview
 │   ├── offboarding_requests/  # Employee leave requests (pre-case)
 │   ├── documents/       # Employee docs + company library + private vault
 │   ├── training/        # Assignments
@@ -82,7 +82,7 @@ backend/app/
 │   ├── tools/           # Registry, auth, domain tools (incl. document_reads)
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
-│   ├── orchestration/   # Tool roundtrips
+│   ├── orchestration/   # LangGraph unified ask + tool roundtrips
 │   └── rag/             # Ingest → embed → retrieve → answer (ACTIVE company docs only)
 └── shared/              # StorageService (S3), MeetingProvider, helpers
 ```
@@ -91,7 +91,7 @@ backend/app/
 
 On authenticated portals, the floating assistant is **one UI** backed by the **unified gateway**:
 
-`POST /api/v1/ai/assistant/ask` → `get_available_agents` → deterministic `route_message` → Knowledge / Leave / Recruitment / Onboarding / Training / Documents.
+`POST /api/v1/ai/assistant/ask` → LangGraph (`filter_available` → deterministic `route_message` → one specialist) → Knowledge / Leave / Recruitment / Onboarding / Training / Documents / Offboarding.
 
 | Agent | When it is available | Confirm endpoint (writes) |
 |-------|----------------------|---------------------------|
@@ -101,10 +101,11 @@ On authenticated portals, the floating assistant is **one UI** backed by the **u
 | Onboarding | `employee_id` set **or** `onboarding:read` | `POST /api/v1/ai/onboarding/confirm` |
 | Training | `employee_id` set **or** HR/Admin + `training:read` | `POST /api/v1/ai/training/confirm` |
 | Documents | `employee_id` set **or** HR/Admin + `company_documents:read` | — (read-only) |
+| Offboarding | `employee_id` set **or** HR/Admin + `offboarding:read` | `POST /api/v1/ai/offboarding/confirm` |
 
 The UI stores each reply’s `agent_id` and routes Confirm by that id (not by pathname). Write proposals show a **Confirm / Cancel** card; the HMAC token stays in client state (not rendered as text). Cancel drops the token locally. Typing “I confirm” in chat does nothing — only the UI button completes a write.
 
-Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`, `/ai/documents`).
+Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`, `/ai/documents`, `/ai/offboarding`).
 
 Document library pages also expose a **Document AI panel** (Summarize / Ask) that calls `POST /api/v1/ai/documents/ask` directly for structured summary + page citations.
 
@@ -463,18 +464,19 @@ Docs: [`backend/docs/phase_11_2d_unified_document_agent.md`](backend/docs/phase_
 - **Training Agent** — self assignments + HR catalogue/onboarding-assignment reads; confirmation-gated complete own / assign to onboarding via the unified assistant (or `POST /api/v1/ai/training/ask` + `/confirm`)
 - **Documents Agent** — read-only library/vault/employee metadata + PDF summarize / Q&A via the unified assistant (or `POST /api/v1/ai/documents/ask`)
 
-### Offboarding (Phases O.1–O.2 + request layer) — request → case + checklist
+### Offboarding (Phases O.1–O.5 + account deactivation + request layer) — request → case + checklist + clearance + exit interview + gated completion
 
-Employee **offboarding request** (pre-case) plus core HR offboarding **case** and **checklist tasks** (no clearance, exit interview, Meet, or AI yet).
+Employee **offboarding request** (pre-case) plus core HR offboarding **case**, **checklist**, **clearance**, **exit interview**, and **finalization rules** (Meet via shared `MeetingProvider`).
 
-- **Employee** (`/employee/offboarding/request`): submit / cancel leave request → HR notified; after a case exists, `/employee/offboarding` for case + **My offboarding tasks**
-- **HR** (`/hr/offboarding/requests`): Approve opens the case + checklist and navigates to `/hr/offboarding/{id}`; Reject closes the request; manage cases/checklist on `/hr/offboarding`
+- **Employee** (`/employee/offboarding/request`): submit / cancel leave request → HR notified; after a case exists, `/employee/offboarding` for case + tasks + clearance + exit interview (read-only join)
+- **HR** (`/hr/offboarding/requests`): Approve opens the case; manage checklist/clearance/exit interview on `/hr/offboarding/{id}`
 - Permissions: `offboarding:read` / `offboarding:write` for Admin + HR
 - Case lifecycle: `initiated` → `in_progress` → `pending_clearance` → `completed` (or `cancelled`)
-- Default checklist seeded atomically on case create (`DEFAULT_OFFBOARDING_TASK_TEMPLATES`)
-- **One active case per employee**; checklist progress does **not** yet gate case completion
-- **Approve** auto-creates the OffboardingCase via existing O.1 create (no separate create-case click required)
-- Docs: [`phase_offboarding_request.md`](backend/docs/phase_offboarding_request.md), [`phase_offboarding_1_core_case.md`](backend/docs/phase_offboarding_1_core_case.md), [`phase_offboarding_2_checklist.md`](backend/docs/phase_offboarding_2_checklist.md)
+- Default checklist + clearance seeded atomically on case create; exit interview scheduled explicitly by HR
+- **Completion is gated** (O.5): required checklist tasks completed, clearance complete, and any scheduled exit interview completed (missing/cancelled exit interview does not block)
+- **On complete**: case employee's application account is deactivated (`User.is_active = false`) and employment set inactive; rows are retained
+- **Offboarding Agent** — read-only case/progress/clearance/exit/readiness plus confirmation-gated complete / clearance / task writes via the unified assistant (or `POST /api/v1/ai/offboarding/ask` + `/confirm`)
+- Docs: [`phase_offboarding_request.md`](backend/docs/phase_offboarding_request.md), [`phase_offboarding_1_core_case.md`](backend/docs/phase_offboarding_1_core_case.md), [`phase_offboarding_2_checklist.md`](backend/docs/phase_offboarding_2_checklist.md), [`phase_offboarding_3_clearance.md`](backend/docs/phase_offboarding_3_clearance.md), [`phase_offboarding_4_exit_interview.md`](backend/docs/phase_offboarding_4_exit_interview.md), [`phase_offboarding_5_finalization.md`](backend/docs/phase_offboarding_5_finalization.md), [`phase_offboarding_account_deactivation.md`](backend/docs/phase_offboarding_account_deactivation.md), [`phase_offboarding_6a_agent_audit.md`](backend/docs/phase_offboarding_6a_agent_audit.md), [`phase_offboarding_6b_agent.md`](backend/docs/phase_offboarding_6b_agent.md), [`phase_offboarding_6c_unified.md`](backend/docs/phase_offboarding_6c_unified.md), [`phase_offboarding_6d_writes.md`](backend/docs/phase_offboarding_6d_writes.md)
 
 ### Leave
 
@@ -489,27 +491,27 @@ Employee **offboarding request** (pre-case) plus core HR offboarding **case** an
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating **unified AI assistant** (intent routing across Knowledge, Leave, Recruitment, Onboarding, Training, Documents)
+- Floating **unified AI assistant** (LangGraph orchestration → one specialist among Knowledge, Leave, Recruitment, Onboarding, Training, Documents, Offboarding)
 
 ### AI foundation (shipped)
 
 - Provider-agnostic LLM layer + `AIExecutionContext`
 - Tool registry with authorization
-- **Agent registry + deterministic router** + unified `POST /api/v1/ai/assistant/ask`
+- **Agent registry + deterministic router** + LangGraph orchestration behind unified `POST /api/v1/ai/assistant/ask`
 - **Knowledge Agent** — RAG Q&A with citations over company documents
 - **Recruitment Agent** — authorized read/write tools over recruitment & interviews (writes confirmation-gated)
 - **Leave Agent** — scoped leave reads + confirmation-gated writes via `LeaveService`
 - **Onboarding Agent** — self/HR onboarding reads + confirmation-gated writes via `OnboardingService`
 - **Training Agent** — self/HR training reads + confirmation-gated writes via `TrainingService`
 - **Documents Agent** — authorized document metadata + Document Understanding (PDF summarize / page-cited Q&A); read-only
+- **Offboarding Agent** — read-only offboarding Q&A plus confirmation-gated complete / clearance / task writes via the unified assistant (or standalone `/ai/offboarding/ask` + `/confirm`)
 - Shared HMAC confirmation + `ai_tool_action_audits` for AI writes
 - Full RAG path through **grounded generation + citations** (see pipeline above); archived company docs excluded from retrieval
 - Smoke scripts under `backend/scripts/` (RAG + recruitment / document agent helpers)
 
 ### Not yet
 
-- Offboarding checklist / clearance / exit interview / Meet
-- Offboarding specialized agent (and assistant registration)
+- Offboarding Meet reminders
 - Document Agent writes (AI upload / archive / delete) or persistent document chat
 - LLM supervisor / chat history / rich Markdown renderer for the assistant
 - LLM rerank / query reformulation for RAG
@@ -696,8 +698,16 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Offboarding Case foundation (entity, lifecycle, HR + employee APIs, HR workspace) — Phase O.1
 - [x] Offboarding Checklist (default tasks, progress, assignee actions) — Phase O.2
 - [x] Employee Offboarding Request (pre-case submit / HR review) — dedicated pages + `/offboarding/requests` APIs
-- [ ] Offboarding clearance / exit interview / Meet
-- [ ] Offboarding agent
+- [x] Offboarding Clearance (equipment/access verification, HR mutate + employee read-only) — Phase O.3
+- [x] Offboarding Exit Interview (schedule + Meet reuse + free-text feedback) — Phase O.4
+- [x] Offboarding Finalization (completion gated on checklist + clearance + exit interview) — Phase O.5
+- [x] Offboarding account deactivation on case complete (`User.is_active` + employment inactive)
+- [x] Offboarding Agent audit (read-only design) — Phase O.6A
+- [x] Offboarding Agent read-only tools + standalone `/ai/offboarding/ask` — Phase O.6B
+- [x] Offboarding Agent unified assistant registration — Phase O.6C
+- [x] Offboarding Agent confirmation-gated writes (complete / clearance / task) — Phase O.6D
+- [x] LangGraph unified-assistant orchestration (availability → route → one specialist) — Phase Orc.1–Orc.2
+- [x] Optional constrained LLM clarify + allowlisted handoff hook / chat-history design — Phase Orc.3–Orc.4
 - [ ] Document Agent writes / persistent document chat
 - [ ] Assistant chat history & richer answer rendering
 

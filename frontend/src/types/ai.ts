@@ -63,6 +63,15 @@ export interface TrainingAskResponse {
   pending_confirmation?: RecruitmentPendingConfirmation | null;
 }
 
+export interface OffboardingAskResponse {
+  answer: string;
+  agent_id: "offboarding";
+  model: string;
+  tool_names_called: string[];
+  usage: LeaveUsage | null;
+  pending_confirmation?: RecruitmentPendingConfirmation | null;
+}
+
 /** Document Understanding source types (standalone Documents Agent). */
 export type DocumentSourceType = "company" | "employee" | "private";
 
@@ -112,7 +121,8 @@ export type AssistantAgentId =
   | "recruitment"
   | "onboarding"
   | "training"
-  | "documents";
+  | "documents"
+  | "offboarding";
 
 export type AssistantAskStatus =
   | "completed"

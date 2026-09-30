@@ -5,6 +5,7 @@ from app.api.v1 import (
     ai_documents,
     ai_knowledge,
     ai_leave,
+    ai_offboarding,
     ai_onboarding,
     ai_recruitment,
     ai_training,
@@ -44,6 +45,7 @@ api_router.include_router(ai_assistant.router)
 api_router.include_router(ai_onboarding.router)
 api_router.include_router(ai_training.router)
 api_router.include_router(ai_documents.router)
+api_router.include_router(ai_offboarding.router)
 api_router.include_router(departments.router)
 api_router.include_router(positions.router)
 api_router.include_router(employees.router)

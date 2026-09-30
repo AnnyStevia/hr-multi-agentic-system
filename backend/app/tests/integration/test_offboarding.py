@@ -38,6 +38,31 @@ def _emp(db_session, department_id: int, email: str, **kwargs):
     )
 
 
+def _satisfy_completion_prerequisites(client, headers, case_id: int) -> None:
+    """Complete required tasks and clear all clearance so O.5 allows finalize."""
+    tasks = client.get(f"/api/v1/offboarding/{case_id}/tasks", headers=headers).json()
+    for task in tasks:
+        if task["is_required"] and task["status"] != "completed":
+            assert (
+                client.post(
+                    f"/api/v1/offboarding/{case_id}/tasks/{task['id']}/complete",
+                    headers=headers,
+                ).status_code
+                == 200
+            )
+    items = client.get(f"/api/v1/offboarding/{case_id}/clearance", headers=headers).json()
+    for item in items:
+        if item["status"] != "cleared":
+            assert (
+                client.patch(
+                    f"/api/v1/offboarding/{case_id}/clearance/{item['id']}",
+                    json={"status": "cleared"},
+                    headers=headers,
+                ).status_code
+                == 200
+            )
+
+
 def test_hr_and_admin_can_create_offboarding(client, db_session):
     dept = create_department(client, name="Offboarding Create Dept")
     create_user_with_role(
@@ -145,13 +170,27 @@ def test_duplicate_active_rejected_historical_allowed(client, db_session):
 
     client.post(f"/api/v1/offboarding/{second['id']}/start", headers=headers)
     client.post(f"/api/v1/offboarding/{second['id']}/pending-clearance", headers=headers)
+    _satisfy_completion_prerequisites(client, headers, second["id"])
     completed = client.post(f"/api/v1/offboarding/{second['id']}/complete", headers=headers)
     assert completed.status_code == 200
     assert completed.json()["status"] == "completed"
     assert completed.json()["completed_at"] is not None
 
-    third = _create_case(client, headers, emp.id, reason="other")
-    assert third["status"] == "initiated"
+    # Completion deactivates the employee; a new case for them is not allowed.
+    third = client.post(
+        "/api/v1/offboarding",
+        json={
+            "employee_id": emp.id,
+            "reason": "other",
+            "last_working_day": _future_day(60),
+        },
+        headers=headers,
+    )
+    assert third.status_code == 400
+    assert "active" in third.json()["detail"].lower()
+
+    db_session.refresh(emp)
+    assert emp.employment_status == EmploymentStatus.INACTIVE
 
 
 def test_lifecycle_transitions_and_rejects(client, db_session):
@@ -182,6 +221,7 @@ def test_lifecycle_transitions_and_rejects(client, db_session):
     assert back.json()["status"] == "in_progress"
 
     client.post(f"/api/v1/offboarding/{case_id}/pending-clearance", headers=headers)
+    _satisfy_completion_prerequisites(client, headers, case_id)
     done = client.post(f"/api/v1/offboarding/{case_id}/complete", headers=headers)
     assert done.status_code == 200
     assert done.json()["status"] == "completed"

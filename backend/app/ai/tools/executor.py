@@ -23,6 +23,19 @@ def _default_preview(tool_name: str, arguments: dict[str, Any], _context) -> str
 
 
 def _infer_target(tool_name: str, arguments: dict[str, Any]) -> tuple[str | None, int | None]:
+    if tool_name == "complete_offboarding_case":
+        case_id = arguments.get("case_id")
+        return ("offboarding_case", int(case_id)) if case_id is not None else (None, None)
+    if tool_name == "update_offboarding_clearance":
+        item_id = arguments.get("item_id")
+        return (
+            ("offboarding_clearance_item", int(item_id))
+            if item_id is not None
+            else (None, None)
+        )
+    if tool_name == "update_offboarding_task":
+        task_id = arguments.get("task_id")
+        return ("offboarding_task", int(task_id)) if task_id is not None else (None, None)
     if "interview_id" in arguments and arguments["interview_id"] is not None:
         return "interview", int(arguments["interview_id"])
     if "application_id" in arguments and arguments["application_id"] is not None:

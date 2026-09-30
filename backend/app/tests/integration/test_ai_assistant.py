@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from app.ai.agents.documents.schemas import DocumentsAgentAnswer
 from app.ai.agents.leave.schemas import LeaveAgentAnswer, PendingConfirmationInfo
+from app.ai.agents.offboarding.schemas import OffboardingAgentAnswer
 from app.ai.agents.onboarding.schemas import (
     OnboardingAgentAnswer,
     PendingConfirmationInfo as OnboardingPending,
@@ -23,6 +24,7 @@ from app.api.v1 import (
     ai_documents,
     ai_knowledge,
     ai_leave,
+    ai_offboarding,
     ai_onboarding,
     ai_recruitment,
     ai_training,
@@ -820,3 +822,174 @@ def test_existing_documents_endpoint_still_works(client, db_session):
     body = response.json()
     assert body["agent_id"] == "documents"
     assert body["answer"] == "ok"
+
+
+def test_unified_ask_routes_to_offboarding(client, db_session):
+    create_user_with_role(
+        db_session,
+        email="hr.asst.offboard@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client, email="hr.asst.offboard@test.com", password="hrpass123"
+    )
+    mock_offboarding = MagicMock()
+    mock_offboarding.ask.return_value = OffboardingAgentAnswer(
+        answer="Sarah's offboarding is in progress.",
+        model="mock-offboarding",
+        tool_names_called=["get_offboarding_case"],
+        usage=None,
+        pending_confirmation=None,
+    )
+    mock_leave = MagicMock()
+    mock_knowledge = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    mock_training = MagicMock()
+    mock_documents = MagicMock()
+    client.app.dependency_overrides[ai_offboarding.get_offboarding_agent] = (
+        lambda: mock_offboarding
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "What is Sarah's offboarding status?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_offboarding.get_offboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["agent_id"] == "offboarding"
+    assert body["answer"] == "Sarah's offboarding is in progress."
+    assert body["pending_confirmation"] is None
+    assert body["tool_names_called"] == ["get_offboarding_case"]
+    mock_offboarding.ask.assert_called_once()
+    mock_knowledge.ask.assert_not_called()
+    mock_leave.ask.assert_not_called()
+    mock_documents.ask.assert_not_called()
+
+
+def test_standalone_offboarding_ask_still_works(client, db_session):
+    create_user_with_role(
+        db_session,
+        email="hr.asst.offboard.standalone@test.com",
+        password="hrpass123",
+        role_name="hr",
+    )
+    headers = auth_header(
+        client,
+        email="hr.asst.offboard.standalone@test.com",
+        password="hrpass123",
+    )
+    mock_offboarding = MagicMock()
+    mock_offboarding.ask.return_value = OffboardingAgentAnswer(
+        answer="Case details here.",
+        model="mock-offboarding",
+        tool_names_called=["get_offboarding_progress"],
+        usage=None,
+        pending_confirmation=None,
+    )
+    client.app.dependency_overrides[ai_offboarding.get_offboarding_agent] = (
+        lambda: mock_offboarding
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/offboarding/ask",
+            json={"message": "What is my offboarding progress?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_offboarding.get_offboarding_agent, None)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["agent_id"] == "offboarding"
+    assert body["answer"] == "Case details here."
+    assert body["pending_confirmation"] is None
+    mock_offboarding.ask.assert_called_once()
+
+
+def test_unified_ask_candidate_offboarding_unavailable(client, db_session):
+    create_user_with_role(
+        db_session,
+        email="cand.asst.offboard@test.com",
+        password="candpass123",
+        role_name="candidate",
+    )
+    headers = auth_header(
+        client, email="cand.asst.offboard@test.com", password="candpass123"
+    )
+    mock_offboarding = MagicMock()
+    mock_leave = MagicMock()
+    mock_knowledge = MagicMock()
+    mock_recruitment = MagicMock()
+    mock_onboarding = MagicMock()
+    mock_training = MagicMock()
+    mock_documents = MagicMock()
+    client.app.dependency_overrides[ai_offboarding.get_offboarding_agent] = (
+        lambda: mock_offboarding
+    )
+    client.app.dependency_overrides[ai_leave.get_leave_agent] = lambda: mock_leave
+    client.app.dependency_overrides[ai_knowledge.get_knowledge_agent] = (
+        lambda: mock_knowledge
+    )
+    client.app.dependency_overrides[ai_recruitment.get_recruitment_agent] = (
+        lambda: mock_recruitment
+    )
+    client.app.dependency_overrides[ai_onboarding.get_onboarding_agent] = (
+        lambda: mock_onboarding
+    )
+    client.app.dependency_overrides[ai_training.get_training_agent] = (
+        lambda: mock_training
+    )
+    client.app.dependency_overrides[ai_documents.get_documents_agent] = (
+        lambda: mock_documents
+    )
+    try:
+        response = client.post(
+            "/api/v1/ai/assistant/ask",
+            json={"message": "What is Sarah's offboarding status?"},
+            headers=headers,
+        )
+    finally:
+        client.app.dependency_overrides.pop(ai_offboarding.get_offboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_leave.get_leave_agent, None)
+        client.app.dependency_overrides.pop(ai_knowledge.get_knowledge_agent, None)
+        client.app.dependency_overrides.pop(
+            ai_recruitment.get_recruitment_agent, None
+        )
+        client.app.dependency_overrides.pop(ai_onboarding.get_onboarding_agent, None)
+        client.app.dependency_overrides.pop(ai_training.get_training_agent, None)
+        client.app.dependency_overrides.pop(ai_documents.get_documents_agent, None)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["agent_id"] is None
+    mock_offboarding.ask.assert_not_called()

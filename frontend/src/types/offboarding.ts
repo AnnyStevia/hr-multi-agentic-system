@@ -186,6 +186,135 @@ export type OffboardingTaskUpdatePayload = {
   clear_due_date?: boolean;
 };
 
+export type OffboardingClearanceCategory = "equipment" | "access";
+
+export type OffboardingClearanceStatus = "pending" | "cleared" | "not_applicable";
+
+export const OFFBOARDING_CLEARANCE_CATEGORY_LABELS: Record<
+  OffboardingClearanceCategory,
+  string
+> = {
+  equipment: "Equipment",
+  access: "Access",
+};
+
+export const OFFBOARDING_CLEARANCE_STATUS_LABELS: Record<OffboardingClearanceStatus, string> = {
+  pending: "Pending",
+  cleared: "Cleared",
+  not_applicable: "Not applicable",
+};
+
+export const OFFBOARDING_CLEARANCE_CATEGORIES = Object.keys(
+  OFFBOARDING_CLEARANCE_CATEGORY_LABELS,
+) as OffboardingClearanceCategory[];
+
+export type OffboardingClearanceItem = {
+  id: number;
+  offboarding_case_id: number;
+  category: OffboardingClearanceCategory;
+  item: string;
+  status: OffboardingClearanceStatus;
+  notes: string | null;
+  completed_at: string | null;
+  completed_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type OffboardingClearanceEmployeeView = {
+  id: number;
+  offboarding_case_id: number;
+  category: OffboardingClearanceCategory;
+  item: string;
+  status: OffboardingClearanceStatus;
+  notes: string | null;
+  completed_at: string | null;
+};
+
+export type OffboardingClearanceProgress = {
+  offboarding_case_id: number;
+  total: number;
+  pending: number;
+  cleared: number;
+  not_applicable: number;
+  percentage: number;
+  clearance_complete: boolean;
+};
+
+export type OffboardingCanComplete = {
+  offboarding_case_id: number;
+  can_complete: boolean;
+  blockers: string[];
+};
+
+export type OffboardingClearanceCreatePayload = {
+  category: OffboardingClearanceCategory;
+  item: string;
+  notes?: string | null;
+};
+
+export type OffboardingClearanceUpdatePayload = {
+  status?: OffboardingClearanceStatus;
+  notes?: string | null;
+};
+
+export type ExitInterviewStatus = "scheduled" | "completed" | "cancelled";
+
+export const EXIT_INTERVIEW_STATUS_LABELS: Record<ExitInterviewStatus, string> = {
+  scheduled: "Scheduled",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export type ExitInterviewInterviewer = {
+  id: number;
+  full_name: string;
+  email: string;
+};
+
+export type ExitInterview = {
+  id: number;
+  offboarding_case_id: number;
+  interviewer_employee_id: number | null;
+  interviewer: ExitInterviewInterviewer | null;
+  scheduled_at: string;
+  ends_at: string;
+  meeting_url: string | null;
+  status: ExitInterviewStatus;
+  feedback: string | null;
+  completed_at: string | null;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ExitInterviewEmployeeView = {
+  id: number;
+  offboarding_case_id: number;
+  interviewer: ExitInterviewInterviewer | null;
+  scheduled_at: string;
+  ends_at: string;
+  meeting_url: string | null;
+  status: ExitInterviewStatus;
+};
+
+export type ExitInterviewCreatePayload = {
+  interviewer_employee_id: number;
+  scheduled_at: string;
+  ends_at: string;
+};
+
+export type ExitInterviewUpdatePayload = {
+  interviewer_employee_id?: number;
+  scheduled_at?: string;
+  ends_at?: string;
+  feedback?: string | null;
+};
+
+export type ExitInterviewCompletePayload = {
+  feedback: string;
+};
+
 export type OffboardingRequestStatus =
   | "pending"
   | "approved"

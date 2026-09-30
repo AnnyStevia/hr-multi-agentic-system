@@ -2,12 +2,19 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
+import { OffboardingClearanceStatusBadge } from "@/components/OffboardingClearanceStatusBadge";
 import { OffboardingStatusBadge } from "@/components/OffboardingStatusBadge";
 import { OffboardingTaskStatusBadge } from "@/components/OffboardingTaskStatusBadge";
 import { api } from "@/lib/api";
+import { formatSlotRange } from "@/lib/interviews";
 import {
+  EXIT_INTERVIEW_STATUS_LABELS,
+  OFFBOARDING_CLEARANCE_CATEGORY_LABELS,
   OFFBOARDING_REASON_LABELS,
   OFFBOARDING_TASK_CATEGORY_LABELS,
+  type ExitInterviewEmployeeView,
+  type OffboardingClearanceEmployeeView,
   type OffboardingEmployeeView,
   type OffboardingTaskEmployeeView,
 } from "@/types/offboarding";
@@ -22,6 +29,10 @@ function formatDate(value: string | null): string {
 export default function EmployeeOffboardingPage() {
   const [cases, setCases] = useState<OffboardingEmployeeView[]>([]);
   const [tasks, setTasks] = useState<OffboardingTaskEmployeeView[]>([]);
+  const [clearance, setClearance] = useState<OffboardingClearanceEmployeeView[]>([]);
+  const [exitInterview, setExitInterview] = useState<ExitInterviewEmployeeView | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
@@ -30,12 +41,16 @@ export default function EmployeeOffboardingPage() {
     setError("");
     setLoading(true);
     try {
-      const [caseData, taskData] = await Promise.all([
+      const [caseData, taskData, clearanceData, exitData] = await Promise.all([
         api.listMyOffboardings(),
         api.listMyOffboardingTasks(),
+        api.listMyOffboardingClearance(),
+        api.getMyOffboardingExitInterview(),
       ]);
       setCases(caseData);
       setTasks(taskData);
+      setClearance(clearanceData);
+      setExitInterview(exitData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load offboarding");
     } finally {
@@ -74,7 +89,7 @@ export default function EmployeeOffboardingPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">My offboarding</h1>
           <p className="mt-1 text-sm text-gray-600">
-            View your offboarding status and complete tasks assigned to you.
+            View your offboarding status, assigned tasks, and clearance progress.
           </p>
         </div>
         <Link
@@ -189,6 +204,60 @@ export default function EmployeeOffboardingPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900">Clearance</h2>
+        {clearance.length === 0 ? (
+          <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-sm text-gray-600">
+            No clearance items for an active offboarding case.
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {clearance.map((item) => (
+              <li key={item.id} className="bg-white rounded-xl border shadow-sm p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-gray-900">{item.item}</span>
+                  <OffboardingClearanceStatusBadge status={item.status} />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  {OFFBOARDING_CLEARANCE_CATEGORY_LABELS[item.category]}
+                </p>
+                {item.notes && (
+                  <p className="mt-2 text-sm text-gray-600">{item.notes}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900">Exit interview</h2>
+        {!exitInterview ? (
+          <div className="bg-white rounded-xl border shadow-sm p-8 text-center text-sm text-gray-600">
+            No exit interview is scheduled for your active offboarding case.
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border shadow-sm p-5 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                {EXIT_INTERVIEW_STATUS_LABELS[exitInterview.status]}
+              </span>
+              <span className="text-sm text-gray-700">
+                {formatSlotRange(exitInterview.scheduled_at, exitInterview.ends_at)}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              Interviewer: {exitInterview.interviewer?.full_name ?? "—"}
+            </p>
+            <MeetingJoinBlock
+              status={exitInterview.status}
+              meetingUrl={exitInterview.meeting_url}
+              joinLabel="Join exit interview"
+            />
+          </div>
         )}
       </section>
     </div>

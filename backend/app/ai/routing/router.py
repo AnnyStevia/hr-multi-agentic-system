@@ -239,6 +239,62 @@ _DOCUMENTS_TASK_MARKERS: tuple[str, ...] = (
     "document_type=",
 )
 
+_OFFBOARDING_KEYWORDS: tuple[str, ...] = (
+    "offboarding clearance",
+    "clearance for departure",
+    "ready to complete offboarding",
+    "complete offboarding",
+    "offboarding progress",
+    "offboarding status",
+    "offboarding tasks",
+    "pending clearance",
+    "exit interview",
+    "last working day",
+    "leaving the company",
+    "employee departure",
+    "return laptop",
+    "return badge",
+    "return equipment",
+    "account deactivation",
+    "before leaving",
+    "offboarding",
+    "offboard",
+    "departure",
+)
+
+# Case / ops language that keeps routing on Offboarding even if "policy" appears.
+_OFFBOARDING_TASK_MARKERS: tuple[str, ...] = (
+    "offboarding clearance",
+    "clearance for departure",
+    "ready to complete offboarding",
+    "complete offboarding",
+    "offboarding progress",
+    "offboarding status",
+    "offboarding tasks",
+    "pending clearance",
+    "exit interview",
+    "last working day",
+    "leaving the company",
+    "employee departure",
+    "return laptop",
+    "return badge",
+    "return equipment",
+    "account deactivation",
+    "before leaving",
+    "offboarding",
+    "offboard",
+)
+
+# Resignation / departure policy phrasing → Knowledge (not a specific case).
+_OFFBOARDING_POLICY_MARKERS: tuple[str, ...] = (
+    "resignation policy",
+    "company resignation",
+    "resign policy",
+    "resignation process policy",
+    "documents do i need to resign",
+    "what documents do i need to resign",
+)
+
 _KNOWLEDGE_POLICY_MARKERS: tuple[str, ...] = (
     "handbook",
     "according to our policy",
@@ -340,6 +396,8 @@ def _score_agent(agent_id: str, text: str) -> int:
         if strong == 0 and vague > 0:
             return 0
         return strong + vague
+    if agent_id == "offboarding":
+        return _score_keywords(text, _OFFBOARDING_KEYWORDS)
     return 0
 
 
@@ -460,6 +518,34 @@ def route_message(
         and not _has_any(text, _TRAINING_TASK_MARKERS)
         and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
         and _score_keywords(text, _TRAINING_KEYWORDS) > 0
+    ):
+        return RouteDecision(
+            kind="agent",
+            agent_id="knowledge",
+            reason="policy_document_preference",
+        )
+
+    # General resignation / departure policy → Knowledge (not a specific case).
+    if (
+        "knowledge" in available_ids
+        and _has_any(text, _OFFBOARDING_POLICY_MARKERS)
+        and not _has_any(text, _OFFBOARDING_TASK_MARKERS)
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
+    ):
+        return RouteDecision(
+            kind="agent",
+            agent_id="knowledge",
+            reason="policy_document_preference",
+        )
+
+    # Policy/handbook Qs without offboarding case language → Knowledge
+    # (even if words like "departure" appear in a policy question).
+    if (
+        "knowledge" in available_ids
+        and _has_any(text, _KNOWLEDGE_VS_ONBOARDING_MARKERS)
+        and not _has_any(text, _OFFBOARDING_TASK_MARKERS)
+        and not _has_any(text, _DOCUMENTS_TASK_MARKERS)
+        and _score_keywords(text, _OFFBOARDING_KEYWORDS) > 0
     ):
         return RouteDecision(
             kind="agent",

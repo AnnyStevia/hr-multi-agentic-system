@@ -33,6 +33,8 @@ class NotificationType(str, Enum):
     OFFBOARDING_REQUEST_SUBMITTED = "offboarding_request_submitted"
     OFFBOARDING_REQUEST_APPROVED = "offboarding_request_approved"
     OFFBOARDING_REQUEST_REJECTED = "offboarding_request_rejected"
+    EXIT_INTERVIEW_SCHEDULED = "exit_interview_scheduled"
+    EXIT_INTERVIEW_MEETING_READY = "exit_interview_meeting_ready"
 
 
 class Notification(Base):

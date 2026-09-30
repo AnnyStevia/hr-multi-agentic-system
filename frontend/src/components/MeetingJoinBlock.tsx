@@ -7,6 +7,7 @@ type MeetingJoinBlockProps = {
   showRetry?: boolean;
   retrying?: boolean;
   onRetry?: () => void;
+  joinLabel?: string;
 };
 
 export function MeetingJoinBlock({
@@ -15,6 +16,7 @@ export function MeetingJoinBlock({
   showRetry = false,
   retrying = false,
   onRetry,
+  joinLabel = "Join interview",
 }: MeetingJoinBlockProps) {
   const isScheduled = status === "scheduled";
   const isCompleted = status === "completed";
@@ -33,7 +35,7 @@ export function MeetingJoinBlock({
           rel="noreferrer"
           className="inline-flex items-center justify-center bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-700"
         >
-          Join interview
+          {joinLabel}
         </a>
       </div>
     );
@@ -47,7 +49,7 @@ export function MeetingJoinBlock({
     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 space-y-2">
       <p className="text-sm text-amber-900">Meeting link will appear shortly.</p>
       <p className="text-xs text-amber-800">
-        The interview is scheduled. Refresh this page in a moment if the join button is not shown yet.
+        The meeting is scheduled. Refresh this page in a moment if the join button is not shown yet.
       </p>
       {showRetry && onRetry && (
         <button

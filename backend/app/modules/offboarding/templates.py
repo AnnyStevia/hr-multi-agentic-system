@@ -1,8 +1,11 @@
-"""In-code default checklist templates for Phase O.2 (no DB template admin)."""
+"""In-code default checklist / clearance templates (no DB template admin)."""
 
 from dataclasses import dataclass
 
-from app.modules.offboarding.models import OffboardingTaskCategory
+from app.modules.offboarding.models import (
+    OffboardingClearanceCategory,
+    OffboardingTaskCategory,
+)
 
 
 @dataclass(frozen=True)
@@ -11,6 +14,12 @@ class OffboardingTaskTemplate:
     description: str
     category: OffboardingTaskCategory
     is_required: bool = True
+
+
+@dataclass(frozen=True)
+class OffboardingClearanceTemplate:
+    item: str
+    category: OffboardingClearanceCategory
 
 
 DEFAULT_OFFBOARDING_TASK_TEMPLATES: tuple[OffboardingTaskTemplate, ...] = (
@@ -74,4 +83,26 @@ DEFAULT_OFFBOARDING_TASK_TEMPLATES: tuple[OffboardingTaskTemplate, ...] = (
         category=OffboardingTaskCategory.ADMINISTRATION,
         is_required=True,
     ),
+)
+
+DEFAULT_OFFBOARDING_CLEARANCE_TEMPLATES: tuple[OffboardingClearanceTemplate, ...] = (
+    OffboardingClearanceTemplate(item="Laptop", category=OffboardingClearanceCategory.EQUIPMENT),
+    OffboardingClearanceTemplate(
+        item="Badge / access card", category=OffboardingClearanceCategory.EQUIPMENT
+    ),
+    OffboardingClearanceTemplate(
+        item="Company phone", category=OffboardingClearanceCategory.EQUIPMENT
+    ),
+    OffboardingClearanceTemplate(
+        item="Other company equipment", category=OffboardingClearanceCategory.EQUIPMENT
+    ),
+    OffboardingClearanceTemplate(item="Email", category=OffboardingClearanceCategory.ACCESS),
+    OffboardingClearanceTemplate(item="VPN", category=OffboardingClearanceCategory.ACCESS),
+    OffboardingClearanceTemplate(
+        item="GitHub / repositories", category=OffboardingClearanceCategory.ACCESS
+    ),
+    OffboardingClearanceTemplate(
+        item="Internal applications", category=OffboardingClearanceCategory.ACCESS
+    ),
+    OffboardingClearanceTemplate(item="Other systems", category=OffboardingClearanceCategory.ACCESS),
 )

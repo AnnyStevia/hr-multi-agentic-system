@@ -3,14 +3,25 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
+import { OffboardingClearanceStatusBadge } from "@/components/OffboardingClearanceStatusBadge";
 import { OffboardingStatusBadge } from "@/components/OffboardingStatusBadge";
 import { OffboardingTaskStatusBadge } from "@/components/OffboardingTaskStatusBadge";
 import { api } from "@/lib/api";
+import { formatSlotRange, toIsoFromDateAndTime } from "@/lib/interviews";
 import type { Employee } from "@/types/employees";
 import {
+  EXIT_INTERVIEW_STATUS_LABELS,
+  OFFBOARDING_CLEARANCE_CATEGORIES,
+  OFFBOARDING_CLEARANCE_CATEGORY_LABELS,
   OFFBOARDING_REASON_LABELS,
   OFFBOARDING_TASK_CATEGORIES,
   OFFBOARDING_TASK_CATEGORY_LABELS,
+  type ExitInterview,
+  type OffboardingCanComplete,
+  type OffboardingClearanceCategory,
+  type OffboardingClearanceItem,
+  type OffboardingClearanceProgress,
   type OffboardingDetail,
   type OffboardingProgress,
   type OffboardingStatus,
@@ -42,8 +53,12 @@ export default function OffboardingDetailPage() {
   const [detail, setDetail] = useState<OffboardingDetail | null>(null);
   const [tasks, setTasks] = useState<OffboardingTask[]>([]);
   const [progress, setProgress] = useState<OffboardingProgress | null>(null);
+  const [clearanceItems, setClearanceItems] = useState<OffboardingClearanceItem[]>([]);
+  const [clearanceProgress, setClearanceProgress] =
+    useState<OffboardingClearanceProgress | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
 
@@ -55,20 +70,59 @@ export default function OffboardingDetailPage() {
   const [dueDate, setDueDate] = useState("");
   const [creating, setCreating] = useState(false);
 
+  const [clearanceItemLabel, setClearanceItemLabel] = useState("");
+  const [clearanceCategory, setClearanceCategory] =
+    useState<OffboardingClearanceCategory>("equipment");
+  const [clearanceNotes, setClearanceNotes] = useState("");
+  const [creatingClearance, setCreatingClearance] = useState(false);
+  const [editingNotesId, setEditingNotesId] = useState<number | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+
+  const [exitInterview, setExitInterview] = useState<ExitInterview | null>(null);
+  const [exitInterviewerId, setExitInterviewerId] = useState("");
+  const [exitDate, setExitDate] = useState("");
+  const [exitStartTime, setExitStartTime] = useState("10:00");
+  const [exitEndTime, setExitEndTime] = useState("11:00");
+  const [exitFeedback, setExitFeedback] = useState("");
+  const [schedulingExit, setSchedulingExit] = useState(false);
+  const [canCompleteInfo, setCanCompleteInfo] = useState<OffboardingCanComplete | null>(
+    null,
+  );
+
   const load = useCallback(async () => {
     setError("");
     setLoading(true);
     try {
-      const [caseData, taskData, progressData, employeeList] = await Promise.all([
+      const [
+        caseData,
+        taskData,
+        progressData,
+        clearanceData,
+        clearanceProgressData,
+        exitData,
+        employeeList,
+      ] = await Promise.all([
         api.getOffboarding(caseId),
         api.listOffboardingTasks(caseId),
         api.getOffboardingProgress(caseId),
+        api.listOffboardingClearance(caseId),
+        api.getOffboardingClearanceProgress(caseId),
+        api.getOffboardingExitInterview(caseId),
         api.listEmployees({ status: "active" }),
       ]);
       setDetail(caseData);
       setTasks(taskData);
       setProgress(progressData);
+      setClearanceItems(clearanceData);
+      setClearanceProgress(clearanceProgressData);
+      setExitInterview(exitData);
+      setExitFeedback(exitData?.feedback ?? "");
       setEmployees(employeeList.items);
+      if (caseData.status === "pending_clearance") {
+        setCanCompleteInfo(await api.getOffboardingCanComplete(caseId));
+      } else {
+        setCanCompleteInfo(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load offboarding case");
       setDetail(null);
@@ -96,21 +150,55 @@ export default function OffboardingDetailPage() {
     return map;
   }, [tasks]);
 
+  const clearanceGrouped = useMemo(() => {
+    const map = new Map<OffboardingClearanceCategory, OffboardingClearanceItem[]>();
+    for (const item of clearanceItems) {
+      const list = map.get(item.category) ?? [];
+      list.push(item);
+      map.set(item.category, list);
+    }
+    return map;
+  }, [clearanceItems]);
+
   const caseMutable =
     detail?.status === "initiated" ||
     detail?.status === "in_progress" ||
     detail?.status === "pending_clearance";
 
+  const refreshClearance = async () => {
+    const [clearanceData, clearanceProgressData] = await Promise.all([
+      api.listOffboardingClearance(caseId),
+      api.getOffboardingClearanceProgress(caseId),
+    ]);
+    setClearanceItems(clearanceData);
+    setClearanceProgress(clearanceProgressData);
+  };
+
+  const refreshCanComplete = async (status?: OffboardingStatus | null) => {
+    const current = status ?? detail?.status;
+    if (current === "pending_clearance") {
+      setCanCompleteInfo(await api.getOffboardingCanComplete(caseId));
+    } else {
+      setCanCompleteInfo(null);
+    }
+  };
+
   const runCaseAction = async (
     label: string,
     action: () => Promise<OffboardingDetail>,
     confirmMessage: string,
+    successOnComplete?: string,
   ) => {
     if (!window.confirm(confirmMessage)) return;
     setActing(label);
     setError("");
+    setSuccessMessage("");
     try {
-      setDetail(await action());
+      const updated = await action();
+      setDetail(updated);
+      if (successOnComplete && updated.status === "completed") {
+        setSuccessMessage(successOnComplete);
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${label}`);
@@ -133,8 +221,26 @@ export default function OffboardingDetailPage() {
       ]);
       setTasks(taskData);
       setProgress(progressData);
+      await refreshCanComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Task action failed");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const runClearanceAction = async (
+    key: string,
+    action: () => Promise<unknown>,
+  ) => {
+    setActing(key);
+    setError("");
+    try {
+      await action();
+      await refreshClearance();
+      await refreshCanComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Clearance action failed");
     } finally {
       setActing(null);
     }
@@ -169,10 +275,90 @@ export default function OffboardingDetailPage() {
       ]);
       setTasks(taskData);
       setProgress(progressData);
+      await refreshCanComplete();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const onCreateClearance = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!clearanceItemLabel.trim()) {
+      setError("Clearance item label is required");
+      return;
+    }
+    setCreatingClearance(true);
+    setError("");
+    try {
+      await api.createOffboardingClearanceItem(caseId, {
+        category: clearanceCategory,
+        item: clearanceItemLabel.trim(),
+        notes: clearanceNotes.trim() || null,
+      });
+      setClearanceItemLabel("");
+      setClearanceCategory("equipment");
+      setClearanceNotes("");
+      await refreshClearance();
+      await refreshCanComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create clearance item");
+    } finally {
+      setCreatingClearance(false);
+    }
+  };
+
+  const saveClearanceNotes = async (itemId: number) => {
+    await runClearanceAction(`notes-${itemId}`, () =>
+      api.updateOffboardingClearanceItem(caseId, itemId, {
+        notes: notesDraft.trim() || null,
+      }),
+    );
+    setEditingNotesId(null);
+    setNotesDraft("");
+  };
+
+  const onScheduleExitInterview = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!exitInterviewerId || !exitDate || !exitStartTime || !exitEndTime) {
+      setError("Interviewer, date, and time window are required");
+      return;
+    }
+    setSchedulingExit(true);
+    setError("");
+    try {
+      const created = await api.createOffboardingExitInterview(caseId, {
+        interviewer_employee_id: Number(exitInterviewerId),
+        scheduled_at: toIsoFromDateAndTime(exitDate, exitStartTime),
+        ends_at: toIsoFromDateAndTime(exitDate, exitEndTime),
+      });
+      setExitInterview(created);
+      setExitFeedback(created.feedback ?? "");
+      setExitInterviewerId("");
+      setExitDate("");
+      setExitStartTime("10:00");
+      setExitEndTime("11:00");
+      await refreshCanComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to schedule exit interview");
+    } finally {
+      setSchedulingExit(false);
+    }
+  };
+
+  const runExitAction = async (key: string, action: () => Promise<ExitInterview>) => {
+    setActing(key);
+    setError("");
+    try {
+      const updated = await action();
+      setExitInterview(updated);
+      setExitFeedback(updated.feedback ?? "");
+      await refreshCanComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Exit interview action failed");
+    } finally {
+      setActing(null);
     }
   };
 
@@ -219,6 +405,11 @@ export default function OffboardingDetailPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-4 py-3 rounded-lg text-sm">
+          {successMessage}
         </div>
       )}
 
@@ -449,6 +640,364 @@ export default function OffboardingDetailPage() {
         )}
       </section>
 
+      <section className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Clearance</h2>
+            <p className="text-sm text-gray-600">
+              {clearanceProgress
+                ? `${clearanceProgress.percentage}% cleared`
+                : "—"}
+              {clearanceProgress?.clearance_complete ? " · Clearance complete" : ""}
+            </p>
+          </div>
+          {clearanceProgress && (
+            <div className="text-xs text-gray-500">
+              {clearanceProgress.cleared}/{clearanceProgress.total} cleared ·{" "}
+              {clearanceProgress.not_applicable} N/A · {clearanceProgress.pending} pending
+            </div>
+          )}
+        </div>
+
+        {clearanceProgress && (
+          <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className="h-full bg-brand-600 transition-all"
+              style={{ width: `${clearanceProgress.percentage}%` }}
+            />
+          </div>
+        )}
+
+        <div className="space-y-5">
+          {OFFBOARDING_CLEARANCE_CATEGORIES.map((cat) => {
+            const items = clearanceGrouped.get(cat);
+            if (!items?.length) return null;
+            return (
+              <div key={cat}>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">
+                  {OFFBOARDING_CLEARANCE_CATEGORY_LABELS[cat]}
+                </h3>
+                <ul className="space-y-2">
+                  {items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="border border-gray-100 rounded-lg px-3 py-3 flex flex-col gap-2"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">
+                              {item.item}
+                            </span>
+                            <OffboardingClearanceStatusBadge status={item.status} />
+                          </div>
+                          {item.notes && editingNotesId !== item.id && (
+                            <p className="mt-1 text-xs text-gray-500">{item.notes}</p>
+                          )}
+                        </div>
+                        {caseMutable && (
+                          <div className="flex flex-wrap gap-2 shrink-0">
+                            {item.status !== "cleared" && (
+                              <button
+                                type="button"
+                                disabled={acting !== null}
+                                className="px-3 py-1.5 text-xs rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
+                                onClick={() =>
+                                  runClearanceAction(`clear-${item.id}`, () =>
+                                    api.updateOffboardingClearanceItem(caseId, item.id, {
+                                      status: "cleared",
+                                    }),
+                                  )
+                                }
+                              >
+                                Clear
+                              </button>
+                            )}
+                            {item.status !== "not_applicable" && (
+                              <button
+                                type="button"
+                                disabled={acting !== null}
+                                className="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
+                                onClick={() =>
+                                  runClearanceAction(`na-${item.id}`, () =>
+                                    api.updateOffboardingClearanceItem(caseId, item.id, {
+                                      status: "not_applicable",
+                                    }),
+                                  )
+                                }
+                              >
+                                N/A
+                              </button>
+                            )}
+                            {item.status !== "pending" && (
+                              <button
+                                type="button"
+                                disabled={acting !== null}
+                                className="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
+                                onClick={() =>
+                                  runClearanceAction(`reopen-clr-${item.id}`, () =>
+                                    api.updateOffboardingClearanceItem(caseId, item.id, {
+                                      status: "pending",
+                                    }),
+                                  )
+                                }
+                              >
+                                Reopen
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={acting !== null}
+                              className="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
+                              onClick={() => {
+                                setEditingNotesId(item.id);
+                                setNotesDraft(item.notes ?? "");
+                              }}
+                            >
+                              Notes
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {editingNotesId === item.id && (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <input
+                            className={inputClass}
+                            value={notesDraft}
+                            onChange={(e) => setNotesDraft(e.target.value)}
+                            placeholder="Clearance notes"
+                          />
+                          <div className="flex gap-2 shrink-0">
+                            <button
+                              type="button"
+                              disabled={acting !== null}
+                              className="px-3 py-1.5 text-xs rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-60"
+                              onClick={() => saveClearanceNotes(item.id)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 text-xs rounded-md border border-gray-300 hover:bg-gray-50"
+                              onClick={() => {
+                                setEditingNotesId(null);
+                                setNotesDraft("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+
+        {caseMutable && (
+          <form
+            onSubmit={onCreateClearance}
+            className="grid gap-3 md:grid-cols-2 border-t border-gray-100 pt-4"
+          >
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Item</label>
+              <input
+                className={inputClass}
+                value={clearanceItemLabel}
+                onChange={(e) => setClearanceItemLabel(e.target.value)}
+                placeholder="Custom clearance item"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+              <select
+                className={inputClass}
+                value={clearanceCategory}
+                onChange={(e) =>
+                  setClearanceCategory(e.target.value as OffboardingClearanceCategory)
+                }
+              >
+                {OFFBOARDING_CLEARANCE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {OFFBOARDING_CLEARANCE_CATEGORY_LABELS[cat]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+              <input
+                className={inputClass}
+                value={clearanceNotes}
+                onChange={(e) => setClearanceNotes(e.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={creatingClearance}
+                className="px-4 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
+              >
+                {creatingClearance ? "Adding…" : "Add clearance item"}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      <section className="bg-white rounded-xl border shadow-sm p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Exit interview</h2>
+          <p className="text-sm text-gray-600">
+            Schedule a Meet-backed exit interview and record free-text feedback.
+          </p>
+        </div>
+
+        {exitInterview ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                {EXIT_INTERVIEW_STATUS_LABELS[exitInterview.status]}
+              </span>
+              <span className="text-gray-700">
+                {formatSlotRange(exitInterview.scheduled_at, exitInterview.ends_at)}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600">
+              Interviewer: {exitInterview.interviewer?.full_name ?? "—"}
+            </p>
+            <MeetingJoinBlock
+              status={exitInterview.status}
+              meetingUrl={exitInterview.meeting_url}
+              joinLabel="Join exit interview"
+              showRetry={caseMutable && exitInterview.status === "scheduled"}
+              retrying={acting === "exit-meeting"}
+              onRetry={() =>
+                runExitAction("exit-meeting", () =>
+                  api.ensureOffboardingExitInterviewMeeting(caseId),
+                )
+              }
+            />
+            {exitInterview.status === "scheduled" && caseMutable && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Feedback
+                  </label>
+                  <textarea
+                    className={inputClass}
+                    rows={4}
+                    value={exitFeedback}
+                    onChange={(e) => setExitFeedback(e.target.value)}
+                    placeholder="Record exit interview notes…"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={acting !== null || !exitFeedback.trim()}
+                    className="px-4 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
+                    onClick={() =>
+                      runExitAction("exit-complete", () =>
+                        api.completeOffboardingExitInterview(caseId, {
+                          feedback: exitFeedback.trim(),
+                        }),
+                      )
+                    }
+                  >
+                    {acting === "exit-complete" ? "Completing…" : "Mark completed"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={acting !== null}
+                    className="px-4 py-2.5 rounded-lg border border-red-300 text-red-700 text-sm font-medium hover:bg-red-50 disabled:opacity-60"
+                    onClick={() => {
+                      if (!window.confirm("Cancel this exit interview?")) return;
+                      runExitAction("exit-cancel", () =>
+                        api.cancelOffboardingExitInterview(caseId),
+                      );
+                    }}
+                  >
+                    Cancel interview
+                  </button>
+                </div>
+              </>
+            )}
+            {exitInterview.status === "completed" && exitInterview.feedback && (
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Feedback</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">
+                  {exitInterview.feedback}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : caseMutable ? (
+          <form onSubmit={onScheduleExitInterview} className="grid gap-3 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Interviewer
+              </label>
+              <select
+                className={inputClass}
+                value={exitInterviewerId}
+                onChange={(e) => setExitInterviewerId(e.target.value)}
+              >
+                <option value="">Select interviewer</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.first_name} {emp.last_name} — {emp.position}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+              <input
+                type="date"
+                className={inputClass}
+                value={exitDate}
+                onChange={(e) => setExitDate(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Start</label>
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={exitStartTime}
+                  onChange={(e) => setExitStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">End</label>
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={exitEndTime}
+                  onChange={(e) => setExitEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={schedulingExit}
+                className="px-4 py-2.5 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-60"
+              >
+                {schedulingExit ? "Scheduling…" : "Schedule exit interview"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-sm text-gray-600">No exit interview scheduled.</p>
+        )}
+      </section>
+
       <div className="flex flex-wrap gap-2">
         {status === "initiated" && (
           <ActionButton
@@ -492,18 +1041,34 @@ export default function OffboardingDetailPage() {
                 )
               }
             />
-            <ActionButton
-              label="Complete"
-              disabled={acting !== null}
-              busy={acting === "complete"}
-              onClick={() =>
-                runCaseAction(
-                  "complete",
-                  () => api.completeOffboarding(detail.id),
-                  "Complete this offboarding case? Checklist does not gate completion yet.",
-                )
-              }
-            />
+            <div className="w-full space-y-2">
+              {canCompleteInfo && !canCompleteInfo.can_complete && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  <p className="font-medium">Cannot complete yet</p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {canCompleteInfo.blockers.map((blocker) => (
+                      <li key={blocker}>{blocker}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <ActionButton
+                label="Complete Offboarding"
+                disabled={
+                  acting !== null ||
+                  (canCompleteInfo !== null && !canCompleteInfo.can_complete)
+                }
+                busy={acting === "complete"}
+                onClick={() =>
+                  runCaseAction(
+                    "complete",
+                    () => api.completeOffboarding(detail.id),
+                    "Complete this offboarding case? This will deactivate the employee's application account. This action cannot be undone from here.",
+                    "Offboarding completed. Employee account deactivated.",
+                  )
+                }
+              />
+            </div>
           </>
         )}
         {caseMutable && (

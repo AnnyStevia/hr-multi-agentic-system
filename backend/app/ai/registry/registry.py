@@ -153,7 +153,40 @@ DOCUMENTS_AGENT = AgentDefinition(
     supports_confirmation=False,
 )
 
-# Implemented agents only. Offboarding is not registered.
+OFFBOARDING_AGENT = AgentDefinition(
+    id="offboarding",
+    display_name="Offboarding Agent",
+    description=(
+        "Offboarding case status, progress, tasks, clearance, exit interview, "
+        "readiness, and confirmation-gated writes (complete case, clearance, "
+        "task mutations). Availability uses employee_id or HR/Admin with "
+        "offboarding:read — not tool authorization for a particular case."
+    ),
+    intents=(
+        "offboarding",
+        "offboard",
+        "leaving the company",
+        "departure",
+        "last working day",
+        "exit interview",
+        "offboarding clearance",
+        "clearance for departure",
+        "offboarding tasks",
+        "return laptop",
+        "return badge",
+        "return equipment",
+        "pending clearance",
+        "offboarding progress",
+        "offboarding status",
+        "ready to complete offboarding",
+        "complete offboarding",
+        "employee departure",
+    ),
+    required_permissions_any=frozenset({"offboarding:read"}),
+    supports_confirmation=True,
+)
+
+# Implemented agents only.
 REGISTERED_AGENTS: tuple[AgentDefinition, ...] = (
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
@@ -161,6 +194,7 @@ REGISTERED_AGENTS: tuple[AgentDefinition, ...] = (
     ONBOARDING_AGENT,
     TRAINING_AGENT,
     DOCUMENTS_AGENT,
+    OFFBOARDING_AGENT,
 )
 
 _AGENTS_BY_ID: dict[str, AgentDefinition] = {a.id: a for a in REGISTERED_AGENTS}

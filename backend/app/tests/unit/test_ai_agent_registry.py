@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.registry import (
     DOCUMENTS_AGENT,
+    OFFBOARDING_AGENT,
     REGISTERED_AGENTS,
     TRAINING_AGENT,
     get_agent_definition,
@@ -30,7 +31,7 @@ def _ctx(
     )
 
 
-def test_six_implemented_agents_registered():
+def test_seven_implemented_agents_registered():
     ids = {a.id for a in list_registered_agents()}
     assert ids == {
         "knowledge",
@@ -39,9 +40,9 @@ def test_six_implemented_agents_registered():
         "onboarding",
         "training",
         "documents",
+        "offboarding",
     }
-    assert len(REGISTERED_AGENTS) == 6
-    assert "offboarding" not in ids
+    assert len(REGISTERED_AGENTS) == 7
     training = get_agent_definition("training")
     assert training is TRAINING_AGENT
     assert training.supports_confirmation is True
@@ -52,6 +53,11 @@ def test_six_implemented_agents_registered():
     assert documents.supports_confirmation is False
     assert documents.id == "documents"
     assert documents.display_name == "Document Agent"
+    offboarding = get_agent_definition("offboarding")
+    assert offboarding is OFFBOARDING_AGENT
+    assert offboarding.supports_confirmation is True
+    assert offboarding.id == "offboarding"
+    assert offboarding.display_name == "Offboarding Agent"
 
 
 def test_employee_available_agents_include_onboarding_and_training():
@@ -76,11 +82,13 @@ def test_employee_available_agents_include_onboarding_and_training():
         "onboarding",
         "training",
         "documents",
+        "offboarding",
     }
 
 
 def test_manager_available_agents_no_recruitment_includes_training():
     # Manager RBAC role may exist but recruitment:read is revoked.
+    # Offboarding available via employee_id (self only at tool layer).
     available = get_available_agents(
         _ctx(
             permission_names=frozenset(
@@ -100,6 +108,7 @@ def test_manager_available_agents_no_recruitment_includes_training():
         "onboarding",
         "training",
         "documents",
+        "offboarding",
     }
     assert all(a.id != "recruitment" for a in available)
 
@@ -112,7 +121,13 @@ def test_leave_available_without_manager_role():
             role_names=frozenset({"employee"}),
         )
     )
-    assert {a.id for a in available} == {"leave", "onboarding", "training", "documents"}
+    assert {a.id for a in available} == {
+        "leave",
+        "onboarding",
+        "training",
+        "documents",
+        "offboarding",
+    }
 
 
 def test_hr_available_agents_include_recruitment_onboarding_training():
@@ -137,6 +152,7 @@ def test_hr_available_agents_include_recruitment_onboarding_training():
         "onboarding",
         "training",
         "documents",
+        "offboarding",
     }
 
 
@@ -160,6 +176,7 @@ def test_admin_available_agents_include_recruitment_onboarding_training():
         "onboarding",
         "training",
         "documents",
+        "offboarding",
     }
 
 
@@ -197,6 +214,7 @@ def test_onboarding_available_via_employee_id_without_permission():
     )
     assert "onboarding" in {a.id for a in available}
     assert "training" in {a.id for a in available}
+    assert "offboarding" in {a.id for a in available}
 
 
 def test_onboarding_available_via_permission_without_employee_id():
@@ -268,6 +286,7 @@ def test_candidate_no_employee_id_no_onboarding_read_unavailable():
     assert "onboarding" not in {a.id for a in available}
     assert "training" not in {a.id for a in available}
     assert "documents" not in {a.id for a in available}
+    assert "offboarding" not in {a.id for a in available}
     assert available == ()
 
 
@@ -280,6 +299,7 @@ def test_documents_available_via_employee_id():
         )
     )
     assert "documents" in {a.id for a in available}
+    assert "offboarding" in {a.id for a in available}
 
 
 def test_documents_available_via_hr_staff_and_company_documents_read_without_employee_id():
@@ -315,3 +335,82 @@ def test_documents_unavailable_with_company_documents_read_alone_without_employe
     assert "documents" not in {a.id for a in available}
     # Knowledge still available via bare company_documents:read.
     assert "knowledge" in {a.id for a in available}
+
+
+def test_offboarding_available_via_employee_id():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"leaves:read"}),
+            role_names=frozenset({"employee"}),
+            employee_id=42,
+        )
+    )
+    assert "offboarding" in {a.id for a in available}
+
+
+def test_offboarding_available_via_hr_staff_and_offboarding_read_without_employee_id():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"offboarding:read"}),
+            role_names=frozenset({"hr"}),
+            employee_id=None,
+        )
+    )
+    assert {a.id for a in available} == {"offboarding"}
+
+
+def test_offboarding_available_via_admin_staff_and_offboarding_read_without_employee_id():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"offboarding:read"}),
+            role_names=frozenset({"admin"}),
+            employee_id=None,
+        )
+    )
+    assert "offboarding" in {a.id for a in available}
+
+
+def test_offboarding_unavailable_with_offboarding_read_alone_without_employee_or_staff():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"offboarding:read"}),
+            role_names=frozenset({"employee"}),
+            employee_id=None,
+        )
+    )
+    assert "offboarding" not in {a.id for a in available}
+
+
+def test_manager_without_hr_staff_no_employee_id_no_offboarding():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"leaves:read", "offboarding:read"}),
+            role_names=frozenset({"manager"}),
+            employee_id=None,
+        )
+    )
+    assert "offboarding" not in {a.id for a in available}
+
+
+def test_candidate_no_offboarding():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset(),
+            role_names=frozenset({"candidate"}),
+            employee_id=None,
+            candidate_id=99,
+        )
+    )
+    assert "offboarding" not in {a.id for a in available}
+    assert available == ()
+
+
+def test_hr_staff_without_offboarding_read_and_no_employee_id_no_offboarding():
+    available = get_available_agents(
+        _ctx(
+            permission_names=frozenset({"onboarding:read"}),
+            role_names=frozenset({"hr"}),
+            employee_id=None,
+        )
+    )
+    assert "offboarding" not in {a.id for a in available}

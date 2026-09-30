@@ -57,6 +57,9 @@ function mapError(err: unknown, confirmAgentId?: AssistantAgentId): string {
       if (confirmAgentId === "training" && err.message) {
         return err.message;
       }
+      if (confirmAgentId === "offboarding" && err.message) {
+        return err.message;
+      }
       if (confirmAgentId === "recruitment") {
         return "This confirmation is no longer valid or the action cannot be applied in the current state.";
       }
@@ -155,7 +158,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
         agentId !== "leave" &&
         agentId !== "recruitment" &&
         agentId !== "onboarding" &&
-        agentId !== "training"
+        agentId !== "training" &&
+        agentId !== "offboarding"
       ) {
         setError("Cannot confirm: missing agent for this action.");
         return;
@@ -175,9 +179,13 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
                 ? await api.confirmTrainingAction({
                     confirmation_token: token,
                   })
-                : await api.confirmOnboardingAction({
-                    confirmation_token: token,
-                  });
+                : agentId === "offboarding"
+                  ? await api.confirmOffboardingAction({
+                      confirmation_token: token,
+                    })
+                  : await api.confirmOnboardingAction({
+                      confirmation_token: token,
+                    });
         setMessages((prev) =>
           prev.map((m) =>
             m.id === messageId

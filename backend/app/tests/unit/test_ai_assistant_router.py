@@ -7,6 +7,7 @@ from app.ai.registry import (
     DOCUMENTS_AGENT,
     KNOWLEDGE_AGENT,
     LEAVE_AGENT,
+    OFFBOARDING_AGENT,
     ONBOARDING_AGENT,
     RECRUITMENT_AGENT,
     TRAINING_AGENT,
@@ -22,6 +23,7 @@ def _emp_available():
         ONBOARDING_AGENT,
         TRAINING_AGENT,
         DOCUMENTS_AGENT,
+        OFFBOARDING_AGENT,
     )
 
 
@@ -33,6 +35,7 @@ def _hr_available():
         ONBOARDING_AGENT,
         TRAINING_AGENT,
         DOCUMENTS_AGENT,
+        OFFBOARDING_AGENT,
     )
 
 
@@ -379,3 +382,124 @@ def test_my_training_still_routes_to_training_not_documents():
     )
     assert decision.kind == "agent"
     assert decision.agent_id == "training"
+
+
+def test_sarah_offboarding_status_routes_to_offboarding():
+    decision = route_message(
+        "What is Sarah's offboarding status?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_blocking_offboarding_routes_to_offboarding():
+    decision = route_message(
+        "What is blocking the offboarding?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_pending_clearance_routes_to_offboarding():
+    decision = route_message(
+        "What pending clearance items remain?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_exit_interview_routes_to_offboarding():
+    decision = route_message(
+        "Has Sarah completed her exit interview?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_return_laptop_before_leaving_routes_to_offboarding():
+    decision = route_message(
+        "Does Sarah still need to return laptop before leaving?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_resignation_policy_routes_to_knowledge_not_offboarding():
+    decision = route_message(
+        "What is the company resignation policy?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "knowledge"
+    assert decision.reason == "policy_document_preference"
+
+
+def test_leave_question_still_leave_with_offboarding_registered():
+    decision = route_message(
+        "Show me my leave balance.",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "leave"
+
+
+def test_training_question_still_training_with_offboarding_registered():
+    decision = route_message(
+        "What training do I have?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "training"
+
+
+def test_document_pdf_still_documents_with_offboarding_registered():
+    decision = route_message(
+        "Summarize this resignation PDF.",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "documents"
+
+
+def test_recruitment_question_still_recruitment_with_offboarding_registered():
+    decision = route_message(
+        "What happened with Sarah's job application?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "recruitment"
+
+
+def test_ready_to_complete_offboarding_routes_to_offboarding():
+    decision = route_message(
+        "Is Sarah ready to complete offboarding?",
+        _hr_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
+def test_offboarding_unavailable_signal_for_candidate():
+    decision = route_message(
+        "What's my offboarding status?",
+        (KNOWLEDGE_AGENT,),
+    )
+    assert decision.kind == "unavailable"
+    assert "offboarding" in decision.reason
+
+
+def test_availability_filter_includes_offboarding_for_employee():
+    ctx = AIExecutionContext(
+        user_id=1,
+        role_names=frozenset({"employee"}),
+        permission_names=frozenset({"company_documents:read", "leaves:read"}),
+        employee_id=1,
+        candidate_id=None,
+    )
+    available = get_available_agents(ctx)
+    assert "offboarding" in {a.id for a in available}

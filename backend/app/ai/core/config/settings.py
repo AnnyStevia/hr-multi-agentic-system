@@ -16,6 +16,9 @@ class AISettings(BaseSettings):
     mistral_model: str = "mistral-small-latest"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
+    # When true and the deterministic router returns clarify, ask LLMProvider to
+    # pick among available agent ids only. Default false preserves router parity.
+    ai_orchestrator_llm_clarify: bool = False
 
 
 ai_settings = AISettings()

@@ -57,6 +57,31 @@ class OffboardingTaskStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class OffboardingClearanceCategory(str, Enum):
+    EQUIPMENT = "equipment"
+    ACCESS = "access"
+
+
+class OffboardingClearanceStatus(str, Enum):
+    PENDING = "pending"
+    CLEARED = "cleared"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class ExitInterviewStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+ACTIVE_EXIT_INTERVIEW_STATUSES = frozenset(
+    {
+        ExitInterviewStatus.SCHEDULED,
+        ExitInterviewStatus.COMPLETED,
+    }
+)
+
+
 ACTIVE_OFFBOARDING_STATUSES = frozenset(
     {
         OffboardingStatus.INITIATED,
@@ -131,6 +156,14 @@ class OffboardingCase(Base):
         back_populates="offboarding_case",
         cascade="all, delete-orphan",
     )
+    clearance_items: Mapped[list[OffboardingClearanceItem]] = relationship(
+        back_populates="offboarding_case",
+        cascade="all, delete-orphan",
+    )
+    exit_interviews: Mapped[list[ExitInterview]] = relationship(
+        back_populates="offboarding_case",
+        cascade="all, delete-orphan",
+    )
 
 
 class OffboardingTask(Base):
@@ -179,3 +212,95 @@ class OffboardingTask(Base):
     offboarding_case: Mapped[OffboardingCase] = relationship(back_populates="tasks")
     assigned_to: Mapped[Employee | None] = relationship(foreign_keys=[assigned_to_employee_id])
     completed_by: Mapped[User | None] = relationship(foreign_keys=[completed_by_user_id])
+
+
+class OffboardingClearanceItem(Base):
+    __tablename__ = "offboarding_clearance_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offboarding_case_id: Mapped[int] = mapped_column(
+        ForeignKey("offboarding_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category: Mapped[OffboardingClearanceCategory] = mapped_column(
+        SAEnum(
+            OffboardingClearanceCategory,
+            name="offboarding_clearance_category",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+    )
+    item: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[OffboardingClearanceStatus] = mapped_column(
+        SAEnum(
+            OffboardingClearanceStatus,
+            name="offboarding_clearance_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=OffboardingClearanceStatus.PENDING,
+        index=True,
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    offboarding_case: Mapped[OffboardingCase] = relationship(back_populates="clearance_items")
+    completed_by: Mapped[User | None] = relationship(foreign_keys=[completed_by_user_id])
+
+
+class ExitInterview(Base):
+    __tablename__ = "exit_interviews"
+    __table_args__ = (
+        Index(
+            "uq_exit_interviews_one_active_per_case",
+            "offboarding_case_id",
+            unique=True,
+            postgresql_where=text("status IN ('scheduled', 'completed')"),
+            sqlite_where=text("status IN ('scheduled', 'completed')"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    offboarding_case_id: Mapped[int] = mapped_column(
+        ForeignKey("offboarding_cases.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    interviewer_employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    meeting_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    meeting_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[ExitInterviewStatus] = mapped_column(
+        SAEnum(
+            ExitInterviewStatus,
+            name="exit_interview_status",
+            values_callable=lambda enum: [item.value for item in enum],
+        ),
+        nullable=False,
+        default=ExitInterviewStatus.SCHEDULED,
+        index=True,
+    )
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    offboarding_case: Mapped[OffboardingCase] = relationship(back_populates="exit_interviews")
+    interviewer: Mapped[Employee | None] = relationship(foreign_keys=[interviewer_employee_id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])

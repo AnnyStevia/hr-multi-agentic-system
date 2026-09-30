@@ -17,7 +17,12 @@ export type NotificationType =
   | "leave_request_manager_approved"
   | "leave_request_approved"
   | "leave_request_rejected"
-  | "leave_request_cancelled";
+  | "leave_request_cancelled"
+  | "offboarding_request_submitted"
+  | "offboarding_request_approved"
+  | "offboarding_request_rejected"
+  | "exit_interview_scheduled"
+  | "exit_interview_meeting_ready";
 
 export interface Notification {
   id: number;

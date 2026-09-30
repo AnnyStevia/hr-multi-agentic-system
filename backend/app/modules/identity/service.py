@@ -52,6 +52,15 @@ class AuthService:
             .first()
         )
 
+    def deactivate_user(self, user_id: int) -> User:
+        """Mark the application account inactive. Does not commit (caller owns the txn)."""
+        user = self.get_user_by_id(user_id)
+        if user is None:
+            raise AppException("User not found", status_code=404)
+        user.is_active = False
+        self.db.flush()
+        return user
+
     @staticmethod
     def build_user_response(user: User, *, onboarding_status: str | None = None) -> UserResponse:
         roles = [ur.role for ur in user.user_roles]
