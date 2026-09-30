@@ -41,7 +41,7 @@ export function AIAssistantWelcome({
         {greetingForNow()}, {name}
       </h1>
       <p className="mt-2 text-sm sm:text-base text-brand-300 max-w-md shrink-0">
-        How can I help you?
+        I&apos;m Pulse — how can I help you?
       </p>
 
       <div className="mt-6 w-full max-w-2xl shrink-0">

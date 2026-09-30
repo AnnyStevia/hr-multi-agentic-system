@@ -19,6 +19,8 @@ from app.modules.profile import models as profile_models  # noqa: F401
 from app.modules.offboarding import models as offboarding_models  # noqa: F401
 from app.modules.offboarding_requests import models as offboarding_request_models  # noqa: F401
 from app.modules.leave import models as leave_models  # noqa: F401
+from app.ai.history import models as ai_history_models  # noqa: F401
+from app.ai.audit import models as ai_audit_models  # noqa: F401
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 

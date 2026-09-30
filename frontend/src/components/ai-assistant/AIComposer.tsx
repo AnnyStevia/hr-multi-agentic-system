@@ -26,7 +26,7 @@ export function AIComposer() {
       className="w-full max-w-2xl mx-auto rounded-3xl border border-brand-200 bg-white shadow-[0_18px_50px_-28px_rgba(15,34,74,0.35)]"
     >
       <label htmlFor="ai-composer-input" className="sr-only">
-        Ask your HR Assistant
+        Ask Pulse
       </label>
       <div className="flex items-start gap-3 px-5 pt-4">
         <span
@@ -43,13 +43,13 @@ export function AIComposer() {
           disabled={loading}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Ask your HR Assistant…"
+          placeholder="Ask Pulse…"
           className="w-full resize-none border-0 bg-transparent text-sm sm:text-base text-brand-900 placeholder:text-brand-300 focus:outline-none focus:ring-0 disabled:opacity-60"
         />
       </div>
       <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-2">
         <p className="text-xs text-brand-300 pl-1">
-          Leave, knowledge, documents, offboarding, and more — routed by the assistant
+          Leave, knowledge, documents, offboarding, and more — routed by Pulse
         </p>
         <button
           type="submit"

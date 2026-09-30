@@ -58,12 +58,15 @@ def build_leave_policy_response(policy: LeavePolicy) -> LeavePolicyResponse:
 
 def build_leave_request_response(request: LeaveRequest) -> LeaveRequestResponse:
     employee_name = None
+    employee_user_id = None
     if request.employee is not None:
         employee_name = f"{request.employee.first_name} {request.employee.last_name}".strip()
+        employee_user_id = request.employee.user_id
     return LeaveRequestResponse(
         id=request.id,
         employee_id=request.employee_id,
         employee_name=employee_name,
+        employee_user_id=employee_user_id,
         leave_type_id=request.leave_type_id,
         leave_type_name=request.leave_type.name if request.leave_type else "",
         start_date=request.start_date,

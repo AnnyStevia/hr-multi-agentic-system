@@ -16,6 +16,7 @@ from app.ai.agents.onboarding.schemas import PendingConfirmationInfo
 from app.ai.core.context.dependencies import get_ai_execution_context
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.core.llm import get_llm_provider
+from app.ai.history.hooks import resolve_pending_best_effort
 from app.core.database import get_db
 from app.modules.employees.dependencies import get_employee_service
 from app.modules.employees.service import EmployeeService
@@ -136,19 +137,38 @@ def confirm_onboarding(
     payload: OnboardingConfirmRequest,
     _: User = Depends(get_current_user),
     context: AIExecutionContext = Depends(get_ai_execution_context),
+    db: Session = Depends(get_db),
     agent: OnboardingAgent = Depends(get_onboarding_agent),
 ) -> OnboardingAskResponse:
     """Authenticated confirm — tool metadata enforces ACK vs HR write gates."""
     try:
         result = agent.confirm(token=payload.confirmation_token, context=context)
     except OnboardingAgentValidationError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=exc.message,
         ) from exc
     except OnboardingAgentError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to complete the confirmed onboarding action right now.",
         ) from exc
+    resolve_pending_best_effort(
+        db,
+        user_id=context.user_id,
+        token=payload.confirmation_token,
+        resolved=True,
+    )
     return _to_response(result)

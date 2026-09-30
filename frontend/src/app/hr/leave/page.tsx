@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LeaveApprovalStages } from "@/components/LeaveApprovalStages";
+import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import {
   LEAVE_CANCELLATION_STATUS_LABELS,
@@ -13,6 +14,8 @@ import {
   type LeaveType,
 } from "@/types/leave";
 
+const OWN_LEAVE_ACTION_HINT = "You can't approve your own leave";
+
 function formatDate(value: string): string {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
@@ -20,6 +23,7 @@ function formatDate(value: string): string {
 }
 
 export default function HrLeaveRequestsPage() {
+  const { user } = useAuth();
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [status, setStatus] = useState<LeaveRequestStatus | "">("pending");
@@ -36,6 +40,14 @@ export default function HrLeaveRequestsPage() {
     null
   );
   const [cancellationRejectReason, setCancellationRejectReason] = useState("");
+
+  const isOwnLeave = useCallback(
+    (request: LeaveRequest) =>
+      user != null &&
+      request.employee_user_id != null &&
+      request.employee_user_id === user.id,
+    [user]
+  );
 
   const load = useCallback(async () => {
     setError("");
@@ -63,6 +75,11 @@ export default function HrLeaveRequestsPage() {
   }, [load]);
 
   const handleApprove = async (requestId: number) => {
+    const target = requests.find((r) => r.id === requestId);
+    if (target && isOwnLeave(target)) {
+      setError(OWN_LEAVE_ACTION_HINT);
+      return;
+    }
     setActingId(requestId);
     setError("");
     try {
@@ -78,6 +95,11 @@ export default function HrLeaveRequestsPage() {
   };
 
   const startReject = (requestId: number) => {
+    const target = requests.find((r) => r.id === requestId);
+    if (target && isOwnLeave(target)) {
+      setError(OWN_LEAVE_ACTION_HINT);
+      return;
+    }
     setRejectingId(requestId);
     setRejectionReason("");
     setError("");
@@ -110,6 +132,11 @@ export default function HrLeaveRequestsPage() {
   };
 
   const handleApproveCancellation = async (requestId: number) => {
+    const target = requests.find((r) => r.id === requestId);
+    if (target && isOwnLeave(target)) {
+      setError(OWN_LEAVE_ACTION_HINT);
+      return;
+    }
     setActingId(requestId);
     setError("");
     try {
@@ -231,12 +258,19 @@ export default function HrLeaveRequestsPage() {
           <p className="py-16 text-center text-sm text-brand-300">No leave requests found.</p>
         ) : (
           <ul className="divide-y divide-brand-100">
-            {requests.map((request) => (
+            {requests.map((request) => {
+              const ownLeave = isOwnLeave(request);
+              return (
               <li key={request.id} className="p-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-brand-900">
                       {request.employee_name || `Employee #${request.employee_id}`}
+                      {ownLeave ? (
+                        <span className="ml-2 text-xs font-normal text-brand-400">
+                          (your request)
+                        </span>
+                      ) : null}
                     </p>
                     <p className="mt-1 text-sm text-brand-300">
                       {request.leave_type_name} · {formatDate(request.start_date)} –{" "}
@@ -274,47 +308,75 @@ export default function HrLeaveRequestsPage() {
                   </div>
                   {request.status === "pending" && rejectingId !== request.id && (
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={actingId === request.id || request.hr_approval === "approved"}
-                        onClick={() => handleApprove(request.id)}
-                        className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                      <span
+                        title={ownLeave ? OWN_LEAVE_ACTION_HINT : undefined}
+                        className="inline-flex"
                       >
-                        {request.manager_approval === "approved" ? "HR approve" : "Approve"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actingId === request.id}
-                        onClick={() => startReject(request.id)}
-                        className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                        <button
+                          type="button"
+                          disabled={
+                            ownLeave ||
+                            actingId === request.id ||
+                            request.hr_approval === "approved"
+                          }
+                          onClick={() => handleApprove(request.id)}
+                          className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {request.manager_approval === "approved" ? "HR approve" : "Approve"}
+                        </button>
+                      </span>
+                      <span
+                        title={ownLeave ? OWN_LEAVE_ACTION_HINT : undefined}
+                        className="inline-flex"
                       >
-                        Reject
-                      </button>
+                        <button
+                          type="button"
+                          disabled={ownLeave || actingId === request.id}
+                          onClick={() => startReject(request.id)}
+                          className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Reject
+                        </button>
+                      </span>
                     </div>
                   )}
                   {request.status === "approved" &&
                     request.cancellation_status === "requested" &&
                     rejectingCancellationId !== request.id && (
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={actingId === request.id}
-                          onClick={() => handleApproveCancellation(request.id)}
-                          className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50"
+                        <span
+                          title={ownLeave ? OWN_LEAVE_ACTION_HINT : undefined}
+                          className="inline-flex"
                         >
-                          Approve cancellation
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actingId === request.id}
-                          onClick={() => {
-                            setRejectingCancellationId(request.id);
-                            setCancellationRejectReason("");
-                          }}
-                          className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+                          <button
+                            type="button"
+                            disabled={ownLeave || actingId === request.id}
+                            onClick={() => handleApproveCancellation(request.id)}
+                            className="bg-brand-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Approve cancellation
+                          </button>
+                        </span>
+                        <span
+                          title={ownLeave ? OWN_LEAVE_ACTION_HINT : undefined}
+                          className="inline-flex"
                         >
-                          Reject cancellation
-                        </button>
+                          <button
+                            type="button"
+                            disabled={ownLeave || actingId === request.id}
+                            onClick={() => {
+                              if (ownLeave) {
+                                setError(OWN_LEAVE_ACTION_HINT);
+                                return;
+                              }
+                              setRejectingCancellationId(request.id);
+                              setCancellationRejectReason("");
+                            }}
+                            className="border border-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Reject cancellation
+                          </button>
+                        </span>
                       </div>
                     )}
                 </div>
@@ -397,7 +459,8 @@ export default function HrLeaveRequestsPage() {
                   </form>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

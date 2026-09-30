@@ -19,6 +19,7 @@ from app.ai.agents.offboarding.schemas import PendingConfirmationInfo
 from app.ai.core.context.dependencies import get_ai_execution_context
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.core.llm import get_llm_provider
+from app.ai.history.hooks import resolve_pending_best_effort
 from app.core.database import get_db
 from app.modules.identity.dependencies import get_current_user
 from app.modules.identity.models import User
@@ -130,22 +131,47 @@ def confirm_offboarding(
     payload: OffboardingConfirmRequest,
     _: User = Depends(get_current_user),
     context: AIExecutionContext = Depends(get_ai_execution_context),
+    db: Session = Depends(get_db),
     agent: OffboardingAgent = Depends(get_offboarding_agent),
 ) -> OffboardingAskResponse:
     """Authenticated confirm — tool metadata enforces HR vs employee write gates."""
     try:
         result = agent.confirm(token=payload.confirmation_token, context=context)
     except OffboardingAgentAuthorizationError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
         ) from exc
     except OffboardingAgentValidationError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail=exc.message
         ) from exc
     except OffboardingAgentError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to complete the confirmed offboarding action right now.",
         ) from exc
+    resolve_pending_best_effort(
+        db,
+        user_id=context.user_id,
+        token=payload.confirmation_token,
+        resolved=True,
+    )
     return _to_response(result)

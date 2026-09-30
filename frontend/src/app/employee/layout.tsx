@@ -131,11 +131,17 @@ export default function EmployeeLayout({ children }: { children: React.ReactNode
                     <SideLink href="/employee/interviews" pathname={pathname} label="Interviews" />
                     <SideLink href="/employee/leave" pathname={pathname} label="Leave" />
                     <SideLink href="/employee/documents" pathname={pathname} label="Documents" />
-                    <SideLink href="/employee/offboarding" pathname={pathname} label="Offboarding" />
+                    <SideLink
+                      href="/employee/offboarding"
+                      pathname={pathname}
+                      label="Offboarding"
+                      exact
+                    />
                     <SideLink
                       href="/employee/offboarding/request"
                       pathname={pathname}
-                      label="Leave request"
+                      label="Resignation request"
+                      className="pl-6"
                     />
                   </>
                 )}
@@ -166,12 +172,18 @@ function SideLink({
   href,
   pathname,
   label,
+  exact = false,
+  className = "",
 }: {
   href: string;
   pathname: string;
   label: string;
+  exact?: boolean;
+  className?: string;
 }) {
-  const active = pathname === href || pathname.startsWith(`${href}/`);
+  const active = exact
+    ? pathname === href
+    : pathname === href || pathname.startsWith(`${href}/`);
   return (
     <Link
       href={href}
@@ -179,7 +191,7 @@ function SideLink({
         active
           ? "bg-brand-100 text-brand-900 font-medium"
           : "text-brand-900 hover:bg-brand-100"
-      }`}
+      } ${className}`.trim()}
     >
       {label}
     </Link>

@@ -411,6 +411,15 @@ def test_pending_clearance_routes_to_offboarding():
     assert decision.agent_id == "offboarding"
 
 
+def test_pending_on_clearance_routes_to_offboarding():
+    decision = route_message(
+        "What's pending on clearance?",
+        _emp_available(),
+    )
+    assert decision.kind == "agent"
+    assert decision.agent_id == "offboarding"
+
+
 def test_exit_interview_routes_to_offboarding():
     decision = route_message(
         "Has Sarah completed her exit interview?",

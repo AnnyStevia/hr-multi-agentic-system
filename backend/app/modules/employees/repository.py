@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import uuid4
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.employees.models import (
@@ -13,6 +13,41 @@ from app.modules.employees.models import (
     EmploymentStatus,
     Position,
 )
+
+
+def _employee_search_clause(search: str):
+    """Match employee_number/email/name fields, including multi-word full names.
+
+    ``q="Prince Nkoulou"`` must match first_name=Prince + last_name=Nkoulou, not only
+    a single column containing the whole string.
+    """
+    raw = search.strip()
+    if not raw:
+        return None
+    term = f"%{raw}%"
+    full_name = func.concat(Employee.first_name, " ", Employee.last_name)
+    clauses = [
+        Employee.employee_number.ilike(term),
+        Employee.first_name.ilike(term),
+        Employee.last_name.ilike(term),
+        Employee.email.ilike(term),
+        full_name.ilike(term),
+    ]
+    tokens = [t for t in raw.split() if t]
+    if len(tokens) >= 2:
+        token_ands = []
+        for token in tokens:
+            tt = f"%{token}%"
+            token_ands.append(
+                or_(
+                    Employee.first_name.ilike(tt),
+                    Employee.last_name.ilike(tt),
+                    Employee.email.ilike(tt),
+                    Employee.employee_number.ilike(tt),
+                )
+            )
+        clauses.append(and_(*token_ands))
+    return or_(*clauses)
 
 
 class DepartmentRepository:
@@ -109,29 +144,19 @@ class EmployeeRepository:
         if department_id is not None:
             query = query.filter(Employee.department_id == department_id)
         if search:
-            term = f"%{search.strip()}%"
-            query = query.filter(
-                or_(
-                    Employee.employee_number.ilike(term),
-                    Employee.first_name.ilike(term),
-                    Employee.last_name.ilike(term),
-                    Employee.email.ilike(term),
-                )
-            )
+            clause = _employee_search_clause(search)
+            if clause is not None:
+                query = query.filter(clause)
         return query.order_by(Employee.employee_number.asc()).all()
 
     def list_for_organization(self, *, search: str | None = None) -> list[Employee]:
         query = self._query().filter(Employee.employment_status == EmploymentStatus.ACTIVE)
         if search:
-            term = f"%{search.strip()}%"
-            query = query.filter(
-                or_(
-                    Employee.first_name.ilike(term),
-                    Employee.last_name.ilike(term),
-                    Employee.position.ilike(term),
-                    Employee.employee_number.ilike(term),
-                )
-            )
+            clause = _employee_search_clause(search)
+            if clause is not None:
+                # Organization directory also allows position matches on the raw term.
+                term = f"%{search.strip()}%"
+                query = query.filter(or_(clause, Employee.position.ilike(term)))
         return query.order_by(Employee.last_name.asc(), Employee.first_name.asc()).all()
 
     def get_by_id(self, employee_id: int) -> Employee | None:

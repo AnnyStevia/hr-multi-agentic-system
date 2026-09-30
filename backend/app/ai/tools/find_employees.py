@@ -6,15 +6,25 @@ from pydantic import BaseModel, Field
 
 from app.ai.core.context import AIExecutionContext
 from app.ai.tools.base import BaseTool, ToolMetadata
-from app.ai.tools.exceptions import ToolExecutionError
+from app.ai.tools.exceptions import ToolAuthorizationError, ToolExecutionError
 from app.modules.employees.service import EmployeeService
 from app.shared.exceptions import AppException
 
+# Shared across Leave / Recruitment / Onboarding agents — any one domain read is enough.
+_FIND_EMPLOYEES_PERMISSIONS_ANY = frozenset(
+    {"recruitment:read", "leaves:read", "onboarding:read"}
+)
+
 _READ_META = ToolMetadata(
     operation="read",
-    required_permissions=frozenset({"recruitment:read"}),
+    required_roles=frozenset({"hr", "admin"}),
+    # Domain permission OR is enforced in execute (metadata only supports AND).
+    required_permissions=frozenset(),
     operates_on_current_user=False,
 )
+
+_GENERIC_DENY = "Not authorized to execute this tool"
+
 
 
 class FindEmployeesInput(BaseModel):
@@ -49,6 +59,7 @@ class FindEmployeesTool(BaseTool):
     description = (
         "Search active employees by name substring for entity resolution "
         "(leave balances, requests, interviewer assignment, etc.). "
+        "Full names like 'Prince Nkoulou' are supported. "
         "If count is 0 or greater than 1, ask the user to clarify with employee_id. "
         "Do not guess. Read-only."
     )
@@ -61,6 +72,8 @@ class FindEmployeesTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, FindEmployeesInput)
+        if not (context.permission_names & _FIND_EMPLOYEES_PERMISSIONS_ANY):
+            raise ToolAuthorizationError(_GENERIC_DENY)
         try:
             rows, _total = self._employees.list_employees(status="active", q=args.q.strip())
         except AppException as exc:

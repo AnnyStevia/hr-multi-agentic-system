@@ -144,15 +144,42 @@ def test_hr_can_get_case_with_reason_details():
     assert out.employee_name == "Sam Staff"
 
 
+def test_hr_my_status_without_ids_uses_self_path():
+    """HR staff asking about their own case must not require case_id/employee_id."""
+    service = MagicMock()
+    case = _case(id=7, employee_id=10)
+    service.list_for_user.return_value = [case]
+    tool = GetOffboardingCaseTool(service)
+    out = tool.execute(_hr(), GetOffboardingCaseInput())
+    assert out.case_id == 7
+    assert out.employee_id == 10
+    assert out.reason_details is None  # self view
+    service.get_for_hr.assert_not_called()
+    service.list_for_user.assert_called_once_with(1)
+
+
 def test_employee_case_hides_reason_details():
     service = MagicMock()
     case = _case()
     service.list_for_user.return_value = [case]
     tool = GetOffboardingCaseTool(service)
-    out = tool.execute(_employee(), GetOffboardingCaseInput()
-    )
+    out = tool.execute(_employee(), GetOffboardingCaseInput())
     assert out.reason_details is None
     assert out.status == "pending_clearance"
+
+
+def test_hr_without_employee_profile_needs_target_id():
+    hr_no_emp = AIExecutionContext(
+        user_id=1,
+        role_names=frozenset({"hr"}),
+        permission_names=frozenset({"offboarding:read"}),
+        employee_id=None,
+        candidate_id=None,
+    )
+    service = MagicMock()
+    tool = GetOffboardingCaseTool(service)
+    with pytest.raises(ToolExecutionError, match="case_id or employee_id"):
+        tool.execute(hr_no_emp, GetOffboardingCaseInput())
 
 
 def test_manager_without_offboarding_read_cannot_use_hr_lookup():

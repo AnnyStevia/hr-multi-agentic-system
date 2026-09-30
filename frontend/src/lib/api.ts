@@ -1,6 +1,8 @@
 import type {
   AssistantAskPayload,
   AssistantAskResponse,
+  ConversationDetail,
+  ConversationSummary,
   DocumentsAskPayload,
   DocumentsAskResponse,
   LeaveAskResponse,
@@ -1494,12 +1496,17 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
+    const body: Record<string, unknown> = { message: payload.message };
+    if (payload.conversation_id != null) {
+      body.conversation_id = payload.conversation_id;
+    }
+
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/api/v1/ai/assistant/ask`, {
         method: "POST",
         headers,
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
     } catch {
       throw new ApiClientError("Cannot reach the server. Is the backend running?", 0);
@@ -1513,6 +1520,22 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  async listAIConversations(): Promise<ConversationSummary[]> {
+    return this.request<ConversationSummary[]>("/api/v1/ai/conversations");
+  }
+
+  async getAIConversation(conversationId: number): Promise<ConversationDetail> {
+    return this.request<ConversationDetail>(
+      `/api/v1/ai/conversations/${conversationId}`
+    );
+  }
+
+  async deleteAIConversation(conversationId: number): Promise<void> {
+    return this.requestVoid(`/api/v1/ai/conversations/${conversationId}`, {
+      method: "DELETE",
+    });
   }
 
   async askDocumentsAgent(payload: DocumentsAskPayload): Promise<DocumentsAskResponse> {

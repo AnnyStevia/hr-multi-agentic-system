@@ -131,6 +131,7 @@ export type AssistantAskStatus =
 
 export interface AssistantAskPayload {
   message: string;
+  conversation_id?: number | null;
 }
 
 export interface AssistantUsage {
@@ -150,9 +151,47 @@ export interface AssistantAskResponse {
   model?: string | null;
   tool_names_called?: string[];
   usage?: AssistantUsage | null;
+  conversation_id?: number | null;
+  message_id?: number | null;
 }
 
 export type AIChatRole = "user" | "assistant";
+
+export interface ConversationSummary {
+  id: number;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HistoryPendingState {
+  tool_name: string | null;
+  summary: string | null;
+  expires_at: number | null;
+  resolved: boolean | null;
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: AIChatRole;
+  content: string;
+  sequence: number;
+  agent_id: AssistantAgentId | null;
+  status: string | null;
+  tool_names_called: string[];
+  citations: KnowledgeCitation[];
+  pending: HistoryPendingState | null;
+  model: string | null;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: number;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  messages: ConversationMessage[];
+}
 
 export interface AIChatMessage {
   id: string;
@@ -163,5 +202,9 @@ export interface AIChatMessage {
   citations?: KnowledgeCitation[];
   has_context?: boolean;
   pendingConfirmation?: RecruitmentPendingConfirmation | null;
+  /** Hydrated historical pending — show summary only, never Confirm. */
+  pendingHistorical?: HistoryPendingState | null;
   confirmationResolved?: "confirmed" | "cancelled";
+  /** Server-side message id when persisted. */
+  serverMessageId?: number;
 }

@@ -15,9 +15,12 @@ import { api, ApiClientError } from "@/lib/api";
 import type {
   AIChatMessage,
   AssistantAgentId,
+  ConversationMessage,
   KnowledgeCitation,
   RecruitmentPendingConfirmation,
 } from "@/types/ai";
+
+const CONVERSATION_STORAGE_KEY = "ai_assistant_conversation_id";
 
 type AIAssistantContextValue = {
   open: boolean;
@@ -33,13 +36,54 @@ type AIAssistantContextValue = {
   ask: (question?: string) => Promise<void>;
   confirmPending: (messageId: string) => Promise<void>;
   cancelPending: (messageId: string) => void;
+  clearConversation: () => Promise<void>;
   hasConversation: boolean;
+  conversationId: number | null;
 };
 
 const AIAssistantContext = createContext<AIAssistantContextValue | null>(null);
 
 function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function readStoredConversationId(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(CONVERSATION_STORAGE_KEY);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function storeConversationId(id: number | null): void {
+  if (typeof window === "undefined") return;
+  if (id == null) {
+    sessionStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    return;
+  }
+  sessionStorage.setItem(CONVERSATION_STORAGE_KEY, String(id));
+}
+
+function mapHistoryMessage(row: ConversationMessage): AIChatMessage {
+  const agentId = (row.agent_id ?? undefined) as AssistantAgentId | undefined;
+  const citations =
+    row.citations && row.citations.length > 0 ? row.citations : undefined;
+  const pendingHistorical =
+    row.pending && !row.pending.resolved ? row.pending : null;
+  const confirmationResolved =
+    row.pending?.resolved === true ? ("confirmed" as const) : undefined;
+
+  return {
+    id: `srv-${row.id}`,
+    role: row.role,
+    content: row.content,
+    agentId,
+    citations,
+    pendingConfirmation: null,
+    pendingHistorical,
+    confirmationResolved,
+    serverMessageId: row.id,
+  };
 }
 
 function mapError(err: unknown, confirmAgentId?: AssistantAgentId): string {
@@ -65,13 +109,16 @@ function mapError(err: unknown, confirmAgentId?: AssistantAgentId): string {
       }
       return err.message || "This request conflicts with the current state.";
     }
+    if (err.status === 404) {
+      return "That conversation was not found. Starting a new thread.";
+    }
     if (err.status === 422) {
       return "Please enter a valid question.";
     }
     if (err.status === 0) {
       return "Cannot reach the server. Please try again in a moment.";
     }
-    return "Something went wrong with the HR assistant. Please try again.";
+    return "Something went wrong with Pulse. Please try again.";
   }
   if (err instanceof Error && err.message) {
     return err.message;
@@ -86,12 +133,19 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const skipCloseOnMount = useRef(true);
+  const conversationIdRef = useRef<number | null>(null);
 
   const openAssistant = useCallback(() => setOpen(true), []);
   const closeAssistant = useCallback(() => setOpen(false), []);
   const toggleAssistant = useCallback(() => setOpen((value) => !value), []);
   const clearError = useCallback(() => setError(null), []);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     if (skipCloseOnMount.current) {
@@ -100,6 +154,61 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     }
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const stored = readStoredConversationId();
+    if (stored == null) {
+      setHydrated(true);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const detail = await api.getAIConversation(stored);
+        if (cancelled) return;
+        setConversationId(detail.id);
+        storeConversationId(detail.id);
+        setMessages(detail.messages.map(mapHistoryMessage));
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiClientError && err.status === 404) {
+          storeConversationId(null);
+          setConversationId(null);
+        }
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open || !hydrated) return;
+    const stored = readStoredConversationId();
+    if (stored == null || messages.length > 0 || conversationId != null) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const detail = await api.getAIConversation(stored);
+        if (cancelled) return;
+        setConversationId(detail.id);
+        storeConversationId(detail.id);
+        setMessages(detail.messages.map(mapHistoryMessage));
+      } catch {
+        if (!cancelled) {
+          storeConversationId(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hydrated, messages.length, conversationId]);
 
   const ask = useCallback(
     async (question?: string) => {
@@ -121,7 +230,16 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       setLoading(true);
 
       try {
-        const result = await api.askAssistant({ message: text });
+        const activeId = conversationIdRef.current;
+        const result = await api.askAssistant({
+          message: text,
+          conversation_id: activeId,
+        });
+        if (result.conversation_id != null) {
+          setConversationId(result.conversation_id);
+          storeConversationId(result.conversation_id);
+          conversationIdRef.current = result.conversation_id;
+        }
         const pending: RecruitmentPendingConfirmation | null =
           result.pending_confirmation ?? null;
         const citations: KnowledgeCitation[] = result.citations ?? [];
@@ -135,9 +253,15 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
           agentId,
           citations: citations.length > 0 ? citations : undefined,
           pendingConfirmation: pending,
+          serverMessageId: result.message_id ?? undefined,
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
+        if (err instanceof ApiClientError && err.status === 404) {
+          storeConversationId(null);
+          setConversationId(null);
+          conversationIdRef.current = null;
+        }
         setError(mapError(err));
       } finally {
         setLoading(false);
@@ -192,6 +316,7 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
               ? {
                   ...m,
                   pendingConfirmation: null,
+                  pendingHistorical: null,
                   confirmationResolved: "confirmed" as const,
                 }
               : m
@@ -230,6 +355,31 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const clearConversation = useCallback(async () => {
+    if (loading) return;
+    const idToDelete = conversationIdRef.current ?? readStoredConversationId();
+    setError(null);
+    if (idToDelete != null) {
+      setLoading(true);
+      try {
+        await api.deleteAIConversation(idToDelete);
+      } catch (err) {
+        if (!(err instanceof ApiClientError && err.status === 404)) {
+          setError(mapError(err));
+          setLoading(false);
+          return;
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    setMessages([]);
+    setDraft("");
+    setConversationId(null);
+    conversationIdRef.current = null;
+    storeConversationId(null);
+  }, [loading]);
+
   const value = useMemo(
     () => ({
       open,
@@ -245,7 +395,9 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       ask,
       confirmPending,
       cancelPending,
+      clearConversation,
       hasConversation: messages.length > 0,
+      conversationId,
     }),
     [
       open,
@@ -260,6 +412,8 @@ export function AIAssistantProvider({ children }: { children: ReactNode }) {
       ask,
       confirmPending,
       cancelPending,
+      clearConversation,
+      conversationId,
     ]
   );
 

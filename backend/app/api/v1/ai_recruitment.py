@@ -16,6 +16,7 @@ from app.ai.agents.recruitment.schemas import PendingConfirmationInfo
 from app.ai.core.context.dependencies import get_ai_execution_context
 from app.ai.core.context.models import AIExecutionContext
 from app.ai.core.llm import get_llm_provider
+from app.ai.history.hooks import resolve_pending_best_effort
 from app.core.database import get_db
 from app.modules.employees.dependencies import get_employee_service
 from app.modules.employees.service import EmployeeService
@@ -155,18 +156,37 @@ def confirm_recruitment(
     payload: RecruitmentConfirmRequest,
     _: User = Depends(require_permissions("recruitment:write")),
     context: AIExecutionContext = Depends(get_ai_execution_context),
+    db: Session = Depends(get_db),
     agent: RecruitmentAgent = Depends(get_recruitment_agent),
 ) -> RecruitmentAskResponse:
     try:
         result = agent.confirm(token=payload.confirmation_token, context=context)
     except RecruitmentAgentValidationError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=exc.message,
         ) from exc
     except RecruitmentAgentError as exc:
+        resolve_pending_best_effort(
+            db,
+            user_id=context.user_id,
+            token=payload.confirmation_token,
+            resolved=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to complete the confirmed recruitment action right now.",
         ) from exc
+    resolve_pending_best_effort(
+        db,
+        user_id=context.user_id,
+        token=payload.confirmation_token,
+        resolved=True,
+    )
     return _to_response(result)

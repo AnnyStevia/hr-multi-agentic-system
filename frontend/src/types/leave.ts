@@ -64,6 +64,8 @@ export interface LeaveRequest {
   id: number;
   employee_id: number;
   employee_name?: string | null;
+  /** Linked auth user for the requester; used to block self-approve in UI. */
+  employee_user_id?: number | null;
   leave_type_id: number;
   leave_type_name: string;
   start_date: string;

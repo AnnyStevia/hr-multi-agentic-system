@@ -66,6 +66,7 @@ from app.modules.leave.service import LeaveService
 
 DEFAULT_MAX_OUTPUT_TOKENS = 800
 DEFAULT_MAX_TOOL_CALLS = 8
+DEFAULT_MAX_TOOL_ROUNDS = 3
 
 
 class LeaveAgent:
@@ -80,10 +81,12 @@ class LeaveAgent:
         db: Session | None = None,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
+        max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS,
     ) -> None:
         self._llm = llm_provider
         self._max_output_tokens = max_output_tokens
         self._max_tool_calls = max_tool_calls
+        self._max_tool_rounds = max_tool_rounds
         self._db = db
         self._registry = ToolRegistry()
         # Self reads
@@ -135,6 +138,7 @@ class LeaveAgent:
                 tool_choice="auto",
                 max_tokens=self._max_output_tokens,
                 max_tool_calls=self._max_tool_calls,
+                max_tool_rounds=self._max_tool_rounds,
             )
         except ToolAuthorizationError as exc:
             raise LeaveAgentError(str(exc)) from exc
@@ -172,6 +176,13 @@ class LeaveAgent:
                 answer = (
                     "I prepared a write action that requires your confirmation. "
                     "Use the Confirm button below to proceed — nothing has been changed yet."
+                )
+            elif any(not tr.success for tr in result.tool_results):
+                answer = (
+                    "I couldn't retrieve that leave information with the available tools. "
+                    "Employees can only see their own leave; looking up someone else's "
+                    "balance requires HR/Admin access. Try 'What's my leave balance?' "
+                    "or ask as HR with the employee's name."
                 )
             else:
                 answer = "I don't have enough information to answer that."

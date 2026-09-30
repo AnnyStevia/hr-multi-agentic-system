@@ -152,6 +152,41 @@ def _resolve_hr_case(
     raise ToolExecutionError("Provide case_id or employee_id")
 
 
+def _should_use_hr_lookup(
+    context: AIExecutionContext,
+    *,
+    case_id: int | None,
+    employee_id: int | None,
+) -> bool:
+    """HR lookup only when a target id is explicit.
+
+    Staff asking 'my offboarding…' with no ids use session employee_id (self path).
+    """
+    return _is_hr(context) and (case_id is not None or employee_id is not None)
+
+
+def _resolve_dual_mode_case(
+    service: OffboardingService,
+    context: AIExecutionContext,
+    *,
+    case_id: int | None,
+    employee_id: int | None,
+) -> tuple[OffboardingCase, bool]:
+    """Return (case, use_hr_view). Self when no target ids; HR view when ids given."""
+    if _should_use_hr_lookup(context, case_id=case_id, employee_id=employee_id):
+        return (
+            _resolve_hr_case(service, case_id=case_id, employee_id=employee_id),
+            True,
+        )
+    if context.employee_id is not None:
+        return _resolve_self_case(service, context, case_id), False
+    if _is_hr(context):
+        raise ToolExecutionError(
+            "Provide case_id or employee_id for the offboarding case to look up"
+        )
+    raise ToolExecutionError("No employee profile for the authenticated user")
+
+
 def _readiness_for_case(
     service: OffboardingService, case: OffboardingCase
 ) -> "OffboardingReadinessResult":
@@ -366,7 +401,8 @@ class GetOffboardingCaseTool(BaseTool):
     name = "get_offboarding_case"
     description = (
         "Get an offboarding case summary (status, reason, last working day, dates). "
-        "HR: pass case_id or employee_id. Employees: omit ids to load their own case. "
+        "For 'my/own' status: omit case_id and employee_id — uses the logged-in "
+        "employee profile. HR looking up someone else: pass case_id or employee_id. "
         "Read-only."
     )
     metadata = _DUAL_META
@@ -378,10 +414,13 @@ class GetOffboardingCaseTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, GetOffboardingCaseInput)
-        if _is_hr(context):
-            case = _resolve_hr_case(
-                self._service, case_id=args.case_id, employee_id=args.employee_id
-            )
+        case, use_hr_view = _resolve_dual_mode_case(
+            self._service,
+            context,
+            case_id=args.case_id,
+            employee_id=args.employee_id,
+        )
+        if use_hr_view:
             detail = build_detail_response(case)
             return OffboardingCaseBrief(
                 case_id=detail.id,
@@ -395,7 +434,6 @@ class GetOffboardingCaseTool(BaseTool):
                 completed_at=detail.completed_at,
             )
 
-        case = _resolve_self_case(self._service, context, args.case_id)
         view = build_employee_view_response(case)
         return OffboardingCaseBrief(
             case_id=view.id,
@@ -425,12 +463,12 @@ class GetOffboardingProgressTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, CaseScopedInput)
-        if _is_hr(context):
-            case = _resolve_hr_case(
-                self._service, case_id=args.case_id, employee_id=args.employee_id
-            )
-        else:
-            case = _resolve_self_case(self._service, context, args.case_id)
+        case, _ = _resolve_dual_mode_case(
+            self._service,
+            context,
+            case_id=args.case_id,
+            employee_id=args.employee_id,
+        )
 
         checklist = _call_service(
             lambda: self._service.get_progress(case.id),
@@ -500,7 +538,10 @@ class ListOffboardingTasksTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, ListOffboardingTasksInput)
-        if _is_hr(context):
+        use_hr = _should_use_hr_lookup(
+            context, case_id=args.case_id, employee_id=args.employee_id
+        )
+        if use_hr:
             case = _resolve_hr_case(
                 self._service, case_id=args.case_id, employee_id=args.employee_id
             )
@@ -572,44 +613,12 @@ class GetOffboardingClearanceTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, CaseScopedInput)
-        if _is_hr(context):
-            case = _resolve_hr_case(
-                self._service, case_id=args.case_id, employee_id=args.employee_id
-            )
-            items = _call_service(
-                lambda: self._service.list_clearance_for_hr(case.id),
-                error_message="Failed to list clearance items",
-            )
-            progress = _call_service(
-                lambda: self._service.get_clearance_progress(case.id),
-                error_message="Failed to load clearance progress",
-            )
-            return OffboardingClearanceResult(
-                case_id=case.id,
-                items=[
-                    OffboardingClearanceItemBrief(
-                        item_id=item.id,
-                        category=_status_value(item.category),
-                        item=item.item,
-                        status=_status_value(item.status),
-                        notes=item.notes,
-                        completed_at=item.completed_at,
-                    )
-                    for item in items
-                ],
-                progress=ClearanceProgressBrief(
-                    total=progress.total,
-                    pending=progress.pending,
-                    cleared=progress.cleared,
-                    not_applicable=progress.not_applicable,
-                    percentage=progress.percentage,
-                    clearance_complete=progress.clearance_complete,
-                ),
-            )
-
-        _require_employee_profile(context)
-        case = _resolve_self_case(self._service, context, args.case_id)
-        # Ownership proven — use case-scoped list via HR list for terminal cases.
+        case, use_hr_view = _resolve_dual_mode_case(
+            self._service,
+            context,
+            case_id=args.case_id,
+            employee_id=args.employee_id,
+        )
         items = _call_service(
             lambda: self._service.list_clearance_for_hr(case.id),
             error_message="Failed to list clearance items",
@@ -626,7 +635,11 @@ class GetOffboardingClearanceTool(BaseTool):
                     category=_status_value(item.category),
                     item=item.item,
                     status=_status_value(item.status),
-                    notes=build_employee_clearance_response(item).notes,
+                    notes=(
+                        item.notes
+                        if use_hr_view
+                        else build_employee_clearance_response(item).notes
+                    ),
                     completed_at=item.completed_at,
                 )
                 for item in items
@@ -657,16 +670,19 @@ class GetExitInterviewTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, CaseScopedInput)
-        if _is_hr(context):
-            case = _resolve_hr_case(
-                self._service, case_id=args.case_id, employee_id=args.employee_id
-            )
-            interview = _call_service(
-                lambda: self._service.get_exit_interview_for_hr(case.id),
-                error_message="Failed to load exit interview",
-            )
-            if interview is None:
-                raise ToolExecutionError("No exit interview for this case")
+        case, use_hr_view = _resolve_dual_mode_case(
+            self._service,
+            context,
+            case_id=args.case_id,
+            employee_id=args.employee_id,
+        )
+        interview = _call_service(
+            lambda: self._service.get_exit_interview_for_hr(case.id),
+            error_message="Failed to load exit interview",
+        )
+        if interview is None:
+            raise ToolExecutionError("No exit interview for this case")
+        if use_hr_view:
             resp = build_exit_interview_response(interview)
             return ExitInterviewBrief(
                 exit_interview_id=resp.id,
@@ -683,13 +699,6 @@ class GetExitInterviewTool(BaseTool):
                 completed_at=resp.completed_at,
             )
 
-        case = _resolve_self_case(self._service, context, args.case_id)
-        interview = _call_service(
-            lambda: self._service.get_exit_interview_for_hr(case.id),
-            error_message="Failed to load exit interview",
-        )
-        if interview is None:
-            raise ToolExecutionError("No exit interview for this case")
         emp_view = build_employee_exit_interview_response(interview)
         return ExitInterviewBrief(
             exit_interview_id=emp_view.id,
@@ -723,12 +732,12 @@ class GetOffboardingReadinessTool(BaseTool):
 
     def execute(self, context: AIExecutionContext, args: BaseModel) -> BaseModel:
         assert isinstance(args, CaseScopedInput)
-        if _is_hr(context):
-            case = _resolve_hr_case(
-                self._service, case_id=args.case_id, employee_id=args.employee_id
-            )
-        else:
-            case = _resolve_self_case(self._service, context, args.case_id)
+        case, _ = _resolve_dual_mode_case(
+            self._service,
+            context,
+            case_id=args.case_id,
+            employee_id=args.employee_id,
+        )
         return _readiness_for_case(self._service, case)
 
 

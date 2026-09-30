@@ -57,7 +57,7 @@ flowchart TB
 
 ```
 backend/app/
-├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/documents, /ai/training, …)
+├── api/                 # Versioned HTTP (incl. /ai/assistant, /ai/conversations, /ai/documents, …)
 ├── core/                # Config, security, database
 ├── modules/             # Core HR domains
 │   ├── identity/        # Auth, RBAC, seed admin
@@ -82,14 +82,15 @@ backend/app/
 │   ├── tools/           # Registry, auth, domain tools (incl. document_reads / offboarding_*)
 │   ├── confirmation/    # HMAC confirmation tokens for AI writes
 │   ├── audit/           # ai_tool_action_audits (minimal write audit)
+│   ├── history/         # Persistent Pulse chat (conversations + messages)
 │   ├── orchestration/   # LangGraph unified ask (one specialist) + tool roundtrips
 │   └── rag/             # Ingest → embed → retrieve → answer (ACTIVE company docs only)
 └── shared/              # StorageService (S3), MeetingProvider, helpers
 ```
 
-### Floating assistant (frontend)
+### Floating assistant — Pulse (frontend)
 
-On authenticated portals, the floating assistant is **one UI** backed by the **unified gateway**:
+On authenticated portals, **Pulse** is the floating HR assistant — **one UI** backed by the **unified gateway**:
 
 `POST /api/v1/ai/assistant/ask` → LangGraph (`filter_available` → deterministic `route_message` → one specialist) → Knowledge / Leave / Recruitment / Onboarding / Training / Documents / Offboarding.
 
@@ -104,6 +105,8 @@ On authenticated portals, the floating assistant is **one UI** backed by the **u
 | Offboarding | `employee_id` set **or** HR/Admin + `offboarding:read` | `POST /api/v1/ai/offboarding/confirm` |
 
 The UI stores each reply’s `agent_id` and routes Confirm by that id (not by pathname). Write proposals show a **Confirm / Cancel** card; the HMAC token stays in client state (not rendered as text). Cancel drops the token locally. Typing “I confirm” in chat does nothing — only the UI button completes a write.
+
+**Chat history (persistent):** ask responses include additive `conversation_id` / `message_id`. Pulse keeps the active thread in `sessionStorage`, hydrates via `GET /api/v1/ai/conversations/{id}`, and can wipe the thread with **New chat** (`DELETE /api/v1/ai/conversations/{id}`). History stores safe answer text + metadata only (pending **digest**, never the raw confirmation token). Prior turns are for UX continuity — they are **not** yet replayed into the LLM as multi-turn context. Document AI panel history is out of scope.
 
 Standalone per-agent ask/confirm routes remain for debugging and regression (`/ai/knowledge`, `/ai/leave`, `/ai/recruitment`, `/ai/onboarding`, `/ai/training`, `/ai/documents`, `/ai/offboarding`).
 
@@ -300,7 +303,8 @@ flowchart TD
 | 9.2E | Onboarding registered in unified assistant (availability + routing + dispatch) |
 | Orc.1–Orc.2 | LangGraph wraps availability → route → **one** specialist invoke; FE ask/confirm contract unchanged |
 | Orc.3 | Optional constrained LLM clarify among **available** agent ids (`ai_orchestrator_llm_clarify`, default off) |
-| Orc.4 | Allowlisted handoff hook (empty by default) + chat-history schema design only |
+| Orc.4 | Allowlisted handoff hook (empty by default) + chat-history schema design |
+| Chat history | Persistent user-owned threads for Pulse (`ai_conversations` / `ai_conversation_messages`, migration `054`) |
 
 **Orchestration constraint:** LangGraph is infrastructure only — not an HR business layer and not a mega-supervisor with all tools. Writes still stop at HMAC propose; Confirm stays on `POST /ai/{domain}/confirm`.
 
@@ -308,7 +312,7 @@ flowchart TD
 
 **Write tools (confirmation-gated)** — employee ACK of own tasks; HR/Admin manual task complete and force-complete onboarding (see [`backend/docs/phase_9_2e_onboarding_unified_assistant.md`](backend/docs/phase_9_2e_onboarding_unified_assistant.md)).
 
-Docs: [`backend/docs/phase_orc_1_langgraph_orchestration.md`](backend/docs/phase_orc_1_langgraph_orchestration.md), [`backend/docs/phase_orc_4_handoffs_and_chat_history.md`](backend/docs/phase_orc_4_handoffs_and_chat_history.md).
+Docs: [`backend/docs/phase_orc_1_langgraph_orchestration.md`](backend/docs/phase_orc_1_langgraph_orchestration.md), [`backend/docs/phase_orc_4_handoffs_and_chat_history.md`](backend/docs/phase_orc_4_handoffs_and_chat_history.md), [`backend/docs/phase_chat_history_audit.md`](backend/docs/phase_chat_history_audit.md), [`backend/docs/phase_chat_history_implementation.md`](backend/docs/phase_chat_history_implementation.md).
 
 ---
 
@@ -514,7 +518,8 @@ Employee **offboarding request** (pre-case) plus core HR offboarding **case**, *
 - Aggregated HR dashboard API and animated UI
 - Role shells: admin, HR, manager, employee, and careers / candidate portals
 - In-app notifications (bell + pages)
-- Floating **unified AI assistant** (LangGraph orchestration → one specialist among Knowledge, Leave, Recruitment, Onboarding, Training, Documents, Offboarding)
+- Floating **Pulse** unified AI assistant (LangGraph orchestration → one specialist among Knowledge, Leave, Recruitment, Onboarding, Training, Documents, Offboarding)
+- Persistent Pulse chat history (user-owned threads; **New chat** clears the active thread)
 
 ### AI foundation (shipped)
 
@@ -529,6 +534,7 @@ Employee **offboarding request** (pre-case) plus core HR offboarding **case**, *
 - **Documents Agent** — authorized document metadata + Document Understanding (PDF summarize / page-cited Q&A); read-only
 - **Offboarding Agent** — read-only offboarding Q&A plus confirmation-gated complete / clearance / task writes via the unified assistant (or standalone `/ai/offboarding/ask` + `/confirm`)
 - Shared HMAC confirmation + `ai_tool_action_audits` for AI writes
+- Persistent chat history for Pulse (`ai_conversations` / messages; safe metadata + pending digest only)
 - Full RAG path through **grounded generation + citations** (see pipeline above); archived company docs excluded from retrieval
 - Smoke scripts under `backend/scripts/` (RAG + recruitment / document agent helpers)
 
@@ -536,7 +542,8 @@ Employee **offboarding request** (pre-case) plus core HR offboarding **case**, *
 
 - Offboarding Meet reminders
 - Document Agent writes (AI upload / archive / delete) or persistent document chat
-- Assistant chat-history persistence / rich Markdown renderer (schema designed in Orc.4; not stored yet)
+- Multi-turn LLM context from stored chat history (history is persisted for UX; each ask still uses the latest user message only)
+- Richer Markdown answer renderer in Pulse
 - Allowlisted multi-agent handoffs enabled in product (hook present; allowlist empty)
 - LLM rerank / query reformulation for RAG
 - Autonomous domain decisions (writes always require UI confirmation)
@@ -592,7 +599,7 @@ After pulling, apply migrations:
 ```bash
 cd backend
 alembic upgrade head
-# Current head: 053_offboarding_exit_interview
+# Current head: 054_ai_chat_history
 ```
 
 ---
@@ -639,9 +646,9 @@ Expect exactly **one** embedding call and **one** generation call, plus `smoke_r
 
 Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `smoke_hybrid_retrieve.py` → `smoke_rag_query.py`.
 
-### Unified assistant (seven specialists via LangGraph)
+### Unified assistant — Pulse (seven specialists via LangGraph)
 
-1. Log in (employee with a linked Employee record, or HR) → open the floating assistant on any authenticated portal.
+1. Log in (employee with a linked Employee record, or HR) → open **Pulse** (floating button) on any authenticated portal.
 2. Ask in natural language; LangGraph filters available agents, then the deterministic router picks **one** specialist:
    - Leave: “What’s my leave balance?”
    - Onboarding: “What’s my onboarding progress?” / “Acknowledge my pending onboarding task.”
@@ -652,8 +659,9 @@ Earlier pipeline checks: `smoke_ingest_pdf.py` → `smoke_embed_chunks.py` → `
    - Recruitment (HR): “How many candidates are currently shortlisted?”
 3. **Writes** (leave, recruitment, onboarding, training, or offboarding): expect a **Confirm / Cancel** card → Confirm hits the matching `/ai/*/confirm` from the message `agentId`; Cancel does nothing. Knowledge and Documents have no writes.
 4. Do not type “I confirm” in chat — only the UI button completes the write.
-5. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training/documents/offboarding (and typically have no agents).
-6. Policy/handbook **questions** prefer **Knowledge**; explicit summarize / “this PDF” / private library phrases prefer **Documents**. Operational “my training” / assign phrases prefer **Training**. Case readiness / clearance phrases prefer **Offboarding** (not Knowledge).
+5. **New chat** deletes the active persisted thread and returns to the welcome state; the next question starts a new `conversation_id`.
+6. Candidates without `employee_id` (and without the relevant staff read permission) should get unavailable for onboarding/training/documents/offboarding (and typically have no agents).
+7. Policy/handbook **questions** prefer **Knowledge**; explicit summarize / “this PDF” / private library phrases prefer **Documents**. Operational “my training” / assign phrases prefer **Training**. Case readiness / clearance phrases prefer **Offboarding** (not Knowledge).
 
 ### Document AI panel (library / employee docs)
 
@@ -686,7 +694,7 @@ HR-Multi-Agentic-System/
 │   ├── docs/                # Phase reports (e.g. 6.4G hardening)
 │   ├── scripts/             # RAG / recruitment smoke helpers
 │   └── tests/
-├── frontend/                # Next.js role portals + AI assistant
+├── frontend/                # Next.js role portals + Pulse AI assistant
 ├── docs/
 │   ├── architecture/        # Architecture index
 │   └── decisions/           # ADRs
@@ -713,7 +721,7 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Core HR security hardening (RBAC / IDOR, inactive-manager validation)
 - [x] AI foundation (LLM providers, execution context, authorized tools)
 - [x] RAG through grounded generation + citations (Phases 5.1–5.8)
-- [x] Knowledge Agent + in-app floating assistant
+- [x] Knowledge Agent + in-app floating assistant (**Pulse**)
 - [x] Recruitment AI (CV extraction, fit, agent reads/writes, Meet, confirmation, audit) — Phases 6.1–6.4G
 - [x] Leave Agent (scoped reads + confirmation-gated writes) — Phases 7.1–7.4B
 - [x] Multi-agent registry + deterministic router + unified `/ai/assistant/ask` — Phases 8.1–8.3
@@ -733,8 +741,9 @@ Architecture decisions: [docs/architecture/README.md](docs/architecture/README.m
 - [x] Offboarding Agent confirmation-gated writes (complete / clearance / task) — Phase O.6D
 - [x] LangGraph unified-assistant orchestration (availability → route → one specialist) — Phase Orc.1–Orc.2
 - [x] Optional constrained LLM clarify + allowlisted handoff hook / chat-history design — Phase Orc.3–Orc.4
+- [x] Persistent Pulse chat history (user-owned threads, New chat, confirm pending digest) — migration `054`
 - [ ] Document Agent writes / persistent document chat
-- [ ] Assistant chat history & richer answer rendering
+- [ ] Multi-turn LLM context from stored history + richer answer rendering
 
 ---
 

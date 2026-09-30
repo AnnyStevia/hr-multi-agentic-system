@@ -109,6 +109,7 @@ class LeaveRequestResponse(BaseModel):
     id: int
     employee_id: int
     employee_name: str | None = None
+    employee_user_id: int | None = None
     leave_type_id: int
     leave_type_name: str
     start_date: date

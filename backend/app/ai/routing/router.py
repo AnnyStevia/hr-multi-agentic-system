@@ -242,12 +242,17 @@ _DOCUMENTS_TASK_MARKERS: tuple[str, ...] = (
 _OFFBOARDING_KEYWORDS: tuple[str, ...] = (
     "offboarding clearance",
     "clearance for departure",
+    "pending on clearance",
+    "pending clearance",
+    "clearance items",
+    "clearance status",
+    "clearance progress",
+    "on clearance",
     "ready to complete offboarding",
     "complete offboarding",
     "offboarding progress",
     "offboarding status",
     "offboarding tasks",
-    "pending clearance",
     "exit interview",
     "last working day",
     "leaving the company",
@@ -260,18 +265,24 @@ _OFFBOARDING_KEYWORDS: tuple[str, ...] = (
     "offboarding",
     "offboard",
     "departure",
+    "clearance",
 )
 
 # Case / ops language that keeps routing on Offboarding even if "policy" appears.
 _OFFBOARDING_TASK_MARKERS: tuple[str, ...] = (
     "offboarding clearance",
     "clearance for departure",
+    "pending on clearance",
+    "pending clearance",
+    "clearance items",
+    "clearance status",
+    "clearance progress",
+    "on clearance",
     "ready to complete offboarding",
     "complete offboarding",
     "offboarding progress",
     "offboarding status",
     "offboarding tasks",
-    "pending clearance",
     "exit interview",
     "last working day",
     "leaving the company",
@@ -283,6 +294,7 @@ _OFFBOARDING_TASK_MARKERS: tuple[str, ...] = (
     "before leaving",
     "offboarding",
     "offboard",
+    "clearance",
 )
 
 # Resignation / departure policy phrasing → Knowledge (not a specific case).

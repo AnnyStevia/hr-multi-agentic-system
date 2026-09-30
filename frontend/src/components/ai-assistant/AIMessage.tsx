@@ -26,6 +26,7 @@ export function AIMessage({ message }: { message: AIChatMessage }) {
   const isUser = message.role === "user";
   const { confirmPending, cancelPending, loading } = useAIAssistant();
   const pending = message.pendingConfirmation;
+  const historical = message.pendingHistorical;
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -64,6 +65,20 @@ export function AIMessage({ message }: { message: AIChatMessage }) {
                 Cancel
               </button>
             </div>
+          </div>
+        ) : null}
+        {!isUser && !pending && historical ? (
+          <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50 px-3 py-3 text-sm text-brand-900">
+            <p className="font-medium text-brand-800">Pending action (historical)</p>
+            {historical.summary ? (
+              <p className="mt-1 whitespace-pre-wrap text-brand-800">
+                {historical.summary}
+              </p>
+            ) : null}
+            <p className="mt-1 text-xs text-brand-600">
+              Confirmation is only available for the live session token. Ask again
+              if you still need to complete this action.
+            </p>
           </div>
         ) : null}
         {!isUser && message.confirmationResolved === "confirmed" ? (
