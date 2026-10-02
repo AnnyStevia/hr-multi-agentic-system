@@ -137,7 +137,7 @@ export function Select({
           aria-activedescendant={
             selected ? `${listboxId}-option-${selected.value || "empty"}` : undefined
           }
-          className="absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-auto rounded-xl border border-[#0f224a]/20 bg-white p-1.5 shadow-[0_18px_40px_-18px_rgba(15,34,74,0.55),0_0_0_1px_rgba(15,34,74,0.06)]"
+          className="absolute left-0 right-0 z-[80] mt-1.5 max-h-60 overflow-auto rounded-xl border border-[#0f224a]/20 bg-white p-1.5 shadow-[0_18px_40px_-18px_rgba(15,34,74,0.55),0_0_0_1px_rgba(15,34,74,0.06)]"
         >
           {options.map((option) => {
             const isSelected = option.value === value;

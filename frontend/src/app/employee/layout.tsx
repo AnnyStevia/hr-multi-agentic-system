@@ -196,8 +196,8 @@ export default function EmployeeLayout({
             notificationVariant={notificationVariant}
             editProfileHref={editProfileHref}
           />
-          <AIAssistantMain contentClassName="flex-1 min-h-0 overflow-y-auto px-6 py-8">
-            <div className="mx-auto w-full max-w-5xl">{children}</div>
+          <AIAssistantMain contentClassName="flex-1 min-h-0 overflow-y-auto p-6">
+            {children}
           </AIAssistantMain>
         </div>
       </GlassPortalShell>
