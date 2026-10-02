@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { DOCUMENT_TYPE_LABELS, type DocumentType } from "@/types/documents";
 import {
@@ -133,46 +134,44 @@ export default function OnboardingTaskTemplatesPage() {
             placeholder="Template title"
             className="px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
           />
-          <select
+          <Select
             value={taskType}
-            onChange={(e) => setTaskType(e.target.value as OnboardingTaskType)}
-            className="px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {TASK_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {ONBOARDING_TASK_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(next) => setTaskType(next as OnboardingTaskType)}
+            triggerClassName="px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={TASK_TYPES.map((type) => ({
+              value: type,
+              label: ONBOARDING_TASK_TYPE_LABELS[type],
+            }))}
+          />
         </div>
         {taskType === "document" && (
-          <select
+          <Select
             required
             value={documentType}
-            onChange={(e) => setDocumentType(e.target.value as EmployeeDocumentType)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {DOCUMENT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {DOCUMENT_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(next) =>
+              setDocumentType(next as EmployeeDocumentType)
+            }
+            triggerClassName="w-full px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={DOCUMENT_TYPES.map((type) => ({
+              value: type,
+              label: DOCUMENT_TYPE_LABELS[type],
+            }))}
+          />
         )}
         {taskType === "training" && (
-          <select
+          <Select
             required
             value={trainingId}
-            onChange={(e) => setTrainingId(e.target.value)}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="">Select training</option>
-            {trainings.map((training) => (
-              <option key={training.id} value={training.id}>
-                {training.title}
-              </option>
-            ))}
-          </select>
+            onValueChange={setTrainingId}
+            triggerClassName="w-full px-4 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={[
+              { value: "", label: "Select training" },
+              ...trainings.map((training) => ({
+                value: String(training.id),
+                label: training.title,
+              })),
+            ]}
+          />
         )}
         <textarea
           value={description}

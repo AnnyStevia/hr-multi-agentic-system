@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent } from "react";
+import { Select } from "@/components/ui/select";
 import type { Department } from "@/types/departments";
 import type { Employee, EmployeePayload } from "@/types/employees";
 import type { OrgPosition } from "@/types/organization";
@@ -56,28 +57,30 @@ export function EmployeeForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label className="text-sm text-gray-700">
           Department
-          <select
+          <Select
             required
-            className={`${inputClass} mt-1`}
-            value={values.department_id || ""}
-            onChange={(e) => set("department_id", Number(e.target.value))}
-          >
-            <option value="">Select department</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </select>
+            className="mt-1"
+            triggerClassName={inputClass}
+            value={values.department_id ? String(values.department_id) : ""}
+            onValueChange={(next) => set("department_id", Number(next))}
+            options={[
+              { value: "", label: "Select department" },
+              ...departments.map((department) => ({
+                value: String(department.id),
+                label: department.name,
+              })),
+            ]}
+          />
         </label>
         <label className="text-sm text-gray-700">
           Position
-          <select
+          <Select
             required
-            className={`${inputClass} mt-1`}
-            value={values.position_id || ""}
-            onChange={(e) => {
-              const id = Number(e.target.value);
+            className="mt-1"
+            triggerClassName={inputClass}
+            value={values.position_id ? String(values.position_id) : ""}
+            onValueChange={(next) => {
+              const id = Number(next);
               const selected = positions.find((item) => item.id === id);
               onChange({
                 ...values,
@@ -85,31 +88,32 @@ export function EmployeeForm({
                 position: selected?.title || values.position,
               });
             }}
-          >
-            <option value="">Select position</option>
-            {positions.map((position) => (
-              <option key={position.id} value={position.id}>
-                {position.title}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "Select position" },
+              ...positions.map((position) => ({
+                value: String(position.id),
+                label: position.title,
+              })),
+            ]}
+          />
         </label>
         <label className="text-sm text-gray-700">
           Manager
-          <select
-            className={`${inputClass} mt-1`}
-            value={values.manager_id ?? ""}
-            onChange={(e) =>
-              set("manager_id", e.target.value ? Number(e.target.value) : null)
+          <Select
+            className="mt-1"
+            triggerClassName={inputClass}
+            value={values.manager_id != null ? String(values.manager_id) : ""}
+            onValueChange={(next) =>
+              set("manager_id", next ? Number(next) : null)
             }
-          >
-            <option value="">No manager (top-level)</option>
-            {managers.map((manager) => (
-              <option key={manager.id} value={manager.id}>
-                {manager.full_name} · {manager.position}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "No manager (top-level)" },
+              ...managers.map((manager) => ({
+                value: String(manager.id),
+                label: `${manager.full_name} · ${manager.position}`,
+              })),
+            ]}
+          />
         </label>
         <label className="text-sm text-gray-700">
           Hire date

@@ -11,6 +11,8 @@ from app.modules.employees.service import EmployeeService, build_employee_respon
 from app.modules.identity.hr_access import require_hr_staff
 from app.modules.identity.models import User
 from app.shared.exceptions import AppException
+from app.shared.storage import get_storage_service
+from app.shared.storage.base import StorageService
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
 
@@ -26,6 +28,7 @@ def list_employees(
     q: str | None = Query(default=None),
     _user: User = Depends(require_hr_staff("employees:read")),
     employee_service: EmployeeService = Depends(get_employee_service),
+    storage: StorageService = Depends(get_storage_service),
 ) -> EmployeeListResponse:
     try:
         rows, total = employee_service.list_employees(
@@ -34,7 +37,7 @@ def list_employees(
             q=q,
         )
         return EmployeeListResponse(
-            items=[build_employee_response(row) for row in rows],
+            items=[build_employee_response(row, storage=storage) for row in rows],
             total=total,
         )
     except AppException as exc:

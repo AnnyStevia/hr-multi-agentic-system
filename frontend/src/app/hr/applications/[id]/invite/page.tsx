@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ApplicationSection } from "@/components/ApplicationSection";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { hasActiveInterviewInvitation } from "@/lib/interviews";
 import type { ApplicationDetail } from "@/types/applications";
@@ -152,20 +153,20 @@ export default function InviteToInterviewPage() {
           <label htmlFor="primary" className="block text-sm font-medium text-gray-700 mb-1">
             Primary interviewer
           </label>
-          <select
+          <Select
             id="primary"
             required
-            value={primaryEmployeeId}
-            onChange={(e) => handlePrimaryChange(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Select primary interviewer</option>
-            {employees.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.first_name} {employee.last_name} — {employee.position}
-              </option>
-            ))}
-          </select>
+            value={primaryEmployeeId === "" ? "" : String(primaryEmployeeId)}
+            onValueChange={handlePrimaryChange}
+            triggerClassName={inputClass}
+            options={[
+              { value: "", label: "Select primary interviewer" },
+              ...employees.map((employee) => ({
+                value: String(employee.id),
+                label: `${employee.first_name} ${employee.last_name} — ${employee.position}`,
+              })),
+            ]}
+          />
         </div>
 
         <div>

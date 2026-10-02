@@ -566,13 +566,27 @@ def validate_manager_assignment(
         current_id = current.manager_id
 
 
-def build_employee_response(employee: Employee) -> EmployeeResponse:
+def build_employee_response(
+    employee: Employee,
+    *,
+    storage: StorageService | None = None,
+) -> EmployeeResponse:
     session = object_session(employee)
     work = (
         derive_current_work_status(session, employee.id)
         if session is not None
         else None
     )
+    has_picture = bool(employee.profile_picture_storage_key)
+    picture_url = None
+    if has_picture and storage is not None and employee.profile_picture_storage_key:
+        try:
+            picture_url = storage.generate_presigned_url(
+                employee.profile_picture_storage_key,
+                expires_in=PRESIGNED_URL_EXPIRES_IN,
+            )
+        except Exception:
+            picture_url = None
     return EmployeeResponse(
         id=employee.id,
         employee_number=employee.employee_number,
@@ -595,6 +609,8 @@ def build_employee_response(employee: Employee) -> EmployeeResponse:
         ),
         current_leave=work.current_leave if work is not None else None,
         user_id=employee.user_id,
+        has_profile_picture=has_picture,
+        profile_picture_url=picture_url,
         created_at=employee.created_at,
         updated_at=employee.updated_at,
     )

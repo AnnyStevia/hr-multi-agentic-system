@@ -15,7 +15,7 @@ export function CandidatePortalShell({ children }: { children: React.ReactNode }
   useEffect(() => {
     if (!loading && !user) {
       const next = pathname || "/careers/jobs";
-      window.location.href = `/login?next=${encodeURIComponent(next)}`;
+      window.location.href = `/careers/login?next=${encodeURIComponent(next)}`;
       return;
     }
     if (!loading && user && needsOnboarding(user)) {

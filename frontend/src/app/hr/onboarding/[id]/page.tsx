@@ -9,6 +9,7 @@ import { OnboardingProgressSection } from "@/components/OnboardingProgressSectio
 import { TrainingSection } from "@/components/TrainingSection";
 import { OnboardingStatusBadge } from "@/components/OnboardingStatusBadge";
 import { OnboardingTaskStatusBadge } from "@/components/OnboardingTaskStatusBadge";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
 import {
@@ -405,19 +406,20 @@ export default function OnboardingDetailPage() {
                       {task.task_type === "manual" && (
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Status</label>
-                          <select
+                          <Select
                             value={editForm.status}
-                            onChange={(e) =>
+                            onValueChange={(next) =>
                               setEditForm((current) => ({
                                 ...current,
-                                status: e.target.value as OnboardingTaskStatus,
+                                status: next as OnboardingTaskStatus,
                               }))
                             }
-                            className={inputClass}
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="completed">Completed</option>
-                          </select>
+                            triggerClassName={inputClass}
+                            options={[
+                              { value: "pending", label: "Pending" },
+                              { value: "completed", label: "Completed" },
+                            ]}
+                          />
                         </div>
                       )}
                     </div>

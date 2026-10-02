@@ -2,7 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Stylish navy selects — only leftover native selects (custom Select uses its own UI) */
+select:not(.ui-select-native-proxy):not([multiple]):not([size]) {
+  appearance: none;
+  -webkit-appearance: none;
+  color: #0f224a;
+  border-color: rgba(15, 34, 74, 0.28) !important;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%230f224a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.8' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.65rem center;
+  background-repeat: no-repeat;
+  background-size: 1.05rem;
+  padding-right: 2.25rem !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+select:not(.ui-select-native-proxy):not([multiple]):not([size]):hover {
+  border-color: rgba(15, 34, 74, 0.5) !important;
+}
+
+select:not(.ui-select-native-proxy):not([multiple]):not([size]):focus,
+select:not(.ui-select-native-proxy):not([multiple]):not([size]):focus-visible {
+  border-color: #0f224a !important;
+  box-shadow: 0 0 0 3px rgba(15, 34, 74, 0.16);
+  outline: none;
+}
+
+select:not(.ui-select-native-proxy):not([multiple]):not([size]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background-color: #f4f6f9;
+}
+
+select:not(.ui-select-native-proxy) option {
+  color: #0f224a;
+  background-color: #ffffff;
+}
+
 @layer utilities {
+  .notif-badge-live {
+    animation:
+      notif-badge-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both,
+      notif-badge-attention 2.2s ease-in-out 0.45s infinite;
+  }
+
   .dash-mesh {
     background-color: #f4f7f6;
     background-image:
@@ -106,6 +149,8 @@
   .animate-ai-orb-glow-pulse,
   .animate-ai-panel-enter,
   .animate-ai-dot-bounce,
+  .notif-badge-live,
+  .animate-notif-badge-ring,
   .ai-orb-float,
   .ai-panel-glow-burst {
     animation: none !important;

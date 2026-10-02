@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import {
   OFFBOARDING_REASON_LABELS,
@@ -104,24 +105,25 @@ export default function HrOffboardingRequestsPage() {
 
       <div className="flex items-center gap-3">
         <label className="text-sm text-gray-600">Filter status</label>
-        <select
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        <Select
+          className="w-auto min-w-[11rem]"
+          triggerClassName="px-3 py-2 border border-gray-300 rounded-lg text-sm h-auto"
           value={statusFilter}
-          onChange={(e) => {
-            const value = e.target.value as OffboardingRequestStatus | "";
+          onValueChange={(next) => {
+            const value = next as OffboardingRequestStatus | "";
             setStatusFilter(value);
             load(value);
           }}
-        >
-          <option value="">All</option>
-          {(
-            ["pending", "approved", "rejected", "cancelled"] as OffboardingRequestStatus[]
-          ).map((status) => (
-            <option key={status} value={status}>
-              {OFFBOARDING_REQUEST_STATUS_LABELS[status]}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "All" },
+            ...(
+              ["pending", "approved", "rejected", "cancelled"] as OffboardingRequestStatus[]
+            ).map((status) => ({
+              value: status,
+              label: OFFBOARDING_REQUEST_STATUS_LABELS[status],
+            })),
+          ]}
+        />
       </div>
 
       {loading ? (

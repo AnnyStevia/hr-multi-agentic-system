@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LeaveApprovalStages } from "@/components/LeaveApprovalStages";
+import { Select } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import {
@@ -201,42 +202,46 @@ export default function HrLeaveRequestsPage() {
       )}
 
       <div className="bg-white rounded-xl border border-brand-200 p-4 flex flex-wrap gap-3">
-        <select
+        <Select
+          className="w-auto min-w-[10rem]"
           value={status}
-          onChange={(e) => setStatus(e.target.value as LeaveRequestStatus | "")}
-          className="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900"
-        >
-          <option value="">All statuses</option>
-          {Object.entries(LEAVE_REQUEST_STATUS_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
+          onValueChange={(next) => setStatus(next as LeaveRequestStatus | "")}
+          triggerClassName="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 h-auto"
+          options={[
+            { value: "", label: "All statuses" },
+            ...Object.entries(LEAVE_REQUEST_STATUS_LABELS).map(([value, label]) => ({
+              value,
+              label,
+            })),
+          ]}
+        />
+        <Select
+          className="w-auto min-w-[12rem]"
           value={cancellationFilter}
-          onChange={(e) =>
-            setCancellationFilter(e.target.value as LeaveCancellationStatus | "")
+          onValueChange={(next) =>
+            setCancellationFilter(next as LeaveCancellationStatus | "")
           }
-          className="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900"
-        >
-          <option value="">All cancellations</option>
-          <option value="requested">Cancellation requested</option>
-          <option value="rejected">Cancellation rejected</option>
-          <option value="none">No cancellation</option>
-        </select>
-        <select
+          triggerClassName="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 h-auto"
+          options={[
+            { value: "", label: "All cancellations" },
+            { value: "requested", label: "Cancellation requested" },
+            { value: "rejected", label: "Cancellation rejected" },
+            { value: "none", label: "No cancellation" },
+          ]}
+        />
+        <Select
+          className="w-auto min-w-[10rem]"
           value={leaveTypeId}
-          onChange={(e) => setLeaveTypeId(e.target.value)}
-          className="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900"
-        >
-          <option value="">All types</option>
-          {types.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
-            </option>
-          ))}
-        </select>
+          onValueChange={setLeaveTypeId}
+          triggerClassName="border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 h-auto"
+          options={[
+            { value: "", label: "All types" },
+            ...types.map((type) => ({
+              value: String(type.id),
+              label: type.name,
+            })),
+          ]}
+        />
         <button
           type="button"
           onClick={() => {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { BackLink } from "@/components/BackLink";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type { LeavePolicy, LeaveType } from "@/types/leave";
 
@@ -142,19 +143,17 @@ export default function HrLeavePoliciesPage() {
                 <label className="block text-xs text-brand-300 mb-1" htmlFor="policy-type">
                   Leave type
                 </label>
-                <select
+                <Select
                   id="policy-type"
                   value={leaveTypeId}
-                  onChange={(e) => setLeaveTypeId(e.target.value)}
-                  className="w-full border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30"
+                  onValueChange={setLeaveTypeId}
+                  triggerClassName="w-full border border-brand-100 rounded-lg px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-600/30 h-auto"
                   required
-                >
-                  {types.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
+                  options={types.map((type) => ({
+                    value: String(type.id),
+                    label: type.name,
+                  }))}
+                />
               </div>
               <div>
                 <label className="block text-xs text-brand-300 mb-1" htmlFor="policy-year">

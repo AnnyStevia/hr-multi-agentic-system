@@ -30,6 +30,8 @@ export interface Employee {
   current_work_status?: CurrentWorkStatus;
   current_leave?: CurrentLeaveSummary | null;
   user_id: number | null;
+  has_profile_picture?: boolean;
+  profile_picture_url?: string | null;
   created_at: string;
   updated_at: string;
 }

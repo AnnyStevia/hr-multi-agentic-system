@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type { Department } from "@/types/departments";
 import type { EmploymentType, JobPayload, JobQuestionInput } from "@/types/jobs";
 import QuestionsEditor from "@/components/QuestionsEditor";
+import { Select } from "@/components/ui/select";
 
 const EMPLOYMENT_TYPES: Array<{ value: EmploymentType; label: string }> = [
   { value: "full_time", label: "Full time" },
@@ -96,19 +97,21 @@ export default function CreateJobPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Department" id="department">
-            <select
+            <Select
               id="department"
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value ? Number(e.target.value) : "")}
-              className={inputClass}
-            >
-              <option value="">No department</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
+              value={departmentId === "" ? "" : String(departmentId)}
+              onValueChange={(next) =>
+                setDepartmentId(next ? Number(next) : "")
+              }
+              triggerClassName={inputClass}
+              options={[
+                { value: "", label: "No department" },
+                ...departments.map((department) => ({
+                  value: String(department.id),
+                  label: department.name,
+                })),
+              ]}
+            />
           </Field>
           <Field label="Position" id="position">
             <input
@@ -122,18 +125,18 @@ export default function CreateJobPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Employment type" id="employmentType">
-            <select
+            <Select
               id="employmentType"
               value={employmentType}
-              onChange={(e) => setEmploymentType(e.target.value as EmploymentType)}
-              className={inputClass}
-            >
-              {EMPLOYMENT_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+              onValueChange={(next) =>
+                setEmploymentType(next as EmploymentType)
+              }
+              triggerClassName={inputClass}
+              options={EMPLOYMENT_TYPES.map((type) => ({
+                value: type.value,
+                label: type.label,
+              }))}
+            />
           </Field>
           <Field label="Location" id="location">
             <input

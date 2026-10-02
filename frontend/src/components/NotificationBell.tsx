@@ -22,7 +22,16 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
   const [navigating, setNavigating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(open);
+  const prevUnreadRef = useRef(0);
+  const [badgePopKey, setBadgePopKey] = useState(0);
   openRef.current = open;
+
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current) {
+      setBadgePopKey((key) => key + 1);
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
 
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -226,8 +235,17 @@ export function NotificationBell({ variant = "candidate" }: NotificationBellProp
           />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full text-[10px] font-semibold bg-red-600 text-white">
-            {unreadCount > 99 ? "99+" : unreadCount}
+          <span
+            className="pointer-events-none absolute -right-1 -top-1 flex min-h-5 min-w-[1.25rem] items-center justify-center"
+            aria-hidden
+          >
+            <span className="absolute inset-0 rounded-full bg-red-500/45 animate-notif-badge-ring" />
+            <span
+              key={badgePopKey}
+              className="notif-badge-live relative inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold tabular-nums text-white shadow-sm"
+            >
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
           </span>
         )}
       </button>

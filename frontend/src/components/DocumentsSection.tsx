@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationSection } from "@/components/ApplicationSection";
 import { DocumentAIPanel, isPdfDocument } from "@/components/DocumentAIPanel";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import {
   DOCUMENT_TYPE_LABELS,
@@ -167,18 +168,16 @@ export function DocumentsSection({
           <label className="block text-xs text-gray-500 mb-1" htmlFor="document-type">
             Document type
           </label>
-          <select
+          <Select
             id="document-type"
             value={documentType}
-            onChange={(e) => setDocumentType(e.target.value as DocumentType)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-          >
-            {DOCUMENT_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {DOCUMENT_TYPE_LABELS[type]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(next) => setDocumentType(next as DocumentType)}
+            triggerClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-auto"
+            options={DOCUMENT_TYPES.map((type) => ({
+              value: type,
+              label: DOCUMENT_TYPE_LABELS[type],
+            }))}
+          />
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1" htmlFor="document-file">

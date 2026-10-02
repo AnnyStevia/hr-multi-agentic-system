@@ -1,5 +1,6 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { UserMenu } from "@/components/UserMenu";
 import { useAIAssistant } from "@/hooks/useAIAssistant";
@@ -23,16 +24,30 @@ export function AIAwareTopBar({
     loading,
   } = useAIAssistant();
   const canClear = hasConversation || conversationId != null;
+  const showSearch = notificationVariant === "hr" && !open;
 
   return (
-    <header className="bg-white border-b border-brand-200 shrink-0">
-      <div className="px-6 h-14 flex items-center justify-between gap-3">
-        <div className="min-w-0">
+    <header className="shrink-0 border-b border-brand-200/80 bg-white">
+      <div className="flex h-14 items-center justify-between gap-3 px-5 sm:px-6">
+        <div className="min-w-0 flex-1">
           {open ? (
-            <p className="text-sm font-semibold text-brand-900 truncate">Pulse</p>
+            <p className="truncate text-sm font-semibold text-brand-900">Pulse</p>
+          ) : showSearch ? (
+            <label className="relative block w-full max-w-xl">
+              <span className="sr-only">Search</span>
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-300"
+                aria-hidden
+              />
+              <input
+                type="search"
+                placeholder="Search employees, applications, documents..."
+                className="h-9 w-full rounded-xl border border-transparent bg-[#f3f6f5] py-2 pl-9 pr-3 text-sm text-brand-900 outline-none transition placeholder:text-brand-300 focus:border-brand-200 focus:bg-white focus:ring-2 focus:ring-brand-500/15"
+              />
+            </label>
           ) : null}
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
           {open ? (
             <>
               {canClear ? (
@@ -42,7 +57,7 @@ export function AIAwareTopBar({
                   title="Clear current conversation and start a new chat"
                   aria-label="Clear current conversation and start a new chat"
                   onClick={() => void clearConversation()}
-                  className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm text-brand-900 hover:bg-brand-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm text-brand-900 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   New chat
                 </button>
@@ -50,7 +65,7 @@ export function AIAwareTopBar({
               <button
                 type="button"
                 onClick={closeAssistant}
-                className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm text-brand-900 hover:bg-brand-50 transition"
+                className="rounded-lg border border-brand-200 bg-white px-3 py-1.5 text-sm text-brand-900 transition hover:bg-brand-50"
               >
                 Close
               </button>

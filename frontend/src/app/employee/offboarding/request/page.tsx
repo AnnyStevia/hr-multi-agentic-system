@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import {
   EMPLOYEE_OFFBOARDING_REQUEST_REASONS,
@@ -189,19 +190,17 @@ export default function EmployeeOffboardingRequestPage() {
           </h2>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Reason</label>
-            <select
-              className={inputClass}
+            <Select
+              triggerClassName={inputClass}
               value={reason}
-              onChange={(e) =>
-                setReason(e.target.value as OffboardingRequestCreatePayload["reason"])
+              onValueChange={(next) =>
+                setReason(next as OffboardingRequestCreatePayload["reason"])
               }
-            >
-              {EMPLOYEE_OFFBOARDING_REQUEST_REASONS.map((value) => (
-                <option key={value} value={value}>
-                  {OFFBOARDING_REASON_LABELS[value]}
-                </option>
-              ))}
-            </select>
+              options={EMPLOYEE_OFFBOARDING_REQUEST_REASONS.map((value) => ({
+                value,
+                label: OFFBOARDING_REASON_LABELS[value],
+              }))}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">

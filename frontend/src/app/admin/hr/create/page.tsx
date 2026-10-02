@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { PasswordInput } from "@/components/PasswordInput";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { isAdmin } from "@/lib/roles";
 import type { Department } from "@/types/departments";
@@ -233,20 +234,20 @@ export default function CreateHRPage() {
                 <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
                   Department
                 </label>
-                <select
+                <Select
                   id="department"
                   required
-                  value={departmentId || ""}
-                  onChange={(e) => setDepartmentId(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
-                >
-                  <option value="">Select department</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
+                  value={departmentId ? String(departmentId) : ""}
+                  onValueChange={(next) => setDepartmentId(Number(next))}
+                  triggerClassName="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition h-auto"
+                  options={[
+                    { value: "", label: "Select department" },
+                    ...departments.map((department) => ({
+                      value: String(department.id),
+                      label: department.name,
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label htmlFor="position" className="block text-sm font-medium text-gray-700 mb-1">
@@ -267,22 +268,23 @@ export default function CreateHRPage() {
               <label htmlFor="manager" className="block text-sm font-medium text-gray-700 mb-1">
                 Manager (optional)
               </label>
-              <select
+              <Select
                 id="manager"
-                value={managerId}
-                onChange={(e) =>
-                  setManagerId(e.target.value === "" ? "" : Number(e.target.value))
+                value={managerId === "" ? "" : String(managerId)}
+                onValueChange={(next) =>
+                  setManagerId(next === "" ? "" : Number(next))
                 }
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition"
-              >
-                <option value="">No manager</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name}
-                    {emp.position ? ` · ${emp.position}` : ""}
-                  </option>
-                ))}
-              </select>
+                triggerClassName="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition h-auto"
+                options={[
+                  { value: "", label: "No manager" },
+                  ...employees.map((emp) => ({
+                    value: String(emp.id),
+                    label: `${emp.first_name} ${emp.last_name}${
+                      emp.position ? ` · ${emp.position}` : ""
+                    }`,
+                  })),
+                ]}
+              />
               <p className="mt-1 text-xs text-gray-500">
                 Organizational manager for leave approval (e.g. HR Manager reports to a director).
               </p>

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
+import { Select } from "@/components/ui/select";
 import { formatSlotRange, toIsoFromDateAndTime } from "@/lib/interviews";
 import type { InterviewDetail, InterviewerRecommendation } from "@/types/interviews";
 
@@ -350,15 +351,18 @@ export default function MyInterviewDetailPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Recommendation</label>
-            <select
+            <Select
               value={recommendation}
-              onChange={(e) => setRecommendation(e.target.value as InterviewerRecommendation)}
-              className={inputClass}
-            >
-              <option value="proceed">Proceed</option>
-              <option value="additional_interview">Additional interview</option>
-              <option value="do_not_proceed">Do not proceed</option>
-            </select>
+              onValueChange={(next) =>
+                setRecommendation(next as InterviewerRecommendation)
+              }
+              triggerClassName={inputClass}
+              options={[
+                { value: "proceed", label: "Proceed" },
+                { value: "additional_interview", label: "Additional interview" },
+                { value: "do_not_proceed", label: "Do not proceed" },
+              ]}
+            />
           </div>
           <button
             type="submit"

@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FileText, FolderLock, Library, Search } from "lucide-react";
 import { DocumentAIPanel, isPdfDocument } from "@/components/DocumentAIPanel";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type {
   CompanyDocument,
@@ -270,32 +271,35 @@ export function DocumentsWorkspace({ canManageLibrary }: DocumentsWorkspaceProps
               className="w-full rounded-lg border border-brand-200 pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
-          <select
-            value={categoryId}
-            onChange={(e) =>
-              setCategoryId(e.target.value === "" ? "" : Number(e.target.value))
+          <Select
+            className="w-auto min-w-[11rem]"
+            value={categoryId === "" ? "" : String(categoryId)}
+            onValueChange={(next) =>
+              setCategoryId(next === "" ? "" : Number(next))
             }
-            className="rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="">All categories</option>
-            {categoryOptions.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
+            triggerClassName="rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={[
+              { value: "", label: "All categories" },
+              ...categoryOptions.map((cat) => ({
+                value: String(cat.id),
+                label: cat.label,
+              })),
+            ]}
+          />
           {canManageLibrary ? (
-            <select
+            <Select
+              className="w-auto min-w-[10rem]"
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter((e.target.value || "") as CompanyDocumentStatus | "")
+              onValueChange={(next) =>
+                setStatusFilter((next || "") as CompanyDocumentStatus | "")
               }
-              className="rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="">All statuses</option>
-              <option value="active">Active</option>
-              <option value="archived">Archived</option>
-            </select>
+              triggerClassName="rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+              options={[
+                { value: "", label: "All statuses" },
+                { value: "active", label: "Active" },
+                { value: "archived", label: "Archived" },
+              ]}
+            />
           ) : null}
         </div>
 
@@ -848,18 +852,16 @@ function CompanyUploadDialog({
           />
         </Field>
         <Field label="Category">
-          <select
+          <Select
             required
-            value={categoryId}
-            onChange={(e) => setCategoryId(Number(e.target.value))}
-            className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
+            value={String(categoryId)}
+            onValueChange={(next) => setCategoryId(Number(next))}
+            triggerClassName="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={categories.map((cat) => ({
+              value: String(cat.id),
+              label: cat.label,
+            }))}
+          />
         </Field>
         <Field label="Description">
           <textarea
@@ -951,28 +953,27 @@ function CompanyEditDialog({
           />
         </Field>
         <Field label="Category">
-          <select
+          <Select
             required
-            value={categoryId}
-            onChange={(e) => setCategoryId(Number(e.target.value))}
-            className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
+            value={String(categoryId)}
+            onValueChange={(next) => setCategoryId(Number(next))}
+            triggerClassName="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={categories.map((cat) => ({
+              value: String(cat.id),
+              label: cat.label,
+            }))}
+          />
         </Field>
         <Field label="Status">
-          <select
+          <Select
             value={status}
-            onChange={(e) => setStatus(e.target.value as CompanyDocumentStatus)}
-            className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="active">Active</option>
-            <option value="archived">Archived</option>
-          </select>
+            onValueChange={(next) => setStatus(next as CompanyDocumentStatus)}
+            triggerClassName="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 h-auto"
+            options={[
+              { value: "active", label: "Active" },
+              { value: "archived", label: "Archived" },
+            ]}
+          />
         </Field>
         <Field label="Description">
           <textarea

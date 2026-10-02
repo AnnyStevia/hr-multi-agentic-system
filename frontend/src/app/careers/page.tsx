@@ -25,7 +25,7 @@ export default function CareersPage() {
             Create an account
           </Link>
           <Link
-            href="/login?next=%2Fcareers%2Fjobs"
+            href="/careers/login?next=%2Fcareers%2Fjobs"
             className="inline-flex justify-center border border-gray-300 bg-white text-gray-800 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             Sign in

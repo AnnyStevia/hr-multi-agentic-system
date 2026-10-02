@@ -7,6 +7,7 @@ import { MeetingJoinBlock } from "@/components/MeetingJoinBlock";
 import { OffboardingClearanceStatusBadge } from "@/components/OffboardingClearanceStatusBadge";
 import { OffboardingStatusBadge } from "@/components/OffboardingStatusBadge";
 import { OffboardingTaskStatusBadge } from "@/components/OffboardingTaskStatusBadge";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { formatSlotRange, toIsoFromDateAndTime } from "@/lib/interviews";
 import type { Employee } from "@/types/employees";
@@ -575,17 +576,15 @@ export default function OffboardingDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
-              <select
-                className={inputClass}
+              <Select
+                triggerClassName={inputClass}
                 value={category}
-                onChange={(e) => setCategory(e.target.value as OffboardingTaskCategory)}
-              >
-                {OFFBOARDING_TASK_CATEGORIES.map((value) => (
-                  <option key={value} value={value}>
-                    {OFFBOARDING_TASK_CATEGORY_LABELS[value]}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(next) => setCategory(next as OffboardingTaskCategory)}
+                options={OFFBOARDING_TASK_CATEGORIES.map((value) => ({
+                  value,
+                  label: OFFBOARDING_TASK_CATEGORY_LABELS[value],
+                }))}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
@@ -597,18 +596,18 @@ export default function OffboardingDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Assignee</label>
-              <select
-                className={inputClass}
+              <Select
+                triggerClassName={inputClass}
                 value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-              >
-                <option value="">Unassigned</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name} — {emp.position}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setAssigneeId}
+                options={[
+                  { value: "", label: "Unassigned" },
+                  ...employees.map((emp) => ({
+                    value: String(emp.id),
+                    label: `${emp.first_name} ${emp.last_name} — ${emp.position}`,
+                  })),
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Due date</label>
@@ -813,19 +812,17 @@ export default function OffboardingDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
-              <select
-                className={inputClass}
+              <Select
+                triggerClassName={inputClass}
                 value={clearanceCategory}
-                onChange={(e) =>
-                  setClearanceCategory(e.target.value as OffboardingClearanceCategory)
+                onValueChange={(next) =>
+                  setClearanceCategory(next as OffboardingClearanceCategory)
                 }
-              >
-                {OFFBOARDING_CLEARANCE_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {OFFBOARDING_CLEARANCE_CATEGORY_LABELS[cat]}
-                  </option>
-                ))}
-              </select>
+                options={OFFBOARDING_CLEARANCE_CATEGORIES.map((cat) => ({
+                  value: cat,
+                  label: OFFBOARDING_CLEARANCE_CATEGORY_LABELS[cat],
+                }))}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
@@ -941,18 +938,18 @@ export default function OffboardingDetailPage() {
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 Interviewer
               </label>
-              <select
-                className={inputClass}
+              <Select
+                triggerClassName={inputClass}
                 value={exitInterviewerId}
-                onChange={(e) => setExitInterviewerId(e.target.value)}
-              >
-                <option value="">Select interviewer</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.first_name} {emp.last_name} — {emp.position}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setExitInterviewerId}
+                options={[
+                  { value: "", label: "Select interviewer" },
+                  ...employees.map((emp) => ({
+                    value: String(emp.id),
+                    label: `${emp.first_name} ${emp.last_name} — ${emp.position}`,
+                  })),
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>

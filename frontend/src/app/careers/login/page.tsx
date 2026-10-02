@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Manrope } from "next/font/google";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { PasswordInput } from "@/components/PasswordInput";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,18 +15,7 @@ const manrope = Manrope({
   weight: ["400", "500", "600", "700", "800"],
 });
 
-const OFFICE_IMAGE =
-  "/images/careers/" +
-  encodeURIComponent(
-    "Moderne kantoorinrichting met houten bureaus, planten en akoestisch plafond.jpg"
-  );
-
-function isCareersNext(next: string | null): boolean {
-  if (!next) return false;
-  return next === "/careers" || next.startsWith("/careers/");
-}
-
-function HrMark({ tone = "dark" }: { tone?: "dark" | "light" }) {
+function TalentMark({ tone = "dark" }: { tone?: "dark" | "light" }) {
   const isLight = tone === "light";
 
   return (
@@ -60,44 +49,36 @@ function HrMark({ tone = "dark" }: { tone?: "dark" | "light" }) {
             isLight ? "text-white" : "text-brand-900"
           }`}
         >
-          HR Platform
+          Talent Portal
         </p>
         <p
           className={`mt-1 text-[10px] font-medium tracking-[0.18em] uppercase ${
             isLight ? "text-white/55" : "text-brand-300"
           }`}
         >
-          Careers & HR hub
+          Careers access
         </p>
       </div>
     </div>
   );
 }
 
-function LoginForm() {
+function TalentLoginForm() {
   const { login, loading: authLoading, user } = useAuth();
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const next = searchParams.get("next");
+  const next = searchParams.get("next") || "/careers/jobs";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (isCareersNext(next)) {
-      const qs = next ? `?next=${encodeURIComponent(next)}` : "";
-      router.replace(`/careers/login${qs}`);
-    }
-  }, [next, router]);
-
-  if (authLoading || isCareersNext(next)) {
+  if (authLoading) {
     return (
       <div
-        className={`${manrope.className} flex h-dvh items-center justify-center bg-[#0f224a]`}
+        className={`${manrope.className} flex h-dvh items-center justify-center bg-[#f4f6f8]`}
       >
-        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-brand-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-brand-600" />
       </div>
     );
   }
@@ -112,7 +93,6 @@ function LoginForm() {
     setError("");
     setInfo("");
     setSubmitting(true);
-
     try {
       await login(email, password, next);
     } catch (err) {
@@ -122,6 +102,8 @@ function LoginForm() {
     }
   };
 
+  const registerHref = `/careers/register?next=${encodeURIComponent(next)}`;
+
   return (
     <div className={`${manrope.className} h-dvh overflow-hidden bg-[#f4f6f8]`}>
       <div className="flex h-full w-full flex-col lg:flex-row">
@@ -129,21 +111,22 @@ function LoginForm() {
         <section className="relative hidden h-full overflow-hidden lg:block lg:w-[52%]">
           <div className="absolute inset-0 animate-dash-fade-in">
             <Image
-              src={OFFICE_IMAGE}
-              alt="Modern corporate office workspace"
+              src="/images/careers/pexels-tima-miroshnichenko-5439375.jpg"
+              alt="Professional interview in a corporate office"
               fill
-              className="object-cover object-center"
+              className="object-cover object-[center_30%]"
               sizes="52vw"
               priority
             />
           </div>
 
+          {/* Structured overlays — navy authority, emerald accent */}
           <div
             className="absolute inset-0 bg-[#0f224a]/55"
             aria-hidden="true"
           />
           <div
-            className="absolute inset-0 bg-gradient-to-t from-[#0f224a] via-[#0f224a]/50 to-[#0f224a]/30"
+            className="absolute inset-0 bg-gradient-to-t from-[#0f224a] via-[#0f224a]/45 to-[#0f224a]/25"
             aria-hidden="true"
           />
           <div
@@ -166,54 +149,26 @@ function LoginForm() {
 
           <div className="relative z-10 flex h-full flex-col px-11 py-9 xl:px-14 xl:py-11">
             <div className="animate-dash-fade-in">
-              <HrMark tone="light" />
+              <TalentMark tone="light" />
             </div>
 
             <div className="mt-auto max-w-xl pb-10 animate-dash-fade-up">
               <div className="mb-5 flex items-center gap-3">
                 <span className="h-px w-10 bg-brand-500" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/65">
-                  People · Process · Growth
+                  Enterprise careers
                 </span>
               </div>
-              <h1 className="text-[2.55rem] font-semibold leading-[1.12] tracking-[-0.02em] text-white xl:text-[2.9rem]">
-                A smarter{" "}
-                <span className="text-[#5fd4a8]">HR experience</span>
+              <h1 className="text-[2.65rem] font-semibold leading-[1.12] tracking-[-0.02em] text-white xl:text-[3rem]">
+                Advance your career
                 <span className="mt-1 block font-light text-white/85">
-                  for modern teams.
+                  with purpose and precision.
                 </span>
               </h1>
               <p className="mt-5 max-w-md text-[15px] leading-relaxed text-white/70">
-                Hire faster, manage leave with ease, and keep every employee
-                process in one place.
+                Access open roles, manage your applications, and stay informed
+                throughout the hiring process.
               </p>
-
-              <dl className="mt-8 grid grid-cols-3 gap-4 border-t border-white/15 pt-6">
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-                    Hire
-                  </dt>
-                  <dd className="mt-1.5 text-[13px] leading-snug text-white/80">
-                    Find and onboard talent
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-                    Run
-                  </dt>
-                  <dd className="mt-1.5 text-[13px] leading-snug text-white/80">
-                    Leave, docs, training
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-                    Grow
-                  </dt>
-                  <dd className="mt-1.5 text-[13px] leading-snug text-white/80">
-                    Clear people insights
-                  </dd>
-                </div>
-              </dl>
             </div>
           </div>
         </section>
@@ -224,25 +179,25 @@ function LoginForm() {
             className="pointer-events-none absolute inset-0"
             aria-hidden="true"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_100%_0%,rgba(2,152,112,0.06),transparent_55%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_100%_0%,rgba(2,152,112,0.07),transparent_55%)]" />
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_0%_100%,rgba(15,34,74,0.05),transparent_50%)]" />
           </div>
 
           <div className="relative flex h-full flex-col px-5 py-6 sm:px-10 lg:px-14 lg:py-8">
             <div className="mb-auto flex items-center justify-between lg:hidden">
-              <HrMark />
+              <TalentMark />
             </div>
 
             <div className="flex flex-1 flex-col justify-center">
               <div className="mx-auto w-full max-w-[400px] animate-dash-fade-up">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-300">
-                  Team access
+                  Candidate sign in
                 </p>
                 <h2 className="mt-2 text-[1.75rem] font-semibold tracking-tight text-brand-900">
                   Welcome back
                 </h2>
                 <p className="mt-1.5 text-sm leading-relaxed text-brand-300">
-                  Enter your work email to open the HR dashboard.
+                  Sign in to continue your application journey.
                 </p>
 
                 <form onSubmit={handleSubmit} className="mt-7 space-y-4">
@@ -259,7 +214,7 @@ function LoginForm() {
 
                   <div>
                     <label
-                      htmlFor="hr-email"
+                      htmlFor="talent-email"
                       className="mb-1.5 block text-[13px] font-semibold text-brand-900"
                     >
                       Work email
@@ -270,14 +225,14 @@ function LoginForm() {
                         aria-hidden
                       />
                       <input
-                        id="hr-email"
+                        id="talent-email"
                         type="email"
                         required
                         autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full rounded-sm border border-brand-200 bg-white py-2.5 pl-11 pr-4 text-sm text-brand-900 outline-none transition placeholder:text-brand-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30"
-                        placeholder="name@company.com"
+                        placeholder="name@email.com"
                       />
                     </div>
                   </div>
@@ -285,7 +240,7 @@ function LoginForm() {
                   <div>
                     <div className="mb-1.5 flex items-center justify-between">
                       <label
-                        htmlFor="hr-password"
+                        htmlFor="talent-password"
                         className="block text-[13px] font-semibold text-brand-900"
                       >
                         Password
@@ -295,7 +250,7 @@ function LoginForm() {
                         className="text-[12px] font-medium text-brand-600 hover:text-brand-700"
                         onClick={() =>
                           setInfo(
-                            "Password reset is not available yet. Contact your administrator if you need help accessing your account."
+                            "Password reset is not available yet. Contact HR if you need help accessing your account."
                           )
                         }
                       >
@@ -308,7 +263,7 @@ function LoginForm() {
                         aria-hidden
                       />
                       <PasswordInput
-                        id="hr-password"
+                        id="talent-password"
                         required
                         autoComplete="current-password"
                         value={password}
@@ -333,12 +288,12 @@ function LoginForm() {
 
                 <div className="mt-8 border-t border-brand-200 pt-5">
                   <p className="text-sm text-brand-300">
-                    Applying for a role?{" "}
+                    New candidate?{" "}
                     <Link
-                      href="/careers/register?next=%2Fcareers%2Fjobs"
+                      href={registerHref}
                       className="font-semibold text-brand-600 underline-offset-4 hover:text-brand-700 hover:underline"
                     >
-                      Create a candidate account
+                      Create an account
                     </Link>
                   </p>
                 </div>
@@ -346,7 +301,7 @@ function LoginForm() {
             </div>
 
             <p className="mt-auto hidden text-[11px] tracking-wide text-brand-300 lg:block">
-              For HR, managers, and employees · Secure company access
+              Secure candidate access · Confidential hiring process
             </p>
           </div>
         </section>
@@ -355,7 +310,7 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+export default function CareersLoginPage() {
   return (
     <Suspense
       fallback={
@@ -364,7 +319,7 @@ export default function LoginPage() {
         </div>
       }
     >
-      <LoginForm />
+      <TalentLoginForm />
     </Suspense>
   );
 }

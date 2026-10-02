@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import type { JobQuestionInput, QuestionType } from "@/types/jobs";
 
 const QUESTION_TYPES: Array<{ value: QuestionType; label: string }> = [
@@ -57,17 +58,17 @@ export default function QuestionsEditor({
               className={inputClass}
             />
             <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-              <select
+              <Select
                 value={question.question_type}
-                onChange={(e) => update(index, { question_type: e.target.value as QuestionType })}
-                className={inputClass}
-              >
-                {QUESTION_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
+                onValueChange={(next) =>
+                  update(index, { question_type: next as QuestionType })
+                }
+                triggerClassName={inputClass}
+                options={QUESTION_TYPES.map((type) => ({
+                  value: type.value,
+                  label: type.label,
+                }))}
+              />
               <label className="flex items-center gap-2 text-sm text-gray-700 whitespace-nowrap">
                 <input
                   type="checkbox"

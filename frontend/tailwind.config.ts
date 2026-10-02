@@ -85,6 +85,25 @@ const config: Config = {
           "0%, 80%, 100%": { transform: "translateY(0)", opacity: "0.45" },
           "40%": { transform: "translateY(-7px)", opacity: "1" },
         },
+        "notif-badge-pop": {
+          "0%": { transform: "scale(0.55)", opacity: "0.5" },
+          "55%": { transform: "scale(1.18)" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        "notif-badge-attention": {
+          "0%, 100%": {
+            transform: "scale(1)",
+            boxShadow: "0 0 0 0 rgba(220, 38, 38, 0.35)",
+          },
+          "50%": {
+            transform: "scale(1.06)",
+            boxShadow: "0 0 0 3px rgba(220, 38, 38, 0)",
+          },
+        },
+        "notif-badge-ring": {
+          "0%": { transform: "scale(0.85)", opacity: "0.55" },
+          "100%": { transform: "scale(2.1)", opacity: "0" },
+        },
       },
       animation: {
         "dash-fade-up": "dash-fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both",
@@ -98,6 +117,9 @@ const config: Config = {
         "ai-panel-enter": "ai-panel-enter 0.48s cubic-bezier(0.22, 1, 0.36, 1) both",
         "ai-panel-glow-burst": "ai-panel-glow-burst 0.55s ease-out both",
         "ai-dot-bounce": "ai-dot-bounce 1.05s ease-in-out infinite",
+        "notif-badge-pop": "notif-badge-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "notif-badge-attention": "notif-badge-attention 2.2s ease-in-out infinite",
+        "notif-badge-ring": "notif-badge-ring 2.2s ease-out infinite",
       },
     },
   },

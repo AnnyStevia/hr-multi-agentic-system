@@ -130,6 +130,8 @@ class EmployeeResponse(BaseModel):
     current_work_status: CurrentWorkStatus = CurrentWorkStatus.ACTIVE
     current_leave: CurrentLeaveSummary | None = None
     user_id: int | None
+    has_profile_picture: bool = False
+    profile_picture_url: str | None = None
     created_at: datetime
     updated_at: datetime
 

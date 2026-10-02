@@ -1,8 +1,8 @@
 export function EmployeeStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    active: "bg-green-100 text-green-800",
-    inactive: "bg-gray-100 text-gray-700",
-    on_leave: "bg-amber-100 text-amber-800",
+    active: "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-600/15",
+    inactive: "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-500/10",
+    on_leave: "bg-amber-50 text-amber-800 ring-1 ring-inset ring-amber-600/15",
   };
   const labels: Record<string, string> = {
     active: "Active",
@@ -10,7 +10,11 @@ export function EmployeeStatusBadge({ status }: { status: string }) {
     on_leave: "On leave",
   };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[status] || "bg-gray-100 text-gray-700"}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        styles[status] || "bg-slate-100 text-slate-700"
+      }`}
+    >
       {labels[status] || status}
     </span>
   );

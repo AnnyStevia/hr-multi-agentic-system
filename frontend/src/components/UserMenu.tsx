@@ -87,7 +87,7 @@ export function UserMenu({ editProfileHref }: UserMenuProps) {
           setOpen((value) => !value);
           void loadAvatar();
         }}
-        className="h-9 w-9 rounded-full overflow-hidden border border-gray-200 bg-slate-100 text-xs font-medium text-slate-600 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-brand-500/30 transition"
+        className="h-9 w-9 rounded-full overflow-hidden border border-[#0f224a]/20 bg-[#0f224a]/5 text-xs font-semibold text-[#0f224a] hover:border-[#0f224a]/45 focus:outline-none focus:ring-2 focus:ring-[#0f224a]/25 transition"
         aria-label="Account menu"
         aria-expanded={open}
       >
@@ -100,12 +100,12 @@ export function UserMenu({ editProfileHref }: UserMenuProps) {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-44 rounded-lg border border-gray-200 bg-white py-1 shadow-sm z-50">
+        <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl border border-[#0f224a]/20 bg-white p-1.5 z-50 shadow-[0_18px_40px_-18px_rgba(15,34,74,0.55),0_0_0_1px_rgba(15,34,74,0.06)]">
           {editProfileHref && (
             <Link
               href={editProfileHref}
               onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-sm text-gray-700 hover:bg-slate-50"
+              className="block rounded-lg px-3 py-2 text-sm font-medium text-[#0f224a]/90 transition-colors hover:bg-[#0f224a] hover:text-white"
             >
               Edit profile
             </Link>
@@ -116,7 +116,7 @@ export function UserMenu({ editProfileHref }: UserMenuProps) {
               setOpen(false);
               logout();
             }}
-            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-slate-50"
+            className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#0f224a]/90 transition-colors hover:bg-[#0f224a] hover:text-white"
           >
             Log out
           </button>

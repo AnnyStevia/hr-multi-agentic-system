@@ -7,6 +7,7 @@ import {
   TrainingResourcePreview,
   TrainingResourcePreviewLive,
 } from "@/components/TrainingResourcePreview";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type { OnboardingTrainingAssignment, Training } from "@/types/training";
 
@@ -168,19 +169,19 @@ export function TrainingSection({ mode, onboardingId, onChanged }: TrainingSecti
               <label className="block text-xs text-gray-500 mb-1" htmlFor="assign-training">
                 Assign from catalogue
               </label>
-              <select
+              <Select
                 id="assign-training"
                 value={selectedTrainingId}
-                onChange={(e) => setSelectedTrainingId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="">Select a training…</option>
-                {availableTrainings.map((training) => (
-                  <option key={training.id} value={training.id}>
-                    {training.title}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setSelectedTrainingId}
+                triggerClassName="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-auto"
+                options={[
+                  { value: "", label: "Select a training…" },
+                  ...availableTrainings.map((training) => ({
+                    value: String(training.id),
+                    label: training.title,
+                  })),
+                ]}
+              />
             </div>
             <button
               type="submit"

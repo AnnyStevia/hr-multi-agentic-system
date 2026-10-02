@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { OffboardingStatusBadge } from "@/components/OffboardingStatusBadge";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import type { Employee } from "@/types/employees";
 import {
@@ -127,33 +128,31 @@ export default function OffboardingListPage() {
         <h2 className="md:col-span-2 text-sm font-semibold text-gray-900">Create case</h2>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Employee</label>
-          <select
-            className={inputClass}
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
+          <Select
             required
-          >
-            <option value="">Select active employee…</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.first_name} {emp.last_name} — {emp.position}
-              </option>
-            ))}
-          </select>
+            triggerClassName={inputClass}
+            value={employeeId}
+            onValueChange={setEmployeeId}
+            options={[
+              { value: "", label: "Select active employee…" },
+              ...employees.map((emp) => ({
+                value: String(emp.id),
+                label: `${emp.first_name} ${emp.last_name} — ${emp.position}`,
+              })),
+            ]}
+          />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Reason</label>
-          <select
-            className={inputClass}
+          <Select
+            triggerClassName={inputClass}
             value={reason}
-            onChange={(e) => setReason(e.target.value as OffboardingReason)}
-          >
-            {REASONS.map((value) => (
-              <option key={value} value={value}>
-                {OFFBOARDING_REASON_LABELS[value]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(next) => setReason(next as OffboardingReason)}
+            options={REASONS.map((value) => ({
+              value,
+              label: OFFBOARDING_REASON_LABELS[value],
+            }))}
+          />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Last working day</label>
@@ -187,30 +186,31 @@ export default function OffboardingListPage() {
 
       <div className="flex items-center gap-3">
         <label className="text-sm text-gray-600">Filter status</label>
-        <select
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        <Select
+          className="w-auto min-w-[11rem]"
+          triggerClassName="px-3 py-2 border border-gray-300 rounded-lg text-sm h-auto"
           value={statusFilter}
-          onChange={(e) => {
-            const value = e.target.value as OffboardingStatus | "";
+          onValueChange={(next) => {
+            const value = next as OffboardingStatus | "";
             setStatusFilter(value);
             load(value);
           }}
-        >
-          <option value="">All</option>
-          {(
-            [
-              "initiated",
-              "in_progress",
-              "pending_clearance",
-              "completed",
-              "cancelled",
-            ] as OffboardingStatus[]
-          ).map((status) => (
-            <option key={status} value={status}>
-              {status.replaceAll("_", " ")}
-            </option>
-          ))}
-        </select>
+          options={[
+            { value: "", label: "All" },
+            ...(
+              [
+                "initiated",
+                "in_progress",
+                "pending_clearance",
+                "completed",
+                "cancelled",
+              ] as OffboardingStatus[]
+            ).map((status) => ({
+              value: status,
+              label: status.replaceAll("_", " "),
+            })),
+          ]}
+        />
       </div>
 
       {items.length === 0 ? (

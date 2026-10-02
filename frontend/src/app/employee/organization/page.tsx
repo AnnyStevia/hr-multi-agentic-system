@@ -144,7 +144,7 @@ export default function EmployeeOrganizationPage() {
       )}
 
       {tab === "hierarchy" && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="rounded-2xl border border-brand-200/70 bg-white p-4 shadow-[0_8px_24px_-18px_rgba(15,34,74,0.35)] sm:p-5">
           {loading ? (
             <div className="py-16 flex justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />

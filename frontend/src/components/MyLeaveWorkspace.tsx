@@ -8,6 +8,7 @@ import {
   type DayVisualState,
 } from "@/components/calendar/MonthCalendar";
 import { formatDisplayDate } from "@/components/calendar/dateUtils";
+import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import {
   eachDateInRange,
@@ -435,18 +436,16 @@ export function MyLeaveWorkspace({
               <label className="block text-xs text-brand-300 mb-1" htmlFor="leave-type">
                 Leave type
               </label>
-              <select
+              <Select
                 id="leave-type"
                 value={leaveTypeId}
-                onChange={(e) => setLeaveTypeId(e.target.value)}
-                className="w-full border border-brand-200 rounded-lg px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-              >
-                {types.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setLeaveTypeId}
+                triggerClassName="w-full border border-brand-200 rounded-lg px-3 py-2 text-sm text-brand-900 focus:outline-none focus:ring-2 focus:ring-brand-600/20 h-auto"
+                options={types.map((type) => ({
+                  value: String(type.id),
+                  label: type.name,
+                }))}
+              />
             </div>
 
             <div className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-3 text-sm space-y-1">
